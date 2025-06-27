@@ -3,75 +3,171 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/marcboeker/go-duckdb"
 	"log"
+	"math"
 	"time"
+
+	_ "github.com/marcboeker/go-duckdb"
+	"gonum.org/v1/gonum/stat"
 )
 
 var db *sql.DB
 
 type StockData struct {
-	Date     time.Time
-	Ticker   string
-	Open     float64
-	High     float64
-	Low      float64
-	Close    float64
-	Volume   float64
-	AdjClose sql.NullFloat64
+	date     time.Time
+	ticker   string
+	open     float64
+	high     float64
+	low      float64
+	close    float64
+	volume   float64
+	adjClose sql.NullFloat64
 }
 
 type Portfolio struct {
-	BuyingPower float64
-	Positions   []Position
+	buyingPower float64
+	positions   map[string]position
+	openValue   float64
+	closeValue  float64
+	dailyAvg    []float64
+	closeValues []float64
+	metrics     Metrics
 }
 
-// Simple long position is tickers and amount of stocks owned with price
-type Position struct {
-	Ticker       string
-	Amount       float64
-	InitialPrice float64
+type position struct {
+	time         string
+	ticker       string
+	amount       float64
+	averagePrice float64
+	currentPrice float64
 }
 
-// Long buy signal
-func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64) {
-	position := Position{
-		Ticker:       ticker,
-		Amount:       amount,
-		InitialPrice: initialPrice,
+type Metrics struct {
+	sharpeRatio  float64
+	maxDrawdown  float64
+	annualReturn float64
+	standardDev  float64
+}
+
+func getRiskFreeRates(startTime time.Time, endTime time.Time) []float64 {
+	query := "SELECT daily_risk_free_rate_decimal FROM \"3MTreasuryYields\" WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS);"
+	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
+	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
+	rows, err := db.Query(query, startTimeStr, endTimeStr)
+	if err != nil {
+		fmt.Printf("Error querying data: %v", err)
 	}
-	if p.BuyingPower < amount*initialPrice {
+	defer rows.Close()
+	riskFreeRates := make([]float64, 0)
+	for rows.Next() {
+		var rate float64
+		err := rows.Scan(&rate)
+		if err != nil {
+			fmt.Printf("Error scanning row: %v", err)
+		}
+		riskFreeRates = append(riskFreeRates, rate)
+	}
+	return riskFreeRates
+}
+
+func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) Metrics {
+	standardDev := stat.StdDev(p.dailyAvg, nil)
+	riskFreeRates := getRiskFreeRates(startTime, endTime)
+	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
+	metrics := Metrics{
+		standardDev: standardDev,
+		sharpeRatio: sharpeRatio,
+	}
+	return metrics
+	//TODO: Calculate annualReturn
+}
+
+// getMaxDrawdown will return the maximum drawdown
+func getMaxDrawdown(closeValues []float64) float64 {
+	peak := closeValues[0]
+	peakIdx := 0
+	minValue := closeValues[0]
+	for i, value := range closeValues {
+		if value > peak {
+			peakIdx = i
+			peak = value
+		}
+	}
+	for i := peakIdx + 1; i < len(closeValues); i++ {
+		minValue = math.Min(minValue, closeValues[i])
+	}
+
+	return (peak - minValue) / peak
+}
+
+// getSharpeRatio will adjust the portfolio's sharpe ratio
+func getSharpeRatio(riskFreeRates []float64, dailyAvg []float64) float64 {
+	if len(dailyAvg) != len(riskFreeRates) {
+		fmt.Println("Error: dailyAvg and riskFreeRates must have the same length")
+	}
+	excessReturns := make([]float64, 0)
+	for i := range riskFreeRates {
+		excessReturns = append(excessReturns, dailyAvg[i]-riskFreeRates[i])
+	}
+	excessStdev := stat.StdDev(excessReturns, nil)
+	sharpeRatio := stat.Mean(excessReturns) / excessStdev
+	return sharpeRatio
+}
+func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, time string) {
+	if p.buyingPower < amount*initialPrice {
 		fmt.Println("Not enough buying power to buy", amount, "shares of", ticker)
 		return
 	}
-	p.Positions = append(p.Positions, position)
-	p.BuyingPower -= amount * initialPrice
+	pos, ok := p.positions[ticker]
+	if !ok {
+		position := position{
+			time:         time,
+			ticker:       ticker,
+			amount:       amount,
+			averagePrice: initialPrice,
+		}
+		p.positions[ticker] = position
+	} else {
+		pos.averagePrice = (pos.averagePrice*pos.amount + initialPrice*amount) / (pos.amount + amount)
+		pos.amount += amount
+		pos.time = time
+		p.positions[ticker] = pos
+	}
+	fmt.Printf("Buying %.2f amount of %s at $%.2f date: %s\n", amount, ticker, initialPrice, time)
+	p.buyingPower -= amount * initialPrice
 }
 
 func (p *Portfolio) Deposit(cash float64) {
-	p.BuyingPower += cash
+	p.buyingPower += cash
 }
 
 func (p *Portfolio) Withdraw(cash float64) {
-	p.BuyingPower -= cash
+	p.buyingPower -= cash
 }
 
-// sell position method should modify average price and
-func (pos *Position) Sell(amount float64, currentPrice float64) {
-	if pos.Amount < amount {
-		fmt.Println("Not enough shares to sell")
-		return
+func (p *Portfolio) Sell(ticker string, stockAmount float64, currentPrice float64) {
+	pos, ok := p.positions[ticker]
+	if !ok {
+		fmt.Println("You don't have a position here!")
+	} else if pos.amount >= stockAmount {
+		fmt.Printf("Selling %.2f amount of %s at $%.2f\n", stockAmount, ticker, currentPrice)
+		pos.amount -= stockAmount
+		if pos.amount == 0 {
+			delete(p.positions, ticker)
+		} else {
+			p.positions[ticker] = pos
+		}
+		p.Deposit(stockAmount * currentPrice)
+	} else {
+		fmt.Println("You don't have enough shares to sell")
 	}
-	pos.Amount -= amount
-	pos.InitialPrice = (pos.InitialPrice*pos.Amount + currentPrice*amount) / (pos.Amount + amount)
 }
 
-// readDB will read the rows returned from a query and return a []StockData
-func readDB(rows *sql.Rows) []StockData {
+func readStocks(rows *sql.Rows) []StockData {
 	stocks := make([]StockData, 0)
 	for rows.Next() {
 		stockData := StockData{}
-		err := rows.Scan(&stockData.Date, &stockData.Ticker, &stockData.Open, &stockData.High, &stockData.Low, &stockData.Close, &stockData.Volume, &stockData.AdjClose)
+		err := rows.Scan(&stockData.date, &stockData.ticker, &stockData.open, &stockData.high, &stockData.low, &stockData.close, &stockData.volume, &stockData.adjClose)
 		if err != nil {
 			log.Fatalf("Failed to scan row: %v", err)
 		}
@@ -82,11 +178,10 @@ func readDB(rows *sql.Rows) []StockData {
 	return stocks
 }
 
-// SMA given (ticker, startTime, endTime)
 func SMA(stocks []StockData) float64 {
 	var mean float64
 	for _, stock := range stocks {
-		mean += stock.Close
+		mean += stock.close
 	}
 	mean /= float64(len(stocks))
 	return mean
@@ -101,33 +196,39 @@ func queryStocks(ticker string, startTime time.Time, endTime time.Time) []StockD
 		fmt.Printf("Error querying data: %v", err)
 	}
 	defer rows.Close()
-	stocks := readDB(rows)
+	stocks := readStocks(rows)
 	return stocks
 }
 
-// TODO: Make a SMACross
 func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
 	startTime = startTime.AddDate(0, 0, -longPeriod)
 	stocks := queryStocks(ticker, startTime, endTime)
 
 	for i := 0; i < len(stocks); i++ {
 		currentDayData := stocks[i]
-		currentDate := currentDayData.Date
 
-		if currentDate.Before(startTime) || currentDate.After(endTime) {
-			continue
-		}
 		if i < longPeriod-1 {
 			continue
 		}
+		startingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.open
 
 		smaShort := SMA(stocks[i-shortPeriod+1 : i+1])
 		smaLong := SMA(stocks[i-longPeriod+1 : i+1])
 
 		if smaShort > smaLong {
-			portfolio.Buy(ticker, 100, currentDayData.Close)
+			portfolio.Buy(ticker, 100, currentDayData.close, currentDayData.Date.Format("2006-01-02"))
 		}
+		if smaShort < smaLong {
+			amount := portfolio.positions[ticker].amount
+			portfolio.Sell(ticker, amount, currentDayData.close)
+		}
+
+		endingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.close
+		// adjust the dailyAvg and closedValues lists
+		portfolio.closeValues = append(portfolio.closeValues, endingValue)
+		portfolio.dailyAvg = append(portfolio.dailyAvg, (endingValue-startingValue)/endingValue)
 	}
+	portfolio.positions[ticker].currentPrice = stocks[len(stocks)-1].close
 }
 
 func fetchPrice(ticker string, currentTime string) float64 {
@@ -150,7 +251,6 @@ func queryAllStocks() {
 		log.Fatalf("Failed to query data: %v", err)
 	}
 	defer rows.Close()
-	// Get column types BEFORE iterating through rows
 	columnTypes, err := rows.ColumnTypes()
 	if err != nil {
 		log.Fatalf("Failed to get column types: %v", err)
@@ -158,10 +258,10 @@ func queryAllStocks() {
 
 	fmt.Println("--- Column Data Types ---")
 	for _, ct := range columnTypes {
-		fmt.Printf("  Column: %-15s | DB Type: %-10s | Go Scan Type: %-15v | Nullable: %t\n",
-			ct.Name(),             // Column name
-			ct.DatabaseTypeName(), // Database-specific type name (e.g., "DATE", "VARCHAR", "DOUBLE")
-			ct.ScanType(),         // Go's reflect.Type that Scan would typically use (e.g., time.Time, string, float64)
+		fmt.Printf("  Column: %-15s | DB Type: %-10s | Go Scan Type: %-15v | Nullable: %t\n",
+			ct.Name(),
+			ct.DatabaseTypeName(),
+			ct.ScanType(),
 		)
 	}
 	fmt.Println("-------------------------")
@@ -188,8 +288,23 @@ func queryAllStocks() {
 	}
 }
 
+func test() {
+	startTime := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+	portfolio := Portfolio{
+		buyingPower: 20000,
+		positions:   make(map[string]position),
+	}
+	SMACross("AAPL", 10, 30, startTime, endTime, &portfolio)
+	fmt.Printf("Buying Power: %.2f\n", portfolio.buyingPower)
+	for _, pos := range portfolio.positions {
+		fmt.Printf("Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n", pos.ticker, pos.amount, pos.averagePrice, pos.currentPrice)
+		fmt.Println("Amount now is", pos.amount*pos.currentPrice+portfolio.buyingPower)
+	}
+}
+
 func main() {
-	duckDBPath := "stock_data.db" // Name of your DuckDB file
+	duckDBPath := "stock_data.db"
 	var err error
 	db, err = sql.Open("duckdb", duckDBPath)
 	if err != nil {
@@ -197,16 +312,4 @@ func main() {
 	}
 	defer db.Close()
 	fmt.Printf("Connected to DuckDB: %s\n", duckDBPath)
-	// queryAllStocks()
-	startTime := time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC)
-	endTime := time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC)
-	portfolio := Portfolio{
-		BuyingPower: 1000000,
-		Positions:   []Position{},
-	}
-	SMACross("AAPL", 10, 30, startTime, endTime, &portfolio)
-	fmt.Printf("Buying Power: %.2f\n", portfolio.BuyingPower)
-	for _, pos := range portfolio.Positions {
-		fmt.Printf("Ticker: %s, Amount: %.2f, Initial Price: %.2f\n", pos.Ticker, pos.Amount, pos.InitialPrice)
-	}
 }
