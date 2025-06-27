@@ -60,26 +60,31 @@ func getRiskFreeRates(startTime time.Time, endTime time.Time) []float64 {
 	defer rows.Close()
 	riskFreeRates := make([]float64, 0)
 	for rows.Next() {
-		var rate float64
+		var rate sql.NullFloat64
 		err := rows.Scan(&rate)
 		if err != nil {
 			fmt.Printf("Error scanning row: %v", err)
 		}
-		riskFreeRates = append(riskFreeRates, rate)
+		if rate.Valid {
+			riskFreeRates = append(riskFreeRates, rate.Float64)
+		} else {
+			riskFreeRates = append(riskFreeRates, 0.0)
+		}
 	}
 	return riskFreeRates
 }
 
-func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) Metrics {
-	standardDev := stat.StdDev(p.dailyAvg, nil)
-	riskFreeRates := getRiskFreeRates(startTime, endTime)
-	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
-	metrics := Metrics{
-		standardDev: standardDev,
-		sharpeRatio: sharpeRatio,
+// getAnnualReturn will return the annual return over the period as a percentage
+func getAnnualReturn(dailyAvg []float64) float64 {
+	startValue := 1.0
+
+	for _, value := range dailyAvg {
+		startValue *= (1 + value)
 	}
-	return metrics
-	//TODO: Calculate annualReturn
+	numYears := float64(len(dailyAvg)) / 365.25
+	// Compound Annual Growth Rate - (end/start) ^ 1/n - 1
+	CAGR := math.Pow(startValue, 1/float64(numYears)-1)
+	return CAGR * 100
 }
 
 // getMaxDrawdown will return the maximum drawdown
@@ -110,9 +115,35 @@ func getSharpeRatio(riskFreeRates []float64, dailyAvg []float64) float64 {
 		excessReturns = append(excessReturns, dailyAvg[i]-riskFreeRates[i])
 	}
 	excessStdev := stat.StdDev(excessReturns, nil)
-	sharpeRatio := stat.Mean(excessReturns) / excessStdev
+	sharpeRatio := stat.Mean(excessReturns, nil) / excessStdev
 	return sharpeRatio
 }
+
+func (p *Portfolio) PrintMetrics() {
+	fmt.Println("=============================================")
+	fmt.Printf("Sharpe Ratio: %.2f\n", p.metrics.sharpeRatio)
+	fmt.Printf("MaxDrawdown: %.2f\n", p.metrics.maxDrawdown)
+	fmt.Printf("Annual Return: %.2f\n", p.metrics.annualReturn)
+	fmt.Printf("Standard Deviation: %.2f\n", p.metrics.standardDev)
+	fmt.Println("=============================================")
+}
+
+func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
+	standardDev := stat.StdDev(p.dailyAvg, nil)
+	riskFreeRates := getRiskFreeRates(startTime, endTime)
+	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
+	annualReturn := getAnnualReturn(p.dailyAvg)
+	maxDrawdown := getMaxDrawdown(p.closeValues)
+	metrics := Metrics{
+		standardDev:  standardDev,
+		sharpeRatio:  sharpeRatio,
+		maxDrawdown:  maxDrawdown,
+		annualReturn: annualReturn,
+	}
+	p.metrics = metrics
+	p.PrintMetrics()
+}
+
 func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, time string) {
 	if p.buyingPower < amount*initialPrice {
 		fmt.Println("Not enough buying power to buy", amount, "shares of", ticker)
@@ -216,7 +247,7 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		smaLong := SMA(stocks[i-longPeriod+1 : i+1])
 
 		if smaShort > smaLong {
-			portfolio.Buy(ticker, 100, currentDayData.close, currentDayData.Date.Format("2006-01-02"))
+			portfolio.Buy(ticker, 100, currentDayData.close, currentDayData.date.Format("2006-01-02"))
 		}
 		if smaShort < smaLong {
 			amount := portfolio.positions[ticker].amount
@@ -227,8 +258,11 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		// adjust the dailyAvg and closedValues lists
 		portfolio.closeValues = append(portfolio.closeValues, endingValue)
 		portfolio.dailyAvg = append(portfolio.dailyAvg, (endingValue-startingValue)/endingValue)
+		// adjust current price of a stock in a positions
+		pos := portfolio.positions[ticker]
+		pos.currentPrice = currentDayData.close
+		portfolio.positions[ticker] = pos
 	}
-	portfolio.positions[ticker].currentPrice = stocks[len(stocks)-1].close
 }
 
 func fetchPrice(ticker string, currentTime string) float64 {
@@ -301,6 +335,7 @@ func test() {
 		fmt.Printf("Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n", pos.ticker, pos.amount, pos.averagePrice, pos.currentPrice)
 		fmt.Println("Amount now is", pos.amount*pos.currentPrice+portfolio.buyingPower)
 	}
+	portfolio.GetBacktestingData(startTime, endTime)
 }
 
 func main() {
@@ -312,4 +347,5 @@ func main() {
 	}
 	defer db.Close()
 	fmt.Printf("Connected to DuckDB: %s\n", duckDBPath)
+	test()
 }
