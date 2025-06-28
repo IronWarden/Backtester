@@ -24,12 +24,13 @@ type StockData struct {
 	adjClose sql.NullFloat64
 }
 
+// TODO: Add ability to hold historical positions in portfolio?
 type Portfolio struct {
 	buyingPower float64
 	positions   map[string]position
 	openValue   float64
 	closeValue  float64
-	dailyAvg    []float64
+	dailyAvg    map[string]float64 // Store dailyAvg which maps a date to the average change of the day
 	closeValues []float64
 	metrics     Metrics
 }
@@ -49,8 +50,9 @@ type Metrics struct {
 	standardDev  float64
 }
 
-func getRiskFreeRates(startTime time.Time, endTime time.Time) []float64 {
-	query := "SELECT daily_risk_free_rate_decimal FROM \"3MTreasuryYields\" WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS);"
+// getRiskFreeRates() will return a map of daily risk free rates with the key being a date string i.e 'YYYY-MM-DD'
+func getRiskFreeRates(startTime time.Time, endTime time.Time) map[string]float64 {
+	query := "SELECT daily_risk_free_rate_decimal, Date FROM \"3MTreasuryYields\" WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS);"
 	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
 	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
 	rows, err := db.Query(query, startTimeStr, endTimeStr)
@@ -58,17 +60,19 @@ func getRiskFreeRates(startTime time.Time, endTime time.Time) []float64 {
 		fmt.Printf("Error querying data: %v", err)
 	}
 	defer rows.Close()
-	riskFreeRates := make([]float64, 0)
+	riskFreeRates := make(map[string]float64, 0)
 	for rows.Next() {
 		var rate sql.NullFloat64
-		err := rows.Scan(&rate)
+		var date time.Time
+		err := rows.Scan(&rate, &date)
 		if err != nil {
 			fmt.Printf("Error scanning row: %v", err)
 		}
+		dateStr := date.Format("2006-01-02")
 		if rate.Valid {
-			riskFreeRates = append(riskFreeRates, rate.Float64)
+			riskFreeRates[dateStr] = rate.Float64
 		} else {
-			riskFreeRates = append(riskFreeRates, 0.0)
+			riskFreeRates[dateStr] = 0.0
 		}
 	}
 	return riskFreeRates
@@ -105,19 +109,23 @@ func getMaxDrawdown(closeValues []float64) float64 {
 	return (peak - minValue) / peak
 }
 
-// getSharpeRatio will adjust the portfolio's sharpe ratio
-func getSharpeRatio(riskFreeRates []float64, dailyAvg []float64) float64 {
-	if len(dailyAvg) != len(riskFreeRates) {
-		fmt.Println("Error: dailyAvg and riskFreeRates must have the same length")
-	}
+// getSharpeRatio will return the sharpeRatio
+func getSharpeRatio(riskFreeRates map[string]float64, dailyAvg map[string]float64) float64 {
 	excessReturns := make([]float64, 0)
-	for i := range riskFreeRates {
-		excessReturns = append(excessReturns, dailyAvg[i]-riskFreeRates[i])
+	// Iterate through map for common dates calculate excess return
+	for key := range riskFreeRates {
+		excessReturn := dailyAvg[key] - riskFreeRates[key]
+		fmt.Println("excess return:", excessReturn)
+		if _, ok := dailyAvg[key]; ok {
+			excessReturns = append(excessReturns, excessReturn)
+		}
 	}
 	excessStdev := stat.StdDev(excessReturns, nil)
 	sharpeRatio := stat.Mean(excessReturns, nil) / excessStdev
 	return sharpeRatio
 }
+
+//TODO: Implement getting Sortino Ratio
 
 func (p *Portfolio) PrintMetrics() {
 	fmt.Println("=============================================")
@@ -129,10 +137,15 @@ func (p *Portfolio) PrintMetrics() {
 }
 
 func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
-	standardDev := stat.StdDev(p.dailyAvg, nil)
+	// Create []float64 from map[string]float64
+	dailyAvgSlice := make([]float64, 0)
+	for _, value := range p.dailyAvg {
+		dailyAvgSlice = append(dailyAvgSlice, value)
+	}
+	standardDev := stat.StdDev(dailyAvgSlice, nil)
 	riskFreeRates := getRiskFreeRates(startTime, endTime)
 	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
-	annualReturn := getAnnualReturn(p.dailyAvg)
+	annualReturn := getAnnualReturn(dailyAvgSlice)
 	maxDrawdown := getMaxDrawdown(p.closeValues)
 	metrics := Metrics{
 		standardDev:  standardDev,
@@ -232,11 +245,12 @@ func queryStocks(ticker string, startTime time.Time, endTime time.Time) []StockD
 }
 
 func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
-	startTime = startTime.AddDate(0, 0, -longPeriod)
-	stocks := queryStocks(ticker, startTime, endTime)
+	adjustedStartTime := startTime.AddDate(0, 0, -longPeriod)
+	stocks := queryStocks(ticker, adjustedStartTime, endTime)
 
 	for i := 0; i < len(stocks); i++ {
 		currentDayData := stocks[i]
+		date := currentDayData.date.Format("2006-01-02")
 
 		if i < longPeriod-1 {
 			continue
@@ -247,7 +261,7 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		smaLong := SMA(stocks[i-longPeriod+1 : i+1])
 
 		if smaShort > smaLong {
-			portfolio.Buy(ticker, 100, currentDayData.close, currentDayData.date.Format("2006-01-02"))
+			portfolio.Buy(ticker, 100, currentDayData.close, date)
 		}
 		if smaShort < smaLong {
 			amount := portfolio.positions[ticker].amount
@@ -257,7 +271,7 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		endingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.close
 		// adjust the dailyAvg and closedValues lists
 		portfolio.closeValues = append(portfolio.closeValues, endingValue)
-		portfolio.dailyAvg = append(portfolio.dailyAvg, (endingValue-startingValue)/endingValue)
+		portfolio.dailyAvg[date] = (endingValue - startingValue) / startingValue
 		// adjust current price of a stock in a positions
 		pos := portfolio.positions[ticker]
 		pos.currentPrice = currentDayData.close
@@ -328,6 +342,8 @@ func test() {
 	portfolio := Portfolio{
 		buyingPower: 20000,
 		positions:   make(map[string]position),
+		dailyAvg:    make(map[string]float64),
+		closeValues: make([]float64, 0),
 	}
 	SMACross("AAPL", 10, 30, startTime, endTime, &portfolio)
 	fmt.Printf("Buying Power: %.2f\n", portfolio.buyingPower)
