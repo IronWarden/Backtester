@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"time"
 
 	_ "github.com/marcboeker/go-duckdb"
@@ -26,13 +27,13 @@ type StockData struct {
 
 // TODO: Add ability to hold historical positions in portfolio?
 type Portfolio struct {
-	buyingPower float64
-	positions   map[string]position
-	openValue   float64
-	closeValue  float64
-	dailyAvg    map[string]float64 // Store dailyAvg which maps a date to the average change of the day
-	closeValues []float64
-	metrics     Metrics
+	buyingPower          float64
+	positions            map[string]position
+	openValue            float64
+	closeValue           float64
+	dailyAvg             map[string]float64 // Store dailyAvg which maps a date to the average change of the day
+	portfolioCloseValues []float64
+	metrics              Metrics
 }
 
 type position struct {
@@ -75,35 +76,39 @@ func getRiskFreeRates(startTime time.Time, endTime time.Time) map[string]float64
 			riskFreeRates[dateStr] = 0.0
 		}
 	}
+	fmt.Println("Length of risk free rates: ", len(riskFreeRates))
+
 	return riskFreeRates
 }
 
 // getAnnualReturn will return the annual return over the period as a percentage
-func getAnnualReturn(dailyAvg []float64) float64 {
+func getAnnualReturn(dailyAvg []float64, startTime time.Time, endTime time.Time) float64 {
 	startValue := 1.0
 
 	for _, value := range dailyAvg {
 		startValue *= (1 + value)
 	}
-	numYears := float64(len(dailyAvg)) / 365.25
+	fmt.Println("Start Value: ", startValue)
+	numYears := float64(len(dailyAvg)) / 252.0
 	// Compound Annual Growth Rate - (end/start) ^ 1/n - 1
-	CAGR := math.Pow(startValue, 1/float64(numYears)-1)
+	CAGR := math.Pow(startValue, 1/numYears) - 1
 	return CAGR * 100
 }
 
 // getMaxDrawdown will return the maximum drawdown
-func getMaxDrawdown(closeValues []float64) float64 {
-	peak := closeValues[0]
+func getMaxDrawdown(portfolioCloseValues []float64) float64 {
+	peak := portfolioCloseValues[0]
 	peakIdx := 0
-	minValue := closeValues[0]
-	for i, value := range closeValues {
-		if value > peak {
+	minValue := portfolioCloseValues[0]
+	for i, value := range portfolioCloseValues {
+		// Find peak but allow atleast 1 day remaining in the period
+		if value > peak && i < len(portfolioCloseValues)-2 {
 			peakIdx = i
 			peak = value
 		}
 	}
-	for i := peakIdx + 1; i < len(closeValues); i++ {
-		minValue = math.Min(minValue, closeValues[i])
+	for i := peakIdx + 1; i < len(portfolioCloseValues); i++ {
+		minValue = math.Min(minValue, portfolioCloseValues[i])
 	}
 
 	return (peak - minValue) / peak
@@ -113,16 +118,18 @@ func getMaxDrawdown(closeValues []float64) float64 {
 func getSharpeRatio(riskFreeRates map[string]float64, dailyAvg map[string]float64) float64 {
 	excessReturns := make([]float64, 0)
 	// Iterate through map for common dates calculate excess return
-	for key := range riskFreeRates {
-		excessReturn := dailyAvg[key] - riskFreeRates[key]
-		fmt.Println("excess return:", excessReturn)
-		if _, ok := dailyAvg[key]; ok {
+	for key := range dailyAvg {
+		if _, ok := riskFreeRates[key]; ok {
+			excessReturn := dailyAvg[key] - riskFreeRates[key]
 			excessReturns = append(excessReturns, excessReturn)
 		}
 	}
 	excessStdev := stat.StdDev(excessReturns, nil)
+	// Calculate daily Sharpe ratio
 	sharpeRatio := stat.Mean(excessReturns, nil) / excessStdev
-	return sharpeRatio
+	// Annualize
+	annualizedSharpe := sharpeRatio * math.Sqrt(252.0)
+	return annualizedSharpe
 }
 
 //TODO: Implement getting Sortino Ratio
@@ -139,14 +146,23 @@ func (p *Portfolio) PrintMetrics() {
 func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
 	// Create []float64 from map[string]float64
 	dailyAvgSlice := make([]float64, 0)
-	for _, value := range p.dailyAvg {
-		dailyAvgSlice = append(dailyAvgSlice, value)
+	dailyAvgStrSlice := make([]string, 0)
+	// NOTE: Daily avg has to retain order for calculations to be correct
+	for date := range p.dailyAvg {
+		dailyAvgStrSlice = append(dailyAvgStrSlice, date)
 	}
-	standardDev := stat.StdDev(dailyAvgSlice, nil)
+	sort.Strings(dailyAvgStrSlice)
+	for _, value := range dailyAvgStrSlice {
+		fmt.Println("Date: ", value)
+		dailyAvgSlice = append(dailyAvgSlice, p.dailyAvg[value])
+	}
+
+	fmt.Println("length of dailyAvgSlice: ", len(dailyAvgSlice))
+	standardDev := stat.StdDev(dailyAvgSlice, nil) * math.Sqrt(252.0)
 	riskFreeRates := getRiskFreeRates(startTime, endTime)
 	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
-	annualReturn := getAnnualReturn(dailyAvgSlice)
-	maxDrawdown := getMaxDrawdown(p.closeValues)
+	annualReturn := getAnnualReturn(dailyAvgSlice, startTime, endTime)
+	maxDrawdown := getMaxDrawdown(p.portfolioCloseValues)
 	metrics := Metrics{
 		standardDev:  standardDev,
 		sharpeRatio:  sharpeRatio,
@@ -244,9 +260,43 @@ func queryStocks(ticker string, startTime time.Time, endTime time.Time) []StockD
 	return stocks
 }
 
+// Just buy and stock at the initialPrice at startTime and hold till endTime
+func BuyAndHold(ticker string, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
+	stocks := queryStocks(ticker, startTime, endTime)
+	amount := int(portfolio.buyingPower / stocks[0].open)
+	portfolio.Buy(ticker, float64(amount), stocks[0].open, stocks[0].date.Format("2006-01-02"))
+
+	for i := range stocks {
+		// if i == 0 {
+		// 	continue
+		// }
+		currentDayData := stocks[i]
+
+		startingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.open
+		endingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.close
+		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
+	}
+}
+
+// BUG: Metrics being messed up due to incorrect dailyAvg?
+func (p *Portfolio) adjustPortfolioParameters(currentDayData StockData, startingValue float64, endingValue float64) {
+	date := currentDayData.date.Format("2006-01-02")
+	ticker := currentDayData.ticker
+	dailyChange := (endingValue - startingValue) / startingValue
+	// adjust the dailyAvg and closedValues lists
+	p.portfolioCloseValues = append(p.portfolioCloseValues, endingValue)
+	fmt.Printf("Daily Change: %.2f \n", dailyChange*100)
+	p.dailyAvg[date] = dailyChange
+	// adjust current price of a stock in a positions
+	pos := p.positions[ticker]
+	pos.currentPrice = currentDayData.close
+	p.positions[ticker] = pos
+}
+
 func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
 	adjustedStartTime := startTime.AddDate(0, 0, -longPeriod)
 	stocks := queryStocks(ticker, adjustedStartTime, endTime)
+	fmt.Println("Length of period is: ", len(stocks[longPeriod:]))
 
 	for i := 0; i < len(stocks); i++ {
 		currentDayData := stocks[i]
@@ -257,6 +307,7 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		}
 		startingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.open
 
+		// TODO: Fix logic to to give SMA the interval which doesn't include the current day
 		smaShort := SMA(stocks[i-shortPeriod+1 : i+1])
 		smaLong := SMA(stocks[i-longPeriod+1 : i+1])
 
@@ -269,13 +320,7 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		}
 
 		endingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.close
-		// adjust the dailyAvg and closedValues lists
-		portfolio.closeValues = append(portfolio.closeValues, endingValue)
-		portfolio.dailyAvg[date] = (endingValue - startingValue) / startingValue
-		// adjust current price of a stock in a positions
-		pos := portfolio.positions[ticker]
-		pos.currentPrice = currentDayData.close
-		portfolio.positions[ticker] = pos
+		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
 	}
 }
 
@@ -340,12 +385,13 @@ func test() {
 	startTime := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
 	endTime := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 	portfolio := Portfolio{
-		buyingPower: 20000,
-		positions:   make(map[string]position),
-		dailyAvg:    make(map[string]float64),
-		closeValues: make([]float64, 0),
+		buyingPower:          20000,
+		positions:            make(map[string]position),
+		dailyAvg:             make(map[string]float64),
+		portfolioCloseValues: make([]float64, 0),
 	}
-	SMACross("AAPL", 10, 30, startTime, endTime, &portfolio)
+	// SMACross("AAPL", 10, 30, startTime, endTime, &portfolio)
+	BuyAndHold("AAPL", startTime, endTime, &portfolio)
 	fmt.Printf("Buying Power: %.2f\n", portfolio.buyingPower)
 	for _, pos := range portfolio.positions {
 		fmt.Printf("Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n", pos.ticker, pos.amount, pos.averagePrice, pos.currentPrice)
