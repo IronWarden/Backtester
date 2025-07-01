@@ -28,7 +28,7 @@ type StockData struct {
 // TODO: Add ability to hold historical positions in portfolio?
 type Portfolio struct {
 	buyingPower          float64
-	positions            map[string]position
+	positions            map[string]*position
 	openValue            float64
 	closeValue           float64
 	dailyAvg             map[string]float64 // Store dailyAvg which maps a date to the average change of the day
@@ -82,13 +82,13 @@ func getRiskFreeRates(startTime time.Time, endTime time.Time) map[string]float64
 }
 
 // getAnnualReturn will return the annual return over the period as a percentage
-func getAnnualReturn(dailyAvg []float64, startTime time.Time, endTime time.Time) float64 {
+func getAnnualReturn(dailyAvg []float64) float64 {
 	startValue := 1.0
 
-	for _, value := range dailyAvg {
-		startValue *= (1 + value)
+	for i := range dailyAvg {
+		startValue *= (1 + dailyAvg[i])
 	}
-	fmt.Println("Start Value: ", startValue)
+	fmt.Println("EndValue: ", startValue)
 	numYears := float64(len(dailyAvg)) / 252.0
 	// Compound Annual Growth Rate - (end/start) ^ 1/n - 1
 	CAGR := math.Pow(startValue, 1/numYears) - 1
@@ -99,7 +99,6 @@ func getAnnualReturn(dailyAvg []float64, startTime time.Time, endTime time.Time)
 func getMaxDrawdown(portfolioCloseValues []float64) float64 {
 	peak := portfolioCloseValues[0]
 	peakIdx := 0
-	minValue := portfolioCloseValues[0]
 	for i, value := range portfolioCloseValues {
 		// Find peak but allow atleast 1 day remaining in the period
 		if value > peak && i < len(portfolioCloseValues)-2 {
@@ -107,11 +106,15 @@ func getMaxDrawdown(portfolioCloseValues []float64) float64 {
 			peak = value
 		}
 	}
+	// Set minValue to peak for initial value
+	minValue := peak
 	for i := peakIdx + 1; i < len(portfolioCloseValues); i++ {
 		minValue = math.Min(minValue, portfolioCloseValues[i])
 	}
+	fmt.Printf("Peak: %.2f, Min: %.2f \n", peak, minValue)
+	change := (minValue - peak) / peak
 
-	return (peak - minValue) / peak
+	return change * 100 // Return percentage
 }
 
 // getSharpeRatio will return the sharpeRatio
@@ -153,7 +156,6 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
 	}
 	sort.Strings(dailyAvgStrSlice)
 	for _, value := range dailyAvgStrSlice {
-		fmt.Println("Date: ", value)
 		dailyAvgSlice = append(dailyAvgSlice, p.dailyAvg[value])
 	}
 
@@ -161,7 +163,7 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
 	standardDev := stat.StdDev(dailyAvgSlice, nil) * math.Sqrt(252.0)
 	riskFreeRates := getRiskFreeRates(startTime, endTime)
 	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
-	annualReturn := getAnnualReturn(dailyAvgSlice, startTime, endTime)
+	annualReturn := getAnnualReturn(dailyAvgSlice)
 	maxDrawdown := getMaxDrawdown(p.portfolioCloseValues)
 	metrics := Metrics{
 		standardDev:  standardDev,
@@ -178,9 +180,12 @@ func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, tim
 		fmt.Println("Not enough buying power to buy", amount, "shares of", ticker)
 		return
 	}
+	if amount == 0 {
+		return
+	}
 	pos, ok := p.positions[ticker]
 	if !ok {
-		position := position{
+		position := &position{
 			time:         time,
 			ticker:       ticker,
 			amount:       amount,
@@ -191,7 +196,6 @@ func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, tim
 		pos.averagePrice = (pos.averagePrice*pos.amount + initialPrice*amount) / (pos.amount + amount)
 		pos.amount += amount
 		pos.time = time
-		p.positions[ticker] = pos
 	}
 	fmt.Printf("Buying %.2f amount of %s at $%.2f date: %s\n", amount, ticker, initialPrice, time)
 	p.buyingPower -= amount * initialPrice
@@ -209,7 +213,7 @@ func (p *Portfolio) Sell(ticker string, stockAmount float64, currentPrice float6
 	pos, ok := p.positions[ticker]
 	if !ok {
 		fmt.Println("You don't have a position here!")
-	} else if pos.amount >= stockAmount {
+	} else if pos.amount >= stockAmount && pos.amount > 0 {
 		fmt.Printf("Selling %.2f amount of %s at $%.2f\n", stockAmount, ticker, currentPrice)
 		pos.amount -= stockAmount
 		if pos.amount == 0 {
@@ -263,136 +267,101 @@ func queryStocks(ticker string, startTime time.Time, endTime time.Time) []StockD
 // Just buy and stock at the initialPrice at startTime and hold till endTime
 func BuyAndHold(ticker string, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
 	stocks := queryStocks(ticker, startTime, endTime)
-	amount := int(portfolio.buyingPower / stocks[0].open)
-	portfolio.Buy(ticker, float64(amount), stocks[0].open, stocks[0].date.Format("2006-01-02"))
+	amount := greedyBuy(portfolio.buyingPower, stocks[0].close)
+	portfolio.Buy(ticker, float64(amount), stocks[0].close, stocks[0].date.Format("2006-01-02"))
+	// NOTE: Close to close values should be used for correct metrics
 
 	for i := range stocks {
-		// if i == 0 {
-		// 	continue
-		// }
+		if i == 0 {
+			continue
+		}
 		currentDayData := stocks[i]
+		previousDayData := stocks[i-1]
 
-		startingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.open
+		startingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*previousDayData.close
 		endingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.close
 		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
 	}
 }
 
-// BUG: Metrics being messed up due to incorrect dailyAvg?
 func (p *Portfolio) adjustPortfolioParameters(currentDayData StockData, startingValue float64, endingValue float64) {
 	date := currentDayData.date.Format("2006-01-02")
 	ticker := currentDayData.ticker
 	dailyChange := (endingValue - startingValue) / startingValue
 	// adjust the dailyAvg and closedValues lists
 	p.portfolioCloseValues = append(p.portfolioCloseValues, endingValue)
-	fmt.Printf("Daily Change: %.2f \n", dailyChange*100)
+	// fmt.Println("Starting Value: ", startingValue)
+	// fmt.Println("Ending Value: ", endingValue)
+	// fmt.Printf("Daily Change: %.5f \n", dailyChange*100)
 	p.dailyAvg[date] = dailyChange
 	// adjust current price of a stock in a positions
-	pos := p.positions[ticker]
-	pos.currentPrice = currentDayData.close
-	p.positions[ticker] = pos
+	if pos, ok := p.positions[ticker]; ok {
+		pos.currentPrice = currentDayData.close
+	}
 }
 
+// Buy has much stock as you can without fractional shares
+func greedyBuy(buyingPower float64, stockValue float64) int {
+	return int(buyingPower / stockValue)
+}
+
+// SMACross strategy
 func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
 	adjustedStartTime := startTime.AddDate(0, 0, -longPeriod)
 	stocks := queryStocks(ticker, adjustedStartTime, endTime)
 	fmt.Println("Length of period is: ", len(stocks[longPeriod:]))
-
-	for i := 0; i < len(stocks); i++ {
-		currentDayData := stocks[i]
-		date := currentDayData.date.Format("2006-01-02")
-
-		if i < longPeriod-1 {
+	for i := range stocks {
+		if i < longPeriod {
 			continue
 		}
-		startingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.open
+		currentDayData := stocks[i]
+		previousDayData := stocks[i-1]
+		date := currentDayData.date.Format("2006-01-02")
+		amountAtOpen := 0.0
+		if position, ok := portfolio.positions[ticker]; ok {
+			amountAtOpen = position.amount
+		}
+		startingValue := portfolio.buyingPower + amountAtOpen*previousDayData.close
 
-		// TODO: Fix logic to to give SMA the interval which doesn't include the current day
-		smaShort := SMA(stocks[i-shortPeriod+1 : i+1])
-		smaLong := SMA(stocks[i-longPeriod+1 : i+1])
+		smaShort := SMA(stocks[i-shortPeriod : i])
+		smaLong := SMA(stocks[i-longPeriod : i])
 
+		changeAmount := 0.0
 		if smaShort > smaLong {
-			portfolio.Buy(ticker, 100, currentDayData.close, date)
-		}
-		if smaShort < smaLong {
-			amount := portfolio.positions[ticker].amount
-			portfolio.Sell(ticker, amount, currentDayData.close)
+			changeAmount = float64(greedyBuy(portfolio.buyingPower*0.25, currentDayData.close))
+			portfolio.Buy(ticker, changeAmount, currentDayData.close, date)
+		} else if smaShort < smaLong {
+			// Sell all stocks
+			changeAmount = amountAtOpen
+			portfolio.Sell(ticker, changeAmount, currentDayData.close)
+		} else {
+			fmt.Println("Do nothing")
 		}
 
-		endingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.close
+		amountAtClose := 0.0
+		if position, ok := portfolio.positions[ticker]; ok {
+			amountAtClose = position.amount
+		}
+		endingValue := portfolio.buyingPower + amountAtClose*currentDayData.close
 		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
-	}
-}
-
-func fetchPrice(ticker string, currentTime string) float64 {
-	var price float64
-	query := "SELECT Close FROM stock_data WHERE Ticker = ? AND Date = CAST(? AS TIMESTAMP_NS);"
-	rows, err := db.Query(query, ticker, currentTime)
-	if err != nil {
-		log.Fatalf("Error querying data: %v", err)
-	}
-	defer rows.Close()
-	rows.Scan(&price)
-
-	return price
-}
-
-func queryAllStocks() {
-	fmt.Println("\nQuerying first 5 rows from 'stock_data' table:")
-	rows, err := db.Query("SELECT Date, Ticker, Open, High, Low, Close, Volume, \"Adj Close\" FROM stock_data LIMIT 5;")
-	if err != nil {
-		log.Fatalf("Failed to query data: %v", err)
-	}
-	defer rows.Close()
-	columnTypes, err := rows.ColumnTypes()
-	if err != nil {
-		log.Fatalf("Failed to get column types: %v", err)
-	}
-
-	fmt.Println("--- Column Data Types ---")
-	for _, ct := range columnTypes {
-		fmt.Printf("  Column: %-15s | DB Type: %-10s | Go Scan Type: %-15v | Nullable: %t\n",
-			ct.Name(),
-			ct.DatabaseTypeName(),
-			ct.ScanType(),
-		)
-	}
-	fmt.Println("-------------------------")
-	for rows.Next() {
-		var (
-			date     time.Time
-			ticker   string
-			open     float64
-			high     float64
-			low      float64
-			close    float64
-			volume   float64
-			adjClose sql.NullFloat64
-		)
-		err := rows.Scan(&date, &ticker, &open, &high, &low, &close, &volume, &adjClose)
-		if err != nil {
-			log.Fatalf("Failed to scan row: %v", err)
-		}
-		fmt.Printf("Date: %s, Ticker: %s, Open: %.2f, High: %.2f, Low: %.2f, Close: %.2f, Volume: %.0f, AdjClose: %.2f\n",
-			date, ticker, open, high, low, close, volume, adjClose)
-	}
-	if err = rows.Err(); err != nil {
-		log.Fatalf("Error iterating rows: %v", err)
 	}
 }
 
 func test() {
 	startTime := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
 	endTime := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
-	portfolio := Portfolio{
+	portfolio := &Portfolio{
 		buyingPower:          20000,
-		positions:            make(map[string]position),
+		positions:            make(map[string]*position),
 		dailyAvg:             make(map[string]float64),
 		portfolioCloseValues: make([]float64, 0),
 	}
-	// SMACross("AAPL", 10, 30, startTime, endTime, &portfolio)
-	BuyAndHold("AAPL", startTime, endTime, &portfolio)
+	SMACross("AAPL", 10, 20, startTime, endTime, portfolio)
+	// BuyAndHold("AAPL", startTime, endTime, portfolio)
 	fmt.Printf("Buying Power: %.2f\n", portfolio.buyingPower)
+	if len(portfolio.positions) == 0 {
+		fmt.Println("No positions")
+	}
 	for _, pos := range portfolio.positions {
 		fmt.Printf("Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n", pos.ticker, pos.amount, pos.averagePrice, pos.currentPrice)
 		fmt.Println("Amount now is", pos.amount*pos.currentPrice+portfolio.buyingPower)
