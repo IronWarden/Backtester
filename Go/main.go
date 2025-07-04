@@ -46,9 +46,43 @@ type position struct {
 
 type Metrics struct {
 	sharpeRatio  float64
+	sortinoRatio float64
 	maxDrawdown  float64
 	annualReturn float64
 	standardDev  float64
+}
+
+// getSortinoRatio returns the Sortino Ratio
+func getSortinoRatio(riskFreeRates map[string]float64, dailyAvg map[string]float64) float64 {
+	excessReturns := make([]float64, 0)
+	downsideReturns := make([]float64, 0)
+
+	// Iterate through map for common dates to calculate excess returns
+	for key := range dailyAvg {
+		if riskFreeRate, ok := riskFreeRates[key]; ok {
+			excessReturn := dailyAvg[key] - riskFreeRate
+			excessReturns = append(excessReturns, excessReturn)
+			if excessReturn < 0 {
+				downsideReturns = append(downsideReturns, excessReturn)
+			}
+		}
+	}
+
+	if len(downsideReturns) == 0 {
+		return 0.0 // Avoid division by zero if there are no negative returns
+	}
+
+	averageExcessReturn := stat.Mean(excessReturns, nil)
+	downsideDeviation := stat.StdDev(downsideReturns, nil)
+
+	if downsideDeviation == 0 {
+		return 0.0 // Avoid division by zero
+	}
+
+	sortinoRatio := averageExcessReturn / downsideDeviation
+	// Annualize
+	annualizedSortino := sortinoRatio * math.Sqrt(252.0)
+	return annualizedSortino
 }
 
 // getRiskFreeRates() will return a map of daily risk free rates with the key being a date string i.e 'YYYY-MM-DD'
@@ -140,6 +174,7 @@ func getSharpeRatio(riskFreeRates map[string]float64, dailyAvg map[string]float6
 func (p *Portfolio) PrintMetrics() {
 	fmt.Println("=============================================")
 	fmt.Printf("Sharpe Ratio: %.2f\n", p.metrics.sharpeRatio)
+	fmt.Printf("Sortino Ratio: %.2f\n", p.metrics.sortinoRatio)
 	fmt.Printf("MaxDrawdown: %.2f\n", p.metrics.maxDrawdown)
 	fmt.Printf("Annual Return: %.2f\n", p.metrics.annualReturn)
 	fmt.Printf("Standard Deviation: %.2f\n", p.metrics.standardDev)
@@ -163,11 +198,13 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
 	standardDev := stat.StdDev(dailyAvgSlice, nil) * math.Sqrt(252.0)
 	riskFreeRates := getRiskFreeRates(startTime, endTime)
 	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
+	sortinoRatio := getSortinoRatio(riskFreeRates, p.dailyAvg)
 	annualReturn := getAnnualReturn(dailyAvgSlice)
 	maxDrawdown := getMaxDrawdown(p.portfolioCloseValues)
 	metrics := Metrics{
 		standardDev:  standardDev,
 		sharpeRatio:  sharpeRatio,
+		sortinoRatio: sortinoRatio,
 		maxDrawdown:  maxDrawdown,
 		annualReturn: annualReturn,
 	}
@@ -264,6 +301,67 @@ func queryStocks(ticker string, startTime time.Time, endTime time.Time) []StockD
 	return stocks
 }
 
+// TODO: Implement mean reversion strategies
+
+// RSI will calculate the Relative Strength Index and return it
+func RSI(closeValues []float64, rsPeriod float64) float64 {
+	upDays := make([]float64, 0)
+	downDays := make([]float64, 0)
+	upDayRs, downDayRs := 0.0, 0.0
+
+	for i := range closeValues {
+		if closeValues[i] >= 0 {
+			upDays = append(upDays, closeValues[i])
+		} else {
+			downDays = append(downDays, closeValues[i])
+		}
+	}
+	for _, value := range upDays {
+		upDayRs += value
+	}
+	upDayRs /= rsPeriod
+	for _, value := range downDays {
+		downDayRs += value
+	}
+	downDayRs /= rsPeriod
+	rs := upDayRs / downDayRs
+
+	// RSI - 100 - (100  / (1 +RS))
+	return 100 - (100 / (1 + rs))
+}
+
+func RSICross(ticker string, startTime time.Time, endTime time.Time, portfolio *Portfolio, rsPeriod int, lowerThreshold float64, upperThreshold float64) {
+	adjustedEndTime := startTime.AddDate(0, 0, -rsPeriod)
+	stocks := queryStocks(ticker, startTime, adjustedEndTime)
+	closeValues := make([]float64, 0)
+	pastRsi := 0.0
+
+	for i := 1; i < len(stocks); i++ {
+		currentDayData := stocks[i]
+		previousDayData := stocks[i-1]
+
+		if i < rsPeriod {
+			change := (currentDayData.close - previousDayData.close) / previousDayData.close
+			closeValues = append(closeValues, change)
+			continue
+		}
+
+		// Calculate current rsi
+		currentRsi := RSI(closeValues, float64(rsPeriod))
+
+		if currentRsi > upperThreshold && pastRsi <= upperThreshold {
+			amount := greedyBuy(portfolio.buyingPower, currentDayData.close)
+			portfolio.Buy(ticker, float64(amount), currentDayData.close, currentDayData.date.Format("2006-01-02"))
+		} else if currentRsi < lowerThreshold && pastRsi >= lowerThreshold {
+			amount := portfolio.positions[ticker].amount * 0.5
+			portfolio.Sell(ticker, amount, currentDayData.close)
+		}
+		closeValues = append(closeValues[1:], currentDayData.close)
+		pastRsi = currentRsi
+
+	}
+}
+
 // Just buy and stock at the initialPrice at startTime and hold till endTime
 func BuyAndHold(ticker string, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
 	stocks := queryStocks(ticker, startTime, endTime)
@@ -278,8 +376,8 @@ func BuyAndHold(ticker string, startTime time.Time, endTime time.Time, portfolio
 		currentDayData := stocks[i]
 		previousDayData := stocks[i-1]
 
-		startingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*previousDayData.close
-		endingValue := portfolio.buyingPower + portfolio.positions[ticker].amount*currentDayData.close
+		startingValue := portfolio.getPortfolioValue(ticker, previousDayData)
+		endingValue := portfolio.getPortfolioValue(ticker, currentDayData)
 		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
 	}
 }
@@ -305,11 +403,23 @@ func greedyBuy(buyingPower float64, stockValue float64) int {
 	return int(buyingPower / stockValue)
 }
 
+// getPortfolioValue() will return the portfolio underlying value of assets plus cash
+// we will use the close value for close to close comparisions
+func (p *Portfolio) getPortfolioValue(ticker string, stockData StockData) float64 {
+	var amountAtOpen float64
+	if position, ok := p.positions[ticker]; ok {
+		amountAtOpen = position.amount
+	}
+	return p.buyingPower + amountAtOpen*stockData.close
+}
+
 // SMACross strategy
 func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
 	adjustedStartTime := startTime.AddDate(0, 0, -longPeriod)
 	stocks := queryStocks(ticker, adjustedStartTime, endTime)
 	fmt.Println("Length of period is: ", len(stocks[longPeriod:]))
+	prevShort, prevLong := 0.0, 0.0
+
 	for i := range stocks {
 		if i < longPeriod {
 			continue
@@ -317,33 +427,26 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		currentDayData := stocks[i]
 		previousDayData := stocks[i-1]
 		date := currentDayData.date.Format("2006-01-02")
-		amountAtOpen := 0.0
-		if position, ok := portfolio.positions[ticker]; ok {
-			amountAtOpen = position.amount
-		}
-		startingValue := portfolio.buyingPower + amountAtOpen*previousDayData.close
+		startingValue := portfolio.getPortfolioValue(ticker, previousDayData)
 
 		smaShort := SMA(stocks[i-shortPeriod : i])
 		smaLong := SMA(stocks[i-longPeriod : i])
 
-		changeAmount := 0.0
-		if smaShort > smaLong {
+		changeAmount := 0.0 // Change in stock amount throughout the day
+		if smaShort > smaLong && prevShort <= prevLong {
 			changeAmount = float64(greedyBuy(portfolio.buyingPower*0.25, currentDayData.close))
 			portfolio.Buy(ticker, changeAmount, currentDayData.close, date)
-		} else if smaShort < smaLong {
+		} else if smaShort < smaLong && prevShort >= prevLong {
 			// Sell all stocks
-			changeAmount = amountAtOpen
+			changeAmount = portfolio.positions[ticker].amount * 0.5
 			portfolio.Sell(ticker, changeAmount, currentDayData.close)
 		} else {
 			fmt.Println("Do nothing")
 		}
 
-		amountAtClose := 0.0
-		if position, ok := portfolio.positions[ticker]; ok {
-			amountAtClose = position.amount
-		}
-		endingValue := portfolio.buyingPower + amountAtClose*currentDayData.close
+		endingValue := portfolio.getPortfolioValue(ticker, currentDayData)
 		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
+		prevShort, prevLong = smaShort, smaLong
 	}
 }
 
