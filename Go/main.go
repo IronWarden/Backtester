@@ -177,7 +177,7 @@ func (p *Portfolio) PrintMetrics() {
 	fmt.Printf("Sortino Ratio: %.2f\n", p.metrics.sortinoRatio)
 	fmt.Printf("MaxDrawdown: %.2f\n", p.metrics.maxDrawdown)
 	fmt.Printf("Annual Return: %.2f\n", p.metrics.annualReturn)
-	fmt.Printf("Standard Deviation: %.2f\n", p.metrics.standardDev)
+	fmt.Printf("Standard Deviation: %.4f\n", p.metrics.standardDev)
 	fmt.Println("=============================================")
 }
 
@@ -191,6 +191,7 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
 	}
 	sort.Strings(dailyAvgStrSlice)
 	for _, value := range dailyAvgStrSlice {
+		// fmt.Println(value)
 		dailyAvgSlice = append(dailyAvgSlice, p.dailyAvg[value])
 	}
 
@@ -340,33 +341,45 @@ func RSICross(ticker string, startTime time.Time, endTime time.Time, portfolio *
 		currentDayData := stocks[i]
 		previousDayData := stocks[i-1]
 
+		price := currentDayData.close
+		if currentDayData.adjClose.Valid {
+			price = currentDayData.adjClose.Float64
+		}
+
 		if i < rsPeriod {
-			change := (currentDayData.close - previousDayData.close) / previousDayData.close
+			change := (price - previousDayData.close) / previousDayData.close
 			closeValues = append(closeValues, change)
 			continue
 		}
+		startingValue := portfolio.getPortfolioValue(ticker, previousDayData)
 
-		// Calculate current rsi
 		currentRsi := RSI(closeValues, float64(rsPeriod))
 
 		if currentRsi > upperThreshold && pastRsi <= upperThreshold {
-			amount := greedyBuy(portfolio.buyingPower, currentDayData.close)
-			portfolio.Buy(ticker, float64(amount), currentDayData.close, currentDayData.date.Format("2006-01-02"))
+			amount := greedyBuy(portfolio.buyingPower, price)
+			portfolio.Buy(ticker, float64(amount), price, currentDayData.date.Format("2006-01-02"))
 		} else if currentRsi < lowerThreshold && pastRsi >= lowerThreshold {
 			amount := portfolio.positions[ticker].amount * 0.5
-			portfolio.Sell(ticker, amount, currentDayData.close)
+			portfolio.Sell(ticker, amount, price)
 		}
-		closeValues = append(closeValues[1:], currentDayData.close)
-		pastRsi = currentRsi
 
+		pastRsi = currentRsi
+		endingValue := portfolio.getPortfolioValue(ticker, currentDayData)
+		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
 	}
 }
 
 // Just buy and stock at the initialPrice at startTime and hold till endTime
-func BuyAndHold(ticker string, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
+func (p *Portfolio) BuyAndHold(ticker string, startTime time.Time, endTime time.Time, strategyType string) {
 	stocks := queryStocks(ticker, startTime, endTime)
-	amount := greedyBuy(portfolio.buyingPower, stocks[0].close)
-	portfolio.Buy(ticker, float64(amount), stocks[0].close, stocks[0].date.Format("2006-01-02"))
+	fmt.Println(stocks[0].date, stocks[0].close, stocks[0].adjClose)
+	initialPrice := stocks[0].close
+	if stocks[0].adjClose.Valid {
+		fmt.Println("Using adjusted close")
+		initialPrice = stocks[0].adjClose.Float64
+	}
+	amount := generalBuy(p.buyingPower, initialPrice, strategyType)
+	p.Buy(ticker, float64(amount), initialPrice, stocks[0].date.Format("2006-01-02"))
 	// NOTE: Close to close values should be used for correct metrics
 
 	for i := range stocks {
@@ -376,9 +389,9 @@ func BuyAndHold(ticker string, startTime time.Time, endTime time.Time, portfolio
 		currentDayData := stocks[i]
 		previousDayData := stocks[i-1]
 
-		startingValue := portfolio.getPortfolioValue(ticker, previousDayData)
-		endingValue := portfolio.getPortfolioValue(ticker, currentDayData)
-		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
+		startingValue := p.getPortfolioValue(ticker, previousDayData)
+		endingValue := p.getPortfolioValue(ticker, currentDayData)
+		p.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
 	}
 }
 
@@ -398,11 +411,24 @@ func (p *Portfolio) adjustPortfolioParameters(currentDayData StockData, starting
 	}
 }
 
+func generalBuy(buyingPower float64, stockValue float64, strategyType string) float64 {
+	amount := 0.0
+	switch strategyType {
+	// buy as much as you can
+	case "greedy":
+		amount = float64(greedyBuy(buyingPower, stockValue))
+	case "percentBuy":
+		amount = float64(greedyBuy(buyingPower*0.50, stockValue))
+	}
+	return amount
+}
+
 // Buy has much stock as you can without fractional shares
 func greedyBuy(buyingPower float64, stockValue float64) int {
 	return int(buyingPower / stockValue)
 }
 
+// TODO: Extend functionality of strategies to work with multiple tickers
 // getPortfolioValue() will return the portfolio underlying value of assets plus cash
 // we will use the close value for close to close comparisions
 func (p *Portfolio) getPortfolioValue(ticker string, stockData StockData) float64 {
@@ -410,11 +436,15 @@ func (p *Portfolio) getPortfolioValue(ticker string, stockData StockData) float6
 	if position, ok := p.positions[ticker]; ok {
 		amountAtOpen = position.amount
 	}
-	return p.buyingPower + amountAtOpen*stockData.close
+	price := stockData.close
+	if stockData.adjClose.Valid {
+		price = stockData.adjClose.Float64
+	}
+	return p.buyingPower + amountAtOpen*price
 }
 
 // SMACross strategy
-func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time, portfolio *Portfolio) {
+func (p *Portfolio) SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time) {
 	adjustedStartTime := startTime.AddDate(0, 0, -longPeriod)
 	stocks := queryStocks(ticker, adjustedStartTime, endTime)
 	fmt.Println("Length of period is: ", len(stocks[longPeriod:]))
@@ -427,40 +457,48 @@ func SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Tim
 		currentDayData := stocks[i]
 		previousDayData := stocks[i-1]
 		date := currentDayData.date.Format("2006-01-02")
-		startingValue := portfolio.getPortfolioValue(ticker, previousDayData)
+		startingValue := p.getPortfolioValue(ticker, previousDayData)
 
 		smaShort := SMA(stocks[i-shortPeriod : i])
 		smaLong := SMA(stocks[i-longPeriod : i])
 
 		changeAmount := 0.0 // Change in stock amount throughout the day
 		if smaShort > smaLong && prevShort <= prevLong {
-			changeAmount = float64(greedyBuy(portfolio.buyingPower*0.25, currentDayData.close))
-			portfolio.Buy(ticker, changeAmount, currentDayData.close, date)
+			changeAmount = float64(greedyBuy(p.buyingPower*0.25, currentDayData.close))
+			fmt.Println("Buying: ", changeAmount)
+			p.Buy(ticker, changeAmount, currentDayData.close, date)
 		} else if smaShort < smaLong && prevShort >= prevLong {
 			// Sell all stocks
-			changeAmount = portfolio.positions[ticker].amount * 0.5
-			portfolio.Sell(ticker, changeAmount, currentDayData.close)
+			changeAmount = p.positions[ticker].amount * 0.5
+			p.Sell(ticker, changeAmount, currentDayData.close)
 		} else {
 			fmt.Println("Do nothing")
 		}
 
-		endingValue := portfolio.getPortfolioValue(ticker, currentDayData)
-		portfolio.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
+		endingValue := p.getPortfolioValue(ticker, currentDayData)
+		p.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
 		prevShort, prevLong = smaShort, smaLong
 	}
 }
 
 func test() {
-	startTime := time.Date(2011, 1, 1, 0, 0, 0, 0, time.UTC)
-	endTime := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+	startTime := time.Date(2011, 6, 25, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2021, 6, 25, 0, 0, 0, 0, time.UTC)
+	shortPeriod, longPeriod := 10, 20
 	portfolio := &Portfolio{
 		buyingPower:          20000,
 		positions:            make(map[string]*position),
 		dailyAvg:             make(map[string]float64),
 		portfolioCloseValues: make([]float64, 0),
 	}
-	SMACross("AAPL", 10, 20, startTime, endTime, portfolio)
-	// BuyAndHold("AAPL", startTime, endTime, portfolio)
+	tickers := []string{"VOO"}
+	for _, ticker := range tickers {
+		portfolio.SMACross(ticker, shortPeriod, longPeriod, startTime, endTime)
+	}
+
+	// SMACross("VOO", 10, 20, startTime, endTime, portfolio)
+	// portfolio.BuyAndHold("VOO", startTime, endTime, "percentBuy")
+	// portfolio.BuyAndHold("AAPL", startTime, endTime, "percentBuy")
 	fmt.Printf("Buying Power: %.2f\n", portfolio.buyingPower)
 	if len(portfolio.positions) == 0 {
 		fmt.Println("No positions")
