@@ -417,8 +417,9 @@ func generalBuy(buyingPower float64, stockValue float64, strategyType string) fl
 	// buy as much as you can
 	case "greedy":
 		amount = float64(greedyBuy(buyingPower, stockValue))
+	// buy fixed percent
 	case "percentBuy":
-		amount = float64(greedyBuy(buyingPower*0.50, stockValue))
+		amount = float64(greedyBuy(buyingPower*0.25, stockValue))
 	}
 	return amount
 }
@@ -428,77 +429,91 @@ func greedyBuy(buyingPower float64, stockValue float64) int {
 	return int(buyingPower / stockValue)
 }
 
-// TODO: Extend functionality of strategies to work with multiple tickers
 // getPortfolioValue() will return the portfolio underlying value of assets plus cash
 // we will use the close value for close to close comparisions
-func (p *Portfolio) getPortfolioValue(ticker string, stockData StockData) float64 {
-	var amountAtOpen float64
-	if position, ok := p.positions[ticker]; ok {
-		amountAtOpen = position.amount
+func (p *Portfolio) getPortfolioValue() float64 {
+	value := p.buyingPower
+	for _, pos := range p.positions {
+		value += pos.amount * pos.currentPrice
 	}
-	price := stockData.close
-	if stockData.adjClose.Valid {
-		price = stockData.adjClose.Float64
-	}
-	return p.buyingPower + amountAtOpen*price
+	return value
 }
 
+// TODO: Extend functionality of strategies to work with multiple tickers
 // SMACross strategy
-func (p *Portfolio) SMACross(ticker string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time) {
+func (p *Portfolio) SMACross(tickers []string, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time) {
 	adjustedStartTime := startTime.AddDate(0, 0, -longPeriod)
-	stocks := queryStocks(ticker, adjustedStartTime, endTime)
-	fmt.Println("Length of period is: ", len(stocks[longPeriod:]))
-	prevShort, prevLong := 0.0, 0.0
-
-	for i := range stocks {
-		if i < longPeriod {
-			continue
+	var shortestRange int
+	var shortestRangeTicker string
+	historicalData := make(map[string][]StockData, 0)
+	for _, ticker := range tickers {
+		currentData := queryStocks(ticker, adjustedStartTime, endTime)
+		currentShortestRange := len(currentData)
+		// Update the shortest range and shortest range ticker
+		if shortestRange == 0 || currentShortestRange < shortestRange {
+			shortestRange = currentShortestRange
+			shortestRangeTicker = ticker
 		}
-		currentDayData := stocks[i]
-		previousDayData := stocks[i-1]
-		date := currentDayData.date.Format("2006-01-02")
-		startingValue := p.getPortfolioValue(ticker, previousDayData)
+		historicalData[ticker] = currentData
+	}
+	commonPeriod := historicalData[shortestRangeTicker]
+	fmt.Println("Length of period is: ", len(commonPeriod[longPeriod:]))
+	prevShort := make(map[string]float64)
+	prevLong := make(map[string]float64)
 
-		smaShort := SMA(stocks[i-shortPeriod : i])
-		smaLong := SMA(stocks[i-longPeriod : i])
+	// Iterate each day
+	for i := range commonPeriod {
+		// Iterate for each ticker given in order
+		for _, ticker := range tickers {
+			value := historicalData[ticker]
+			if i < longPeriod {
+				continue
+			}
+			currentDayData := value[i]
+			previousDayData := value[i-1]
+			ticker := currentDayData.ticker
+			date := currentDayData.date.Format("2006-01-02")
+			fmt.Printf("Date: %s, Ticker: %s \n", date, ticker)
+			startingValue := p.getPortfolioValue()
 
-		changeAmount := 0.0 // Change in stock amount throughout the day
-		if smaShort > smaLong && prevShort <= prevLong {
-			changeAmount = float64(greedyBuy(p.buyingPower*0.25, currentDayData.close))
-			fmt.Println("Buying: ", changeAmount)
-			p.Buy(ticker, changeAmount, currentDayData.close, date)
-		} else if smaShort < smaLong && prevShort >= prevLong {
-			// Sell all stocks
-			changeAmount = p.positions[ticker].amount * 0.5
-			p.Sell(ticker, changeAmount, currentDayData.close)
-		} else {
-			fmt.Println("Do nothing")
+			smaShort := SMA(value[i-shortPeriod : i])
+			smaLong := SMA(value[i-longPeriod : i])
+
+			changeAmount := 0.0 // Change in stock amount throughout the day
+			if smaShort > smaLong && prevShort[ticker] <= prevLong[ticker] {
+				changeAmount = float64(greedyBuy(p.buyingPower*0.50, currentDayData.close))
+				p.Buy(ticker, changeAmount, currentDayData.close, date)
+			} else if smaShort < smaLong && prevShort[ticker] >= prevLong[ticker] {
+				// Sell all stocks
+				if _, ok := p.positions[ticker]; ok {
+					changeAmount = p.positions[ticker].amount * 0.50
+				}
+				p.Sell(ticker, changeAmount, currentDayData.close)
+			}
+			endingValue := p.getPortfolioValue()
+			p.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
+			prevShort[ticker] = smaShort
+			prevLong[ticker] = smaLong
 		}
-
-		endingValue := p.getPortfolioValue(ticker, currentDayData)
-		p.adjustPortfolioParameters(currentDayData, startingValue, endingValue)
-		prevShort, prevLong = smaShort, smaLong
 	}
 }
-
 func test() {
-	startTime := time.Date(2011, 6, 25, 0, 0, 0, 0, time.UTC)
-	endTime := time.Date(2021, 6, 25, 0, 0, 0, 0, time.UTC)
-	shortPeriod, longPeriod := 10, 20
+	startTime := time.Date(2014, 6, 29, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2024, 6, 29, 0, 0, 0, 0, time.UTC)
+	// shortPeriod, longPeriod := 10, 20
 	portfolio := &Portfolio{
 		buyingPower:          20000,
 		positions:            make(map[string]*position),
 		dailyAvg:             make(map[string]float64),
 		portfolioCloseValues: make([]float64, 0),
 	}
-	tickers := []string{"VOO"}
-	for _, ticker := range tickers {
-		portfolio.SMACross(ticker, shortPeriod, longPeriod, startTime, endTime)
-	}
+	tickers := []string{"TSLA", "AAPL", "NVDA", "MSFT"}
+	portfolio.SMACross(tickers, 10, 20, startTime, endTime)
 
 	// SMACross("VOO", 10, 20, startTime, endTime, portfolio)
 	// portfolio.BuyAndHold("VOO", startTime, endTime, "percentBuy")
-	// portfolio.BuyAndHold("AAPL", startTime, endTime, "percentBuy")
+	// portfolio.BuyAndHold("NVDA", startTime, endTime, "greedy")
+	// portfolio.BuyAndHold("TSLA", startTime, endTime, "greedy")
 	fmt.Printf("Buying Power: %.2f\n", portfolio.buyingPower)
 	if len(portfolio.positions) == 0 {
 		fmt.Println("No positions")
