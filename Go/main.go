@@ -496,6 +496,7 @@ func test() {
 	shortPeriod, longPeriod := 10, 20
 	buyingPower := 20000.0
 	tickers := []string{"AAPL", "BTC-USD", "TSLA", "SPY", "MSFT", "GOOGL", "NVDA"}
+
 	for ticker := range tickers {
 		portfolio := InitializePortfolio(buyingPower)
 		// portfolio.BuyAndHold(tickers[ticker], startTime, endTime, "greedy")
