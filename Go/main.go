@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"sort"
 	"time"
 
@@ -93,7 +94,7 @@ func getSortinoRatio(riskFreeRates map[string]float64, dailyAvg map[string]float
 }
 
 func getRiskFreeRates(startTime time.Time, endTime time.Time) map[string]float64 {
-	query := "SELECT daily_risk_free_rate_decimal, Date FROM \"3MTreasuryYields\" WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS);"
+	query := "SELECT daily_risk_free_rate_decimal, Date FROM \"3MTreasuryYields\" WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS) ORDER BY Date;"
 	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
 	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
 	rows, err := db.Query(query, startTimeStr, endTimeStr)
@@ -209,6 +210,7 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
 	}
 
 	fmt.Println("length of dailyAvgSlice: ", len(dailyAvgSlice))
+	// annualize standard deviation
 	standardDev := stat.StdDev(dailyAvgSlice, nil) * math.Sqrt(252.0)
 	riskFreeRates := getRiskFreeRates(startTime, endTime)
 	sharpeRatio := getSharpeRatio(riskFreeRates, p.dailyAvg)
@@ -224,6 +226,33 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time) {
 	}
 	p.metrics = metrics
 	p.PrintMetrics()
+}
+
+func (p *Portfolio) evaluateAndSaveTicker() {
+	if p.metrics.sharpeRatio > 1.0 {
+		// Get ticker from positions
+		var ticker string
+		for t := range p.positions {
+			ticker = t
+			break
+		}
+		if ticker == "" {
+			return
+		}
+
+		// Open file in append mode
+		file, err := os.OpenFile("worthy_tickers.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Printf("Failed to open file: %v", err)
+			return
+		}
+		defer file.Close()
+
+		// Write ticker to file
+		if _, err := file.WriteString(ticker + "\n"); err != nil {
+			log.Printf("Failed to write to file: %v", err)
+		}
+	}
 }
 
 func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, time string) {
@@ -303,12 +332,14 @@ func SMA(stocks []AssetData) float64 {
 func queryAssets(ticker string, startTime time.Time, endTime time.Time) []AssetData {
 	var rows *sql.Rows
 	var err error
-	query := "SELECT * FROM stock_data WHERE Ticker = ? AND Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS);"
+	query := "SELECT * FROM stock_data WHERE Ticker = ? AND Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS) ORDER BY Date;"
 	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
 	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
 	rows, err = db.Query(query, ticker, startTimeStr, endTimeStr)
 	if err != nil {
+		emptyArr := make([]AssetData, 0)
 		fmt.Printf("Error querying data: %v", err)
+		return emptyArr
 	}
 	defer rows.Close()
 	stocks := readStocks(rows)
@@ -490,18 +521,42 @@ func (p *Portfolio) SMACross(ticker string, shortPeriod int, longPeriod int, sta
 	}
 }
 
+func getAllTickers(startTime time.Time, endTime time.Time) []string {
+	var rows *sql.Rows
+	var err error
+	query := "SELECT DISTINCT ticker FROM stock_data WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS);"
+	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
+	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
+	rows, err = db.Query(query, startTimeStr, endTimeStr)
+	if err != nil {
+		fmt.Printf("Error querying data: %v", err)
+	}
+	defer rows.Close()
+	tickers := make([]string, 0)
+	for rows.Next() {
+		var ticker string
+		err := rows.Scan(&ticker)
+		if err != nil {
+			fmt.Printf("Error scanning row: %v", err)
+		}
+		tickers = append(tickers, ticker)
+	}
+	return tickers
+}
+
 func test() {
-	startTime := time.Date(2014, 6, 29, 0, 0, 0, 0, time.UTC)
+	startTime := time.Date(2010, 6, 29, 0, 0, 0, 0, time.UTC)
 	endTime := time.Date(2025, 6, 29, 0, 0, 0, 0, time.UTC)
-	shortPeriod, longPeriod := 10, 20
+	// shortPeriod, longPeriod := 10, 20
 	buyingPower := 20000.0
-	tickers := []string{"AAPL", "BTC-USD", "TSLA", "SPY", "MSFT", "GOOGL", "NVDA"}
+	tickers := getAllTickers(startTime, endTime)
 
 	for ticker := range tickers {
 		portfolio := InitializePortfolio(buyingPower)
-		// portfolio.BuyAndHold(tickers[ticker], startTime, endTime, "greedy")
-		portfolio.SMACross(tickers[ticker], shortPeriod, longPeriod, startTime, endTime)
+		portfolio.BuyAndHold(tickers[ticker], startTime, endTime, "greedy")
+		// portfolio.SMACross(tickers[ticker], shortPeriod, longPeriod, startTime, endTime)
 		portfolio.GetBacktestingData(startTime, endTime)
+		portfolio.evaluateAndSaveTicker()
 	}
 }
 
