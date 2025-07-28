@@ -6,7 +6,10 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -38,10 +41,10 @@ type AssetData struct {
 type Portfolio struct {
 	buyingPower          float64
 	positions            map[string]*position
-	dailyAvg             map[string]float64
+	dailyAvg             map[time.Time]float64
 	portfolioCloseValues []float64
 	metrics              Metrics
-	riskFreeRates        map[string]float64
+	riskFreeRates        map[time.Time]float64
 }
 
 // Constructor
@@ -49,13 +52,12 @@ func InitializePortfolio(buyingPower float64) *Portfolio {
 	return &Portfolio{
 		buyingPower:          buyingPower,
 		positions:            make(map[string]*position),
-		dailyAvg:             make(map[string]float64),
+		dailyAvg:             make(map[time.Time]float64),
 		portfolioCloseValues: make([]float64, 0),
 	}
 }
 
 type position struct {
-	ticker       string
 	amount       float64
 	averagePrice float64
 	currentPrice float64
@@ -190,8 +192,8 @@ func (p *Portfolio) PrintMetrics() {
 	if len(p.positions) == 0 {
 		log.Println("No positions")
 	}
-	for _, pos := range p.positions {
-		log.Printf("Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n", pos.ticker, pos.amount, pos.averagePrice, pos.currentPrice)
+	for key, pos := range p.positions {
+		log.Printf("Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n", key, pos.amount, pos.averagePrice, pos.currentPrice)
 		log.Println("Amount now is", pos.amount*pos.currentPrice+p.buyingPower)
 	}
 	log.Println("=============================================")
@@ -233,7 +235,7 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time, r
 		annualReturn: annualReturn,
 	}
 	p.metrics = metrics
-	// p.PrintMetrics()
+	p.PrintMetrics()
 }
 
 func (p *Portfolio) evaluateAndSaveTicker() {
@@ -263,7 +265,7 @@ func (p *Portfolio) evaluateAndSaveTicker() {
 	}
 }
 
-func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, time string) {
+func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, time time.Time) {
 	if p.buyingPower < amount*initialPrice {
 		logVerbosef("Not enough buying power to buy %f shares of %s", amount, ticker)
 		return
@@ -274,7 +276,6 @@ func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, tim
 	pos, ok := p.positions[ticker]
 	if !ok {
 		position := &position{
-			ticker:       ticker,
 			amount:       amount,
 			averagePrice: initialPrice,
 		}
@@ -283,7 +284,7 @@ func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, tim
 		pos.averagePrice = (pos.averagePrice*pos.amount + initialPrice*amount) / (pos.amount + amount)
 		pos.amount += amount
 	}
-	logVerbosef("Buying %.2f amount of %s at $%.2f date: %s\n", amount, ticker, initialPrice, time)
+	logVerbosef("Buying %.2f amount of %s at $%.2f date: %v\n", amount, ticker, initialPrice, time)
 	p.buyingPower -= amount * initialPrice
 }
 
@@ -421,7 +422,7 @@ func (p *Portfolio) RSICross(ticker string, historicalData []AssetData, startTim
 
 		if currentRsi > upperThreshold && pastRsi <= upperThreshold {
 			amount := greedyBuy(p.buyingPower, price)
-			p.Buy(ticker, float64(amount), price, currentDayData.date.Format("2006-01-02"))
+			p.Buy(ticker, float64(amount), price, currentDayData.date)
 		} else if currentRsi < lowerThreshold && pastRsi >= lowerThreshold {
 			amount := p.positions[ticker].amount
 			p.Sell(ticker, amount, price)
@@ -449,7 +450,7 @@ func (p *Portfolio) RandomBuySell(ticker string, historicalData []AssetData) {
 
 		if randomNum >= 0.5 {
 			amount := greedyBuy(p.buyingPower*randomAmount, currentDayData.close)
-			p.Buy(ticker, float64(amount), currentDayData.close, currentDayData.date.Format("2006-01-02"))
+			p.Buy(ticker, float64(amount), currentDayData.close, currentDayData.date)
 		} else {
 			if pos, ok := p.positions[ticker]; ok && pos.amount > 0 {
 				amount := int(pos.amount * randomAmount)
@@ -466,7 +467,7 @@ func (p *Portfolio) BuyAndHold(ticker string, historicalData []AssetData, startT
 	logVerbosef("%s %f", historicalData[0].date, historicalData[0].close)
 	initialPrice := historicalData[0].close
 	amount := generalBuy(p.buyingPower, initialPrice, strategyType)
-	p.Buy(ticker, float64(amount), initialPrice, historicalData[0].date.Format("2006-01-02"))
+	p.Buy(ticker, float64(amount), initialPrice, historicalData[0].date)
 	// NOTE: Close to close values should be used for correct metrics
 
 	for i := range historicalData {
@@ -542,7 +543,7 @@ func (p *Portfolio) SMACross(ticker string, historicalData []AssetData, shortPer
 		}
 		currentDayData := historicalData[i]
 		previousDayData := historicalData[i-1]
-		date := currentDayData.date.Format("2006-01-02")
+		date := currentDayData.date
 		startingValue := p.getPortfolioValue(ticker, previousDayData)
 
 		smaShort := SMA(historicalData[i-shortPeriod : i])
@@ -618,7 +619,7 @@ func test() {
 	assets := queryAllAssets(startTime, endTime)
 	timeToQuery := time.Since(timeNow)
 	simulationTimes := 100
-	numWorkers := 8
+	numWorkers := runtime.NumCPU()
 
 	jobs := make(chan string, len(tickers)*simulationTimes)
 
@@ -663,6 +664,10 @@ func main() {
 		}
 		log.SetOutput(file)
 	}
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	duckDBPath := "./stock_data.db"
 	var err error
