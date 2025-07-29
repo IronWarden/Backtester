@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"flag"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -10,7 +11,6 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"runtime"
-	"sort"
 	"sync"
 	"time"
 
@@ -44,7 +44,6 @@ type Portfolio struct {
 	dailyAvg             map[time.Time]float64
 	portfolioCloseValues []float64
 	metrics              Metrics
-	riskFreeRates        map[time.Time]float64
 }
 
 // Constructor
@@ -55,6 +54,17 @@ func InitializePortfolio(buyingPower float64) *Portfolio {
 		dailyAvg:             make(map[time.Time]float64),
 		portfolioCloseValues: make([]float64, 0),
 	}
+}
+
+func (p *Portfolio) Reset(buyingPower float64) {
+	p.buyingPower = buyingPower
+	for k := range p.positions {
+		delete(p.positions, k)
+	}
+	for k := range p.dailyAvg {
+		delete(p.dailyAvg, k)
+	}
+	p.portfolioCloseValues = p.portfolioCloseValues[:0]
 }
 
 type position struct {
@@ -72,7 +82,7 @@ type Metrics struct {
 }
 
 // getSortinoRatio returns the Sortino Ratio
-func getSortinoRatio(riskFreeRates map[string]float64, dailyAvg map[string]float64) float64 {
+func getSortinoRatio(riskFreeRates map[time.Time]float64, dailyAvg map[time.Time]float64) float64 {
 	excessReturns := make([]float64, 0)
 	downsideReturns := make([]float64, 0)
 
@@ -104,7 +114,7 @@ func getSortinoRatio(riskFreeRates map[string]float64, dailyAvg map[string]float
 	return annualizedSortino
 }
 
-func getRiskFreeRates(startTime time.Time, endTime time.Time) map[string]float64 {
+func getRiskFreeRates(startTime time.Time, endTime time.Time) map[time.Time]float64 {
 	query := "SELECT daily_risk_free_rate_decimal, Date FROM \"3MTreasuryYields\" WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS) ORDER BY Date;"
 	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
 	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
@@ -113,7 +123,7 @@ func getRiskFreeRates(startTime time.Time, endTime time.Time) map[string]float64
 		log.Printf("Error querying data: %v", err)
 	}
 	defer rows.Close()
-	riskFreeRates := make(map[string]float64, 0)
+	riskFreeRates := make(map[time.Time]float64, 0)
 	for rows.Next() {
 		var rate sql.NullFloat64
 		var date time.Time
@@ -121,11 +131,10 @@ func getRiskFreeRates(startTime time.Time, endTime time.Time) map[string]float64
 		if err != nil {
 			log.Printf("Error scanning row: %v", err)
 		}
-		dateStr := date.Format("2006-01-02")
 		if rate.Valid {
-			riskFreeRates[dateStr] = rate.Float64
+			riskFreeRates[date] = rate.Float64
 		} else {
-			riskFreeRates[dateStr] = 0.0
+			riskFreeRates[date] = 0.0
 		}
 	}
 	logVerbosef("Length of risk free rates: %d", len(riskFreeRates))
@@ -168,7 +177,7 @@ func getMaxDrawdown(portfolioCloseValues []float64) float64 {
 }
 
 // getSharpeRatio will return the sharpeRatio
-func getSharpeRatio(riskFreeRates map[string]float64, dailyAvg map[string]float64) float64 {
+func getSharpeRatio(riskFreeRates map[time.Time]float64, dailyAvg map[time.Time]float64) float64 {
 	excessReturns := make([]float64, 0)
 	// Iterate through map for common dates calculate excess return
 	for key := range dailyAvg {
@@ -206,18 +215,13 @@ func (p *Portfolio) PrintMetrics() {
 	log.Println("=============================================")
 }
 
-func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time, riskFreeRates map[string]float64) {
+func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time, riskFreeRates map[time.Time]float64) {
 	// Create []float64 from map[string]float64
 	dailyAvgSlice := make([]float64, 0)
-	dailyAvgStrSlice := make([]string, 0)
-	// NOTE: Daily avg has to retain order for calculations to be correct
-	for date := range p.dailyAvg {
-		dailyAvgStrSlice = append(dailyAvgStrSlice, date)
-	}
-	sort.Strings(dailyAvgStrSlice)
-	for _, value := range dailyAvgStrSlice {
-		// fmt.Println(value)
-		dailyAvgSlice = append(dailyAvgSlice, p.dailyAvg[value])
+	for date := startTime; date.Before(endTime); date = date.AddDate(0, 0, 1) {
+		if val, ok := p.dailyAvg[date.Truncate(24*time.Hour)]; ok {
+			dailyAvgSlice = append(dailyAvgSlice, val)
+		}
 	}
 
 	logVerbosef("length of dailyAvgSlice: %d", len(dailyAvgSlice))
@@ -259,7 +263,8 @@ func (p *Portfolio) evaluateAndSaveTicker() {
 		defer file.Close()
 
 		// Write ticker to file
-		if _, err := file.WriteString(ticker + "\n"); err != nil {
+		string := fmt.Sprintf("%s, Sharpe Ratio: %.2f, Sortino Ratio: %.2f, Max Drawdown: %.2f, Annual Return: %.2f", ticker, p.metrics.sharpeRatio, p.metrics.sortinoRatio, p.metrics.maxDrawdown, p.metrics.annualReturn)
+		if _, err := file.WriteString(string + "\n"); err != nil {
 			log.Printf("Failed to write to file: %v", err)
 		}
 	}
@@ -284,7 +289,7 @@ func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, tim
 		pos.averagePrice = (pos.averagePrice*pos.amount + initialPrice*amount) / (pos.amount + amount)
 		pos.amount += amount
 	}
-	logVerbosef("Buying %.2f amount of %s at $%.2f date: %v\n", amount, ticker, initialPrice, time)
+	logVerbosef("Buying %.2f amount of %s at $%.2f date: %s\n", amount, ticker, initialPrice, time)
 	p.buyingPower -= amount * initialPrice
 }
 
@@ -358,7 +363,7 @@ func queryAllAssets(startTime time.Time, endTime time.Time) map[string][]AssetDa
 	var rows *sql.Rows
 	var err error
 	query := `
-	SELECT Date, Ticker, Open, High, Low, Close, Volume FROM stock_data 
+	SELECT Date, Ticker, Open, High, Low, Close, Volume FROM stock_data_optimized 
 	WHERE Date BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS) 
 	ORDER BY Ticker, Date;`
 
@@ -435,7 +440,7 @@ func (p *Portfolio) RSICross(ticker string, historicalData []AssetData, startTim
 	}
 }
 
-func (p *Portfolio) RandomBuySell(ticker string, historicalData []AssetData) {
+func (p *Portfolio) RandomBuySell(ticker string, historicalData []AssetData, localRand *rand.Rand) {
 
 	for i := range historicalData {
 		if i == 0 {
@@ -445,7 +450,7 @@ func (p *Portfolio) RandomBuySell(ticker string, historicalData []AssetData) {
 		previousDayData := historicalData[i-1]
 		currentDayData := historicalData[i]
 		startingValue := p.getPortfolioValue(ticker, previousDayData)
-		randomAmount, randomNum := rand.Float64(), rand.Float64() // Buy or sell random amounts
+		randomAmount, randomNum := localRand.Float64(), localRand.Float64() // Buy or sell random amounts
 		logVerbosef("randomAmount: %f", randomAmount)
 
 		if randomNum >= 0.5 {
@@ -484,7 +489,6 @@ func (p *Portfolio) BuyAndHold(ticker string, historicalData []AssetData, startT
 }
 
 func (p *Portfolio) adjustPortfolioParameters(ticker string, currentDayData AssetData, startingValue float64, endingValue float64) {
-	date := currentDayData.date.Format("2006-01-02")
 	dailyChange := 0.0
 	if startingValue > 0.0 {
 		dailyChange = (endingValue - startingValue) / startingValue
@@ -494,7 +498,7 @@ func (p *Portfolio) adjustPortfolioParameters(ticker string, currentDayData Asse
 	// fmt.Println("Starting Value: ", startingValue)
 	// fmt.Println("Ending Value: ", endingValue)
 	// fmt.Printf("Daily Change: %.5f \n", dailyChange*100)
-	p.dailyAvg[date] = dailyChange
+	p.dailyAvg[currentDayData.date] = dailyChange
 	// adjust current price of a stock in a positions
 	if pos, ok := p.positions[ticker]; ok {
 		pos.currentPrice = currentDayData.close
@@ -543,7 +547,6 @@ func (p *Portfolio) SMACross(ticker string, historicalData []AssetData, shortPer
 		}
 		currentDayData := historicalData[i]
 		previousDayData := historicalData[i-1]
-		date := currentDayData.date
 		startingValue := p.getPortfolioValue(ticker, previousDayData)
 
 		smaShort := SMA(historicalData[i-shortPeriod : i])
@@ -557,7 +560,7 @@ func (p *Portfolio) SMACross(ticker string, historicalData []AssetData, shortPer
 			if smaShort > smaLong && prevShort <= prevLong {
 				// Use the assets average price in the day
 				changeAmount = float64(greedyBuy(p.buyingPower, averagePrice))
-				p.Buy(ticker, changeAmount, averagePrice, date)
+				p.Buy(ticker, changeAmount, averagePrice, currentDayData.date)
 			} else if smaShort < smaLong && prevShort >= prevLong {
 				// Sell all stocks
 				if _, ok := p.positions[ticker]; ok {
@@ -618,7 +621,7 @@ func test() {
 	timeNow := time.Now()
 	assets := queryAllAssets(startTime, endTime)
 	timeToQuery := time.Since(timeNow)
-	simulationTimes := 100
+	simulationTimes := 150
 	numWorkers := runtime.NumCPU()
 
 	jobs := make(chan string, len(tickers)*simulationTimes)
@@ -630,10 +633,12 @@ func test() {
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
+			localRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 			defer wg.Done()
+			portfolio := InitializePortfolio(buyingPower)
 			for ticker := range jobs {
-				portfolio := InitializePortfolio(buyingPower)
-				portfolio.RandomBuySell(ticker, assets[ticker])
+				portfolio.Reset(buyingPower)
+				portfolio.RandomBuySell(ticker, assets[ticker], localRand)
 				portfolio.GetBacktestingData(startTime, endTime, riskFreeRates)
 				mutex.Lock()
 				portfolio.evaluateAndSaveTicker()
