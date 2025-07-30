@@ -611,8 +611,8 @@ func getTickersWithSufficientData(startTime time.Time, endTime time.Time) []stri
 }
 
 func test() {
-	startTime := time.Date(2015, 6, 12, 0, 0, 0, 0, time.UTC)
-	endTime := time.Date(2025, 6, 12, 0, 0, 0, 0, time.UTC)
+	startTime := time.Date(2020, 9, 30, 0, 0, 0, 0, time.UTC)
+	endTime := time.Date(2025, 3, 31, 0, 0, 0, 0, time.UTC)
 	// shortPeriod, longPeriod := 10, 20
 	buyingPower := 20000.0
 	tickers := getTickersWithSufficientData(startTime, endTime)
