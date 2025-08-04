@@ -299,6 +299,15 @@ func (p *Portfolio) Sell(ticker string, stockAmount float64, currentPrice float6
 	}
 }
 
+func SMA(stocks []AssetData) float64 {
+	var mean float64
+	for _, stock := range stocks {
+		mean += stock.close
+	}
+	mean /= float64(len(stocks))
+	return mean
+}
+
 func readStocks(rows *sql.Rows) map[string][]AssetData {
 	allAssetData := make(map[string][]AssetData)
 	var currentTicker string
@@ -330,21 +339,12 @@ func readStocks(rows *sql.Rows) map[string][]AssetData {
 	return allAssetData
 }
 
-func SMA(stocks []AssetData) float64 {
-	var mean float64
-	for _, stock := range stocks {
-		mean += stock.close
-	}
-	mean /= float64(len(stocks))
-	return mean
-}
-
 func queryAllAssets(startTime time.Time, endTime time.Time) map[string][]AssetData {
 	timeQuery := time.Now()
 	var rows *sql.Rows
 	var err error
 	query := `
-	SELECT Date, Ticker, Open, High, Low, Close, Volume FROM stock_data_optimized 
+	SELECT Date, Ticker, Open, High, Low, Close, Volume FROM stock_data_optimized
 	WHERE Date BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS);`
 
 	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
@@ -357,6 +357,39 @@ func queryAllAssets(startTime time.Time, endTime time.Time) map[string][]AssetDa
 	stocks := readStocks(rows)
 	log.Printf("Query time: %s\n", time.Since(timeQuery))
 	return stocks
+}
+
+func queryAssetData(ticker string, startTime time.Time, endTime time.Time) []AssetData {
+	queryTime := time.Now()
+	query := `
+	SELECT Date, Ticker, Open, High, Low, Close, Volume FROM stock_data_optimized
+	WHERE Ticker = ? AND Date BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS)
+	ORDER BY Date;`
+
+	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
+	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
+	rows, err := db.Query(query, ticker, startTimeStr, endTimeStr)
+	if err != nil {
+		log.Printf("Error querying data for ticker %s: %v", ticker, err)
+		return nil
+	}
+	defer rows.Close()
+
+	var dailyAssets []AssetData
+	for rows.Next() {
+		var assetData AssetData
+		var ticker string
+		if err := rows.Scan(&assetData.date, &ticker, &assetData.open, &assetData.high, &assetData.low, &assetData.close, &assetData.volume); err != nil {
+			log.Printf("Failed to scan row for ticker %s: %v", ticker, err)
+			continue
+		}
+		dailyAssets = append(dailyAssets, assetData)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("Error during rows iteration for ticker %s: %v", ticker, err)
+	}
+	log.Printf("Query time for %s: %s\n", ticker, time.Since(queryTime))
+	return dailyAssets
 }
 
 // TODO: Implement mean reversion strategies
@@ -597,8 +630,7 @@ func getTickersWithSufficientData(startTime time.Time, endTime time.Time) []stri
 }
 
 type WorkItem struct {
-	Ticker         string
-	HistoricalData []AssetData
+	Ticker string
 }
 
 type Result struct {
@@ -614,7 +646,7 @@ func test() {
 	tickers := getTickersWithSufficientData(startTime, endTime)
 	// tickers := []string{"NVDA"}
 	riskFreeRates := getRiskFreeRates(startTime, endTime)
-	simulationTimes := 150
+	simulationTimes := 1
 	numWorkers := runtime.NumCPU()
 
 	jobs := make(chan WorkItem, len(tickers)*simulationTimes)
@@ -626,13 +658,20 @@ func test() {
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
-			localRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+			// localRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 			defer wg.Done()
 			days := int(endTime.Sub(startTime).Hours() / 24)
 			portfolio := InitializePortfolio(buyingPower, days)
 			for work := range jobs {
+				historicalData := queryAssetData(work.Ticker, startTime, endTime)
+				if historicalData == nil {
+					continue
+				}
 				portfolio.Reset(buyingPower)
-				portfolio.RandomBuySell(work.Ticker, work.HistoricalData, localRand)
+				portfolio.BuyAndHold(work.Ticker, historicalData, startTime, endTime, "greedy")
+				// portfolio.SMACross(work.Ticker, work.HistoricalData, 10, 20, startTime, endTime)
+				// portfolio.RSICross(work.Ticker, work.HistoricalData, startTime, endTime, 15, 20, 70)
+				// portfolio.RandomBuySell(work.Ticker, historicalData, localRand)
 				portfolio.GetBacktestingData(startTime, endTime, riskFreeRates)
 				results <- Result{Ticker: work.Ticker, Metrics: portfolio.metrics}
 			}
@@ -641,10 +680,9 @@ func test() {
 
 	// Producer
 	go func() {
-		assets := queryAllAssets(startTime, endTime)
 		for i := 0; i < simulationTimes; i++ {
 			for _, ticker := range tickers {
-				jobs <- WorkItem{Ticker: ticker, HistoricalData: assets[ticker]}
+				jobs <- WorkItem{Ticker: ticker}
 			}
 		}
 		close(jobs)
@@ -667,7 +705,7 @@ func test() {
 				}
 			}
 		}
-		log.Printf("Writing to file time: %s\n", time.Since(writingTickerTime))
+		log.Printf("Writing ticker time: %s\n", time.Since(writingTickerTime))
 	}()
 
 	wg.Wait()
