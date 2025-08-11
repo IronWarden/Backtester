@@ -22,11 +22,24 @@ type Result struct {
 	Metrics Metrics
 }
 
+type BacktesterParams struct {
+	StartTime      time.Time
+	EndTime        time.Time
+	HistoricalData map[string][]data.AssetData
+	RiskFreeRates  map[int64]float64
+	Tickers        []string
+}
+
 // Run runs the backtesting simulation.
 func Run(startTime, endTime time.Time, buyingPower float64, simulationTimes int) {
 	tickers := data.GetTickersWithSufficientData(startTime, endTime)
 	riskFreeRates := data.GetRiskFreeRates(startTime, endTime)
 	numWorkers := runtime.NumCPU()
+	backtesterParams := BacktesterParams{
+		StartTime:     startTime,
+		EndTime:       endTime,
+		RiskFreeRates: riskFreeRates,
+	}
 
 	jobs := make(chan WorkItem, len(tickers)*simulationTimes)
 	results := make(chan Result, len(tickers)*simulationTimes)
@@ -42,12 +55,13 @@ func Run(startTime, endTime time.Time, buyingPower float64, simulationTimes int)
 			portfolio := InitializePortfolio(buyingPower, days)
 			for work := range jobs {
 				historicalData := data.QueryAssetData(work.Ticker, startTime, endTime)
+				backtesterParams.HistoricalData = historicalData
 				if historicalData == nil {
 					continue
 				}
 				portfolio.Reset(buyingPower)
-				portfolio.BuyAndHold(work.Ticker, historicalData, startTime, endTime, "greedy")
-				portfolio.GetBacktestingData(startTime, endTime, riskFreeRates)
+				portfolio.BuyAndHold(backtesterParams, "greedy")
+				portfolio.GetBacktestingData(backtesterParams)
 				results <- Result{Ticker: work.Ticker, Metrics: portfolio.Metrics}
 			}
 		}()

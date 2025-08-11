@@ -2,7 +2,6 @@ package backtest
 
 import (
 	"math/rand"
-	"time"
 
 	"my-backtester/src/data"
 )
@@ -42,13 +41,13 @@ func RSI(closeValues []float64, rsPeriod float64) float64 {
 	return 100 - (100 / (1 + rs))
 }
 
-func (p *Portfolio) RSICross(ticker string, historicalData []data.AssetData, startTime time.Time, endTime time.Time, rsPeriod int, lowerThreshold float64, upperThreshold float64) {
+func (p *Portfolio) RSICross(params BacktesterParams, rsPeriod int, lowerThreshold float64, upperThreshold float64) {
 	closeValues := make([]float64, 0)
 	pastRsi := 0.0
 
-	for i := 1; i < len(historicalData); i++ {
-		currentDayData := historicalData[i]
-		previousDayData := historicalData[i-1]
+	for i := 1; i < len(params.HistoricalData); i++ {
+		currentDayData := params.HistoricalData[i]
+		previousDayData := params.HistoricalData[i-1]
 		price := currentDayData.Close
 		change := (price - previousDayData.Close) / previousDayData.Close
 
@@ -56,23 +55,23 @@ func (p *Portfolio) RSICross(ticker string, historicalData []data.AssetData, sta
 			closeValues = append(closeValues, change)
 			continue
 		}
-		startingValue := p.GetPortfolioValue(ticker, previousDayData.Close)
+		startingValue := p.GetPortfolioValue(params.Ticker, previousDayData.Close)
 		currentRsi := RSI(closeValues, float64(rsPeriod))
 
 		if currentRsi > upperThreshold && pastRsi <= upperThreshold {
 			amount := greedyBuy(p.BuyingPower, price)
-			p.Buy(ticker, float64(amount), price, currentDayData.Date)
+			p.Buy(params.Ticker, float64(amount), price, currentDayData.Date)
 		} else if currentRsi < lowerThreshold && pastRsi >= lowerThreshold {
-			pos, _ := p.FindPosition(ticker)
+			pos, _ := p.FindPosition(params.Ticker)
 			if pos != nil {
 				amount := pos.Amount
-				p.Sell(ticker, amount, price, currentDayData.Date)
+				p.Sell(params.Ticker, amount, price, currentDayData.Date)
 			}
 		}
 
 		pastRsi = currentRsi
-		endingValue := p.GetPortfolioValue(ticker, currentDayData.Close)
-		p.AdjustPortfolioParameters(ticker, currentDayData, startingValue, endingValue)
+		endingValue := p.GetPortfolioValue(params.Ticker, currentDayData.Close)
+		p.AdjustPortfolioParameters(params.Ticker, currentDayData, startingValue, endingValue)
 		closeValues = append(closeValues[1:], change)
 	}
 }
@@ -103,37 +102,37 @@ func (p *Portfolio) RandomBuySell(ticker string, historicalData []data.AssetData
 	}
 }
 
-func (p *Portfolio) BuyAndHold(ticker string, historicalData []data.AssetData, startTime time.Time, endTime time.Time, strategyType string) {
-	initialPrice := historicalData[0].Close
+func (p *Portfolio) BuyAndHold(params BacktesterParams, strategyType string) {
+	initialPrice := params.HistoricalData[0].Close
 	amount := generalBuy(p.BuyingPower, initialPrice, strategyType)
-	p.Buy(ticker, float64(amount), initialPrice, historicalData[0].Date)
+	p.Buy(params.Ticker, float64(amount), initialPrice, params.HistoricalData[0].Date)
 
-	for i := range historicalData {
+	for i := range params.HistoricalData {
 		if i == 0 {
 			continue
 		}
-		currentDayData := historicalData[i]
-		previousDayData := historicalData[i-1]
+		currentDayData := params.HistoricalData[i]
+		previousDayData := params.HistoricalData[i-1]
 
-		startingValue := p.GetPortfolioValue(ticker, previousDayData.Close)
-		endingValue := p.GetPortfolioValue(ticker, currentDayData.Close)
-		p.AdjustPortfolioParameters(ticker, currentDayData, startingValue, endingValue)
+		startingValue := p.GetPortfolioValue(params.Ticker, previousDayData.Close)
+		endingValue := p.GetPortfolioValue(params.Ticker, currentDayData.Close)
+		p.AdjustPortfolioParameters(params.Ticker, currentDayData, startingValue, endingValue)
 	}
 }
 
-func (p *Portfolio) SMACross(ticker string, historicalData []data.AssetData, shortPeriod int, longPeriod int, startTime time.Time, endTime time.Time) {
+func (p *Portfolio) SMACross(params BacktesterParams, shortPeriod int, longPeriod int) {
 	prevShort, prevLong := 0.0, 0.0
 
-	for i := range historicalData {
+	for i := range params.HistoricalData {
 		if i < longPeriod {
 			continue
 		}
-		currentDayData := historicalData[i]
-		previousDayData := historicalData[i-1]
-		startingValue := p.GetPortfolioValue(ticker, previousDayData.Close)
+		currentDayData := params.HistoricalData[i]
+		previousDayData := params.HistoricalData[i-1]
+		startingValue := p.GetPortfolioValue(params.Ticker, previousDayData.Close)
 
-		smaShort := SMA(historicalData[i-shortPeriod : i])
-		smaLong := SMA(historicalData[i-longPeriod : i])
+		smaShort := SMA(params.HistoricalData[i-shortPeriod : i])
+		smaLong := SMA(params.HistoricalData[i-longPeriod : i])
 
 		if prevShort != 0.0 && prevLong != 0.0 {
 
@@ -141,16 +140,16 @@ func (p *Portfolio) SMACross(ticker string, historicalData []data.AssetData, sho
 			averagePrice := (currentDayData.Low + currentDayData.High + currentDayData.Close) / 3.0
 			if smaShort > smaLong && prevShort <= prevLong {
 				changeAmount = float64(greedyBuy(p.BuyingPower, averagePrice))
-				p.Buy(ticker, changeAmount, averagePrice, currentDayData.Date)
+				p.Buy(params.Ticker, changeAmount, averagePrice, currentDayData.Date)
 			} else if smaShort < smaLong && prevShort >= prevLong {
-				if pos, _ := p.FindPosition(ticker); pos != nil {
+				if pos, _ := p.FindPosition(params.Ticker); pos != nil {
 					changeAmount = pos.Amount
 				}
-				p.Sell(ticker, changeAmount, averagePrice, currentDayData.Date)
+				p.Sell(params.Ticker, changeAmount, averagePrice, currentDayData.Date)
 			}
 		}
-		endingValue := p.GetPortfolioValue(ticker, currentDayData.Close)
-		p.AdjustPortfolioParameters(ticker, currentDayData, startingValue, endingValue)
+		endingValue := p.GetPortfolioValue(params.Ticker, currentDayData.Close)
+		p.AdjustPortfolioParameters(params.Ticker, currentDayData, startingValue, endingValue)
 		prevShort, prevLong = smaShort, smaLong
 	}
 }

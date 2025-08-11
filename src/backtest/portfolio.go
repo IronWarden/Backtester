@@ -129,6 +129,7 @@ func (p *Portfolio) AdjustPortfolioParameters(ticker string, currentDayData data
 	if startingValue > 0.0 {
 		dailyChange = (endingValue - startingValue) / startingValue
 	}
+	TransactionLogger.Printf("dailyChange: %.4f\n", dailyChange*100)
 	p.DailyReturns = append(p.DailyReturns, DailyReturn{Date: currentDayData.Date, Return: dailyChange})
 	p.PortfolioCloseValues = append(p.PortfolioCloseValues, endingValue)
 

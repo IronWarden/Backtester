@@ -2,7 +2,6 @@ package backtest
 
 import (
 	"math"
-	"time"
 
 	"gonum.org/v1/gonum/stat"
 )
@@ -93,7 +92,7 @@ func GetSharpeRatio(riskFreeRates map[int64]float64, dailyAvg map[int64]float64)
 	return annualizedSharpe
 }
 
-func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time, riskFreeRates map[int64]float64) {
+func (p *Portfolio) GetBacktestingData(params BacktesterParams) {
 	dailyAvg := make(map[int64]float64, len(p.DailyReturns))
 	dailyAvgSlice := make([]float64, 0, len(p.DailyReturns))
 	for _, dr := range p.DailyReturns {
@@ -103,8 +102,8 @@ func (p *Portfolio) GetBacktestingData(startTime time.Time, endTime time.Time, r
 
 	// annualize standard deviation
 	standardDev := stat.StdDev(dailyAvgSlice, nil) * math.Sqrt(252.0)
-	sharpeRatio := GetSharpeRatio(riskFreeRates, dailyAvg)
-	sortinoRatio := GetSortinoRatio(riskFreeRates, dailyAvg)
+	sharpeRatio := GetSharpeRatio(params.RiskFreeRates, dailyAvg)
+	sortinoRatio := GetSortinoRatio(params.RiskFreeRates, dailyAvg)
 	annualReturn := GetAnnualReturn(dailyAvgSlice)
 	maxDrawdown := GetMaxDrawdown(p.PortfolioCloseValues)
 	metrics := Metrics{
