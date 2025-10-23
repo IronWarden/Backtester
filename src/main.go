@@ -13,14 +13,14 @@ import (
 	"my-backtester/src/data"
 )
 
-var verbose bool
+var debug bool
 
 func main() {
-	flag.BoolVar(&verbose, "verbose", false, "Enable verbose output")
+	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.Parse()
 
 	// General logger
-	if verbose {
+	if debug {
 		file, err := os.OpenFile("backtester.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 		if err != nil {
 			log.Fatalf("Failed to open log file: %v", err)
@@ -29,7 +29,7 @@ func main() {
 	}
 
 	// Transaction logger
-	if verbose {
+	if debug {
 		file, err := os.OpenFile("transactions.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 		if err != nil {
 			log.Fatalf("Failed to open transaction log file: %v", err)
@@ -39,9 +39,11 @@ func main() {
 		backtest.TransactionLogger = log.New(io.Discard, "", 0)
 	}
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	if debug {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
+	}
 
 	duckDBPath := "./stock_data.db"
 	_, err := data.InitDB(duckDBPath)
@@ -53,6 +55,13 @@ func main() {
 	endTime := time.Date(2025, 3, 31, 0, 0, 0, 0, time.UTC)
 	buyingPower := 20000.0
 	simulationTimes := 1
+	tickers1 := []string{"AAPL", "MSFT", "GOOGL", "AMZN"}
+	tickers2 := []string{"NVDA", "AMD", "INTC"}
 
-	backtest.Run(startTime, endTime, buyingPower, simulationTimes)
+	portfolios := []*backtest.Portfolio{
+		backtest.InitializePortfolio(buyingPower, startTime, endTime, "Tech Giants", tickers1),
+		backtest.InitializePortfolio(buyingPower, startTime, endTime, "Semiconductors", tickers2),
+	}
+
+	backtest.Run(simulationTimes, portfolios)
 }

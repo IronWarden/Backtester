@@ -15,19 +15,34 @@ type DailyReturn struct {
 }
 
 type Portfolio struct {
+	Pname                string // Portfolio name for tracking purposes
 	BuyingPower          float64
 	Positions            map[string]*Position
 	DailyReturns         []DailyReturn
 	PortfolioCloseValues []float64
 	Metrics              Metrics
+	Tickers              []string
+	StartTime            time.Time
+	EndTime              time.Time
+	RiskFreeRates        map[int64]float64
 }
 
-func InitializePortfolio(buyingPower float64, days int) *Portfolio {
+func InitializePortfolio
+(buyingPower float64, startTime, endTime time.Time, pname string, tickers []string) *Portfolio {
+	toDays := func(startTime, endTime time.Time) int {
+		return int(endTime.Sub(startTime).Hours() / 24)
+	}
+	days := toDays(startTime, endTime)
+
 	return &Portfolio{
+		Pname:                pname,
 		BuyingPower:          buyingPower,
 		Positions:            make(map[string]*Position),
 		DailyReturns:         make([]DailyReturn, 0, days),
 		PortfolioCloseValues: make([]float64, 0, days),
+		StartTime:            startTime,
+		EndTime:              endTime,
+		Tickers:              tickers,
 	}
 }
 
@@ -116,24 +131,32 @@ func (p *Portfolio) Sell(ticker string, stockAmount float64, currentPrice float6
 	}
 }
 
-func (p *Portfolio) GetPortfolioValue(ticker string, price float64) float64 {
-	var amount float64
-	if position, ok := p.FindPosition(ticker); ok {
-		amount = position.Amount
+func (p *Portfolio) GetPortfolioValue(tickers []string, historicalData map[string][]data.AssetData, day int) float64 {
+	value := p.BuyingPower
+	for _, ticker := range tickers {
+		currentPrice := historicalData[ticker][day].Close
+		if position, ok := p.FindPosition(ticker); ok {
+			value += position.Amount * currentPrice
+		}
 	}
-	return p.BuyingPower + amount*price
+	return value
 }
 
-func (p *Portfolio) AdjustPortfolioParameters(ticker string, currentDayData data.AssetData, startingValue float64, endingValue float64) {
+// Will adjust the portoflio after day loop of a backtester
+func (p *Portfolio) AdjustPortfolioParameters(tickers []string, currentDayData map[string][]data.AssetData, day int, startingValue float64, endingValue float64) {
 	dailyChange := 0.0
 	if startingValue > 0.0 {
 		dailyChange = (endingValue - startingValue) / startingValue
 	}
 	TransactionLogger.Printf("dailyChange: %.4f\n", dailyChange*100)
-	p.DailyReturns = append(p.DailyReturns, DailyReturn{Date: currentDayData.Date, Return: dailyChange})
+	arbitraryTicker := tickers[0]
+	date := currentDayData[arbitraryTicker][day].Date
+	p.DailyReturns = append(p.DailyReturns, DailyReturn{Date: date, Return: dailyChange})
 	p.PortfolioCloseValues = append(p.PortfolioCloseValues, endingValue)
 
-	if pos, _ := p.FindPosition(ticker); pos != nil {
-		pos.CurrentPrice = currentDayData.Close
+	for _, ticker := range tickers {
+		if pos, _ := p.FindPosition(ticker); pos != nil {
+			pos.CurrentPrice = currentDayData[ticker][day].Close
+		}
 	}
 }
