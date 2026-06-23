@@ -2,7 +2,9 @@ package data
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	_ "github.com/marcboeker/go-duckdb"
@@ -17,6 +19,32 @@ func InitDB(dataSourceName string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// ListTickers returns the distinct ticker symbols available in the price
+// table, sorted alphabetically. Used to populate the UI's ticker picker.
+// Requires InitDB to have been called.
+func ListTickers() ([]string, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	rows, err := db.Query(
+		`SELECT DISTINCT Ticker FROM stock_data_optimized ORDER BY Ticker`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tickers []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		tickers = append(tickers, t)
+	}
+	return tickers, rows.Err()
 }
 
 type AssetData struct {
@@ -36,7 +64,9 @@ func ReadStocks(rows *sql.Rows) map[string][]AssetData {
 	for rows.Next() {
 		var assetData AssetData
 		var ticker string
-		if err := rows.Scan(&assetData.Date, &ticker, &assetData.Open, &assetData.High, &assetData.Low, &assetData.Close, &assetData.Volume); err != nil {
+		err := rows.Scan(&assetData.Date, &ticker, &assetData.Open,
+			&assetData.High, &assetData.Low, &assetData.Close, &assetData.Volume)
+		if err != nil {
 			log.Fatalf("Failed to scan row: %v", err)
 		}
 
@@ -59,7 +89,10 @@ func ReadStocks(rows *sql.Rows) map[string][]AssetData {
 	return allAssetData
 }
 
-func QueryAllAssets(startTime time.Time, endTime time.Time) map[string][]AssetData {
+func QueryAllAssets(
+	startTime time.Time,
+	endTime time.Time,
+) map[string][]AssetData {
 	timeQuery := time.Now()
 	var rows *sql.Rows
 	var err error
@@ -81,11 +114,59 @@ func QueryAllAssets(startTime time.Time, endTime time.Time) map[string][]AssetDa
 	return stocks
 }
 
-func QueryAssetData(ticker string, startTime time.Time, endTime time.Time) []AssetData {
+// QueryAssetsForTickers fetches OHLCV data for a known set of tickers
+// in a single round-trip, bucketing rows by ticker via ReadStocks.
+func QueryAssetsForTickers(
+	tickers []string,
+	startTime time.Time,
+	endTime time.Time,
+) map[string][]AssetData {
+	if len(tickers) == 0 {
+		return map[string][]AssetData{}
+	}
+
+	placeholders := strings.Repeat("?,", len(tickers))
+	placeholders = placeholders[:len(placeholders)-1]
+	query := fmt.Sprintf(`
+		SELECT Date, Ticker, Open, High, Low, Close, Volume
+		FROM stock_data_optimized
+		WHERE Ticker IN (%s)
+		  AND Date BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS)
+		ORDER BY Ticker, Date;
+	`, placeholders)
+
+	args := make([]any, 0, len(tickers)+2)
+	for _, t := range tickers {
+		args = append(args, t)
+	}
+	args = append(args,
+		startTime.Format("2006-01-02 15:04:05.000000000"),
+		endTime.Format("2006-01-02 15:04:05.000000000"),
+	)
+
+	queryTime := time.Now()
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		log.Printf("Error querying assets for %d tickers: %v", len(tickers), err)
+		return map[string][]AssetData{}
+	}
+	defer rows.Close()
+
+	result := ReadStocks(rows)
+	log.Printf("Query time for %d tickers: %s\n", len(tickers), time.Since(queryTime))
+	return result
+}
+
+func QueryAssetData(
+	ticker string,
+	startTime time.Time,
+	endTime time.Time,
+) []AssetData {
 	queryTime := time.Now()
 	query := `
 	SELECT Date, Ticker, Open, High, Low, Close, Volume FROM stock_data_optimized
-	WHERE Ticker = ? AND Date BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS)
+	WHERE Ticker = ? AND 
+		Date BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS)
 	ORDER BY Date;
 	`
 
@@ -103,7 +184,9 @@ func QueryAssetData(ticker string, startTime time.Time, endTime time.Time) []Ass
 	for rows.Next() {
 		var assetData AssetData
 		var ticker string
-		if err := rows.Scan(&assetData.Date, &ticker, &assetData.Open, &assetData.High, &assetData.Low, &assetData.Close, &assetData.Volume); err != nil {
+		err := rows.Scan(&assetData.Date, &ticker, &assetData.Open,
+			&assetData.High, &assetData.Low, &assetData.Close, &assetData.Volume)
+		if err != nil {
 			log.Printf("Failed to scan row for ticker %s: %v", ticker, err)
 			continue
 		}
@@ -116,33 +199,41 @@ func QueryAssetData(ticker string, startTime time.Time, endTime time.Time) []Ass
 	return dailyAssets
 }
 
-func GetRiskFreeRates(startTime time.Time, endTime time.Time) map[int64]float64 {
-	query := "SELECT daily_risk_free_rate_decimal, Date FROM \"3MTreasuryYields\" WHERE Date  BETWEEN CAST(? AS TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS) ORDER BY Date;"
+func GetRiskFreeRates(
+	startTime time.Time,
+	endTime time.Time,
+) map[int64]float64 {
+	query := "SELECT daily_risk_free_rate_decimal, Date FROM " +
+		"\"3MTreasuryYields\" WHERE Date BETWEEN CAST(? AS " +
+		"TIMESTAMP_NS) AND CAST(? AS TIMESTAMP_NS) ORDER BY Date;"
 	startTimeStr := startTime.Format("2006-01-02 15:04:05.000000000")
 	endTimeStr := endTime.Format("2006-01-02 15:04:05.000000000")
 
 	rows, err := db.Query(query, startTimeStr, endTimeStr)
 	if err != nil {
-		log.Printf("Error querying data: %v", err)
+		log.Printf("Error querying risk free rates: %v, returning empty map", err)
+		return make(map[int64]float64)
 	}
 	defer rows.Close()
-	riskFreeRates := make(map[int64]float64, 0)
+	riskFreeRates := make(map[int64]float64)
 	for rows.Next() {
 		var rate sql.NullFloat64
 		var date time.Time
-		err := rows.Scan(&rate, &date)
-		if err != nil {
+		if err := rows.Scan(&rate, &date); err != nil {
 			log.Printf("Error scanning row: %v", err)
+			continue
 		}
 		if rate.Valid {
 			riskFreeRates[date.Unix()] = rate.Float64
 		}
 	}
-	log.Printf("Risk Free Rates: %v\n", riskFreeRates)
 	return riskFreeRates
 }
 
-func GetTickersWithSufficientData(startTime time.Time, endTime time.Time) []string {
+func GetTickersWithSufficientData(
+	startTime time.Time,
+	endTime time.Time,
+) []string {
 	var rows *sql.Rows
 	var err error
 

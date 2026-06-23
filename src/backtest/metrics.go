@@ -2,26 +2,31 @@ package backtest
 
 import (
 	"math"
+	"my-backtester/src/data"
 
 	"gonum.org/v1/gonum/stat"
 )
 
 type Metrics struct {
-	SharpeRatio  float64
-	SortinoRatio float64
-	MaxDrawdown  float64
-	AnnualReturn float64
-	StandardDev  float64
+	SharpeRatio       float64
+	SortinoRatio      float64
+	MaxDrawdown       float64
+	AnnualReturn      float64
+	StandardDev       float64
+	AvgCorrelation    float64
+	CointegratedPairs int
 }
 
-func GetSortinoRatio(riskFreeRates map[int64]float64, dailyAvg map[int64]float64) float64 {
-	excessReturns := make([]float64, 0)
+func GetSortinoRatio(
+	riskFreeRates map[int64]float64,
+	dailyAvg map[int64]float64,
+) float64 {
+	excessReturns := make([]float64, 0, len(dailyAvg))
 	downsideReturns := make([]float64, 0)
 
-	// Iterate through map for common dates to calculate excess returns
 	for key, val := range dailyAvg {
-		if riskFreeRate, ok := riskFreeRates[key]; ok {
-			excessReturn := val - riskFreeRate
+		if rate, ok := riskFreeRates[key]; ok {
+			excessReturn := val - rate
 			excessReturns = append(excessReturns, excessReturn)
 			if excessReturn < 0 {
 				downsideReturns = append(downsideReturns, excessReturn)
@@ -59,31 +64,33 @@ func GetAnnualReturn(dailyAvg []float64) float64 {
 }
 
 func GetMaxDrawdown(portfolioCloseValues []float64) float64 {
+	if len(portfolioCloseValues) == 0 {
+		return 0.0
+	}
 	peak := portfolioCloseValues[0]
-	peakIdx := 0
-	for i, value := range portfolioCloseValues {
-		// Find peak but allow atleast 1 day remaining in the period
-		if value > peak && i < len(portfolioCloseValues)-2 {
-			peakIdx = i
+	maxDrawdown := 0.0
+
+	for _, value := range portfolioCloseValues {
+		if value > peak {
 			peak = value
 		}
+		drawdown := (peak - value) / peak
+		if drawdown > maxDrawdown {
+			maxDrawdown = drawdown
+		}
 	}
-	minValue := peak
-	for i := peakIdx + 1; i < len(portfolioCloseValues); i++ {
-		minValue = math.Min(minValue, portfolioCloseValues[i])
-	}
-	change := (minValue - peak) / peak
 
-	return change * 100
+	return maxDrawdown * 100
 }
 
-func GetSharpeRatio(riskFreeRates map[int64]float64, dailyAvg map[int64]float64) float64 {
-	excessReturns := make([]float64, 0)
-	// Iterate through map for common dates calculate excess return
+func GetSharpeRatio(
+	riskFreeRates map[int64]float64,
+	dailyAvg map[int64]float64,
+) float64 {
+	excessReturns := make([]float64, 0, len(dailyAvg))
 	for key, val := range dailyAvg {
-		if _, ok := riskFreeRates[key]; ok {
-			excessReturn := val - riskFreeRates[key]
-			excessReturns = append(excessReturns, excessReturn)
+		if rate, ok := riskFreeRates[key]; ok {
+			excessReturns = append(excessReturns, val-rate)
 		}
 	}
 	excessStdev := stat.StdDev(excessReturns, nil)
@@ -92,7 +99,15 @@ func GetSharpeRatio(riskFreeRates map[int64]float64, dailyAvg map[int64]float64)
 	return annualizedSharpe
 }
 
+<<<<<<< Updated upstream
 func (p *Portfolio) GetBacktestingData(params BacktesterParams) {
+=======
+func (p *Portfolio) GetBacktestingData(
+	riskFreeRates map[int64]float64,
+	hist map[string][]data.AssetData,
+	dataLen int,
+) {
+>>>>>>> Stashed changes
 	dailyAvg := make(map[int64]float64, len(p.DailyReturns))
 	dailyAvgSlice := make([]float64, 0, len(p.DailyReturns))
 	for _, dr := range p.DailyReturns {
@@ -106,12 +121,16 @@ func (p *Portfolio) GetBacktestingData(params BacktesterParams) {
 	sortinoRatio := GetSortinoRatio(params.RiskFreeRates, dailyAvg)
 	annualReturn := GetAnnualReturn(dailyAvgSlice)
 	maxDrawdown := GetMaxDrawdown(p.PortfolioCloseValues)
+	avgCorrelation := AvgPairwiseCorrelation(p.Tickers, hist, dataLen)
+	cointegratedPairs := CountCointegratedPairs(p.Tickers, hist, dataLen)
 	metrics := Metrics{
-		StandardDev:  standardDev,
-		SharpeRatio:  sharpeRatio,
-		SortinoRatio: sortinoRatio,
-		MaxDrawdown:  maxDrawdown,
-		AnnualReturn: annualReturn,
+		StandardDev:       standardDev,
+		SharpeRatio:       sharpeRatio,
+		SortinoRatio:      sortinoRatio,
+		MaxDrawdown:       maxDrawdown,
+		AnnualReturn:      annualReturn,
+		AvgCorrelation:    avgCorrelation,
+		CointegratedPairs: cointegratedPairs,
 	}
 	p.Metrics = metrics
 }

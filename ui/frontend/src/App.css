@@ -1,0 +1,551 @@
+html,
+body,
+#root,
+.app {
+  height: 100%;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #1e1e1e;
+  color: #ddd;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.editor {
+  flex: 1;
+}
+
+.main-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em;
+  align-items: center;
+  padding: 0.5em 0.9em;
+  background: #232323;
+  border-bottom: 1px solid #333;
+}
+
+.topbar button {
+  background: #3a3a3a;
+  color: #ddd;
+  border: 1px solid #555;
+  padding: 0.4em 0.9em;
+  border-radius: 0.3em;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+.topbar button:hover {
+  background: #4a4a4a;
+}
+
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid #555;
+  border-radius: 0.3em;
+  overflow: hidden;
+}
+
+.mode-toggle button {
+  border: none;
+  border-radius: 0;
+  background: #2a2a2a;
+}
+
+.mode-toggle button.active {
+  background: #2a6cdf;
+  color: #fff;
+}
+
+/* Simple form ------------------------------------------------------------ */
+.simple-form {
+  padding: 1em 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1em;
+  max-width: 60em;
+}
+
+.simple-form .field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+}
+
+.simple-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  font-size: 1em;
+  color: #aaa;
+}
+
+/* Let the top-row fields share the width and shrink instead of overflowing when
+   the window narrows. min-width: 0 overrides the input's intrinsic min width so
+   flex can size them down; width: 100% makes each input fill its label. */
+.simple-form .field-row > label {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+.simple-form .field-row input {
+  width: 100%;
+}
+
+.simple-form input {
+  background: #2a2a2a;
+  color: #eee;
+  border: 1px solid #555;
+  border-radius: 0.3em;
+  padding: 0.4em 0.5em;
+  font-size: 1em;
+  /* Drop the native (GTK-themed) control box. WebKitGTK renders default form
+     controls at fixed metrics that ignore the app-wide font-size zoom, so the
+     calendar/number fields wouldn't grow on Ctrl+scroll. As a plain CSS box the
+     field is sized purely from its em padding + font-size and scales in step. */
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* The native date field ships a fixed-size picker glyph that ignores the
+   app-wide font-size zoom. Sizing it in em keeps the calendar icon growing
+   in step with the Ctrl+scroll / Ctrl+Arrow zoom. */
+.simple-form input[type="date"]::-webkit-calendar-picker-indicator {
+  width: 0.9em;
+  height: 0.9em;
+  cursor: pointer;
+}
+
+/* Hide the number field's up/down spin buttons — they read as clutter, and the
+   field still takes typed input and the arrow keys. */
+.simple-form input[type="number"]::-webkit-inner-spin-button,
+.simple-form input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.simple-form input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.simple-form .block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  margin-bottom: 0.4em;
+}
+
+.simple-form .block-label {
+  font-size: 0.85em;
+  color: #aaa;
+}
+
+.even-split {
+  background: #3a3a3a;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 0.3em;
+  padding: 0.3em 0.7em;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.even-split:hover:not(:disabled) {
+  background: #4a4a4a;
+}
+
+.even-split:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.simple-form .ticker-add {
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.simple-form .ticker-add input[list] {
+  /* Hold ~16em on a roomy window, but allow shrinking so it never overflows a
+     narrow one (0 grow keeps it from stretching the full row width). */
+  flex: 0 1 16em;
+  min-width: 0;
+}
+
+.simple-form .ticker-add button {
+  background: #3a3a3a;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 0.3em;
+  padding: 0.4em 0.9em;
+  cursor: pointer;
+  /* Without an explicit size this button keeps the UA default and is the one
+     control that won't grow with the app-wide zoom. */
+  font-size: 1em;
+}
+
+/* Allocation list: one row per holding, each with a % of the portfolio. */
+.alloc-list {
+  margin-top: 0.7em;
+  max-width: 26em;
+  border: 1px solid #333;
+  border-radius: 0.4em;
+  overflow: hidden;
+}
+
+.alloc-row {
+  display: grid;
+  grid-template-columns: 1fr 8em 1.6em;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.4em 0.7em;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.alloc-head {
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+  background: #202020;
+}
+
+.alloc-sym {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 600;
+  color: #eee;
+}
+
+.alloc-pct {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.alloc-pct input {
+  width: 5em;
+  text-align: right;
+}
+
+.pct-sign {
+  color: #999;
+}
+
+.alloc-x {
+  background: transparent !important;
+  border: none !important;
+  color: #999;
+  cursor: pointer;
+  font-size: 1.2em;
+  line-height: 1;
+  padding: 0 !important;
+  justify-self: center;
+}
+
+.alloc-x:hover {
+  color: #ff6b6b;
+}
+
+.alloc-total {
+  display: grid;
+  grid-template-columns: 1fr 8em 1.6em;
+  gap: 0.6em;
+  padding: 0.45em 0.7em;
+  background: #202020;
+  border-top: 1px solid #333;
+  font-size: 0.9em;
+  color: #aaa;
+}
+
+.alloc-total .total-val {
+  text-align: right;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 600;
+}
+
+.alloc-total.ok .total-val {
+  color: #22c55e;
+}
+
+.alloc-total.warn .total-val {
+  color: #f59e0b;
+}
+
+.simple-form .hint,
+.simple-form .empty {
+  font-size: 0.82em;
+  color: #777;
+  font-style: italic;
+  margin-top: 0.5em;
+}
+
+.simple-form .actions {
+  margin-top: 0.3em;
+}
+
+.simple-form .actions button {
+  background: #3a3a3a;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 0.3em;
+  padding: 0.5em 1.1em;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+.simple-form .actions button.run {
+  background: #2a6cdf;
+  border-color: #1a5cdf;
+  color: #fff;
+}
+
+.simple-form .actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.resize-handle {
+  height: 5px;
+  background: #2a2a2a;
+  cursor: ns-resize;
+  border-top: 1px solid #333;
+  border-bottom: 1px solid #333;
+  transition: background 0.1s;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: #2a6cdf;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em;
+  padding: 0.6em 0.9em;
+  background: #2a2a2a;
+  border-bottom: 1px solid #333;
+  align-items: center;
+}
+
+.toolbar button {
+  background: #3a3a3a;
+  color: #ddd;
+  border: 1px solid #555;
+  padding: 0.4em 0.9em;
+  border-radius: 0.3em;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+.toolbar button:hover:not(:disabled) {
+  background: #4a4a4a;
+}
+
+.toolbar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar button.run {
+  background: #2a6cdf;
+  border-color: #1a5cdf;
+}
+
+.toolbar button.run:hover:not(:disabled) {
+  background: #3a7cef;
+}
+
+.paths {
+  margin-left: auto;
+  font-size: 0.82em;
+  color: #888;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.tabs {
+  display: flex;
+  background: #252525;
+  border-bottom: 1px solid #333;
+}
+
+.tab {
+  background: transparent;
+  color: #aaa;
+  border: none;
+  border-right: 1px solid #333;
+  padding: 0.55em 1.1em;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+.tab.active {
+  background: #1e1e1e;
+  color: #fff;
+  border-bottom: 2px solid #2a6cdf;
+}
+
+.tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.editor {
+  overflow: hidden;
+  min-height: 200px;
+}
+
+.status {
+  background: #1a1a1a;
+  padding: 0.3em 0.9em;
+  font-size: 0.9em;
+  border-top: 1px solid #333;
+  min-height: 1.7em;
+}
+
+.status .err {
+  color: #ff6b6b;
+  white-space: pre-wrap;
+}
+
+.results {
+  background: #1a1a1a;
+  border-top: 1px solid #333;
+  overflow: auto;
+  padding: 0.6em 0.9em;
+}
+
+.results .empty {
+  color: #666;
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.results table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.results th,
+.results td {
+  text-align: left;
+  padding: 0.3em 0.6em;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.results th {
+  color: #888;
+  font-weight: 600;
+  background: #1a1a1a;
+  position: sticky;
+  top: -0.6em;
+}
+
+.results td {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Results view: headline cards + equity chart ---------------------------- */
+.results-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+}
+
+.headline-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7em;
+}
+
+.card {
+  background: #232323;
+  border: 1px solid #333;
+  border-radius: 0.4em;
+  padding: 0.6em 0.8em;
+  min-width: 11em;
+}
+
+.card-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.82em;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 16em;
+}
+
+.card-swatch {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 0.2em;
+  flex: none;
+}
+
+.card-big {
+  font-size: 1.7em;
+  font-weight: 700;
+  margin: 0.1em 0;
+}
+
+.card-big.pos {
+  color: #22c55e;
+}
+
+.card-big.neg {
+  color: #ef4444;
+}
+
+.card-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7em;
+  font-size: 0.78em;
+  color: #999;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.equity-chart {
+  display: block;
+  background: #181818;
+  border: 1px solid #2c2c2c;
+  border-radius: 0.4em;
+}
+
+.equity-chart .axis-label {
+  fill: #777;
+  /* font-size is set on the <svg> in JS so it scales with the app zoom; the
+     labels inherit it. Declaring a size here would override that inheritance. */
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.equity-chart .axis-label.end {
+  text-anchor: end;
+}
+
+.equity-chart .axis-label.mid {
+  text-anchor: middle;
+}

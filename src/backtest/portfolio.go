@@ -1,13 +1,16 @@
 package backtest
 
 import (
+	"io"
 	"log"
-	"time"
-
 	"my-backtester/src/data"
+	"time"
 )
 
-var TransactionLogger *log.Logger
+// TransactionLogger receives BUY/SELL records. Defaults to a discard sink
+// so callers that don't enable transaction logging (e.g. the UI) don't
+// nil-panic; the CLI's --debug flag replaces it with a file-backed logger.
+var TransactionLogger = log.New(io.Discard, "", 0)
 
 type DailyReturn struct {
 	Date   time.Time
@@ -16,29 +19,81 @@ type DailyReturn struct {
 
 type Portfolio struct {
 	BuyingPower          float64
+	InitialBuyingPower   float64
 	Positions            map[string]*Position
 	DailyReturns         []DailyReturn
 	PortfolioCloseValues []float64
 	Metrics              Metrics
+<<<<<<< Updated upstream
 }
 
 func InitializePortfolio(buyingPower float64, days int) *Portfolio {
+=======
+	Tickers              []string
+	StrategySpec         string
+	StrategyParams       map[string]any
+	Strategy             Strategy
+	StartTime            time.Time
+	EndTime              time.Time
+}
+
+func InitializePortfolio(
+	buyingPower float64,
+	startTime, endTime time.Time,
+	pname string,
+	tickers []string,
+	strategySpec string,
+	strategyParams map[string]any,
+) (*Portfolio, error) {
+	strat, err := NewStrategy(strategySpec, strategyParams)
+	if err != nil {
+		return nil, err
+	}
+	days := int(endTime.Sub(startTime).Hours() / 24)
+
+>>>>>>> Stashed changes
 	return &Portfolio{
 		BuyingPower:          buyingPower,
+		InitialBuyingPower:   buyingPower,
 		Positions:            make(map[string]*Position),
 		DailyReturns:         make([]DailyReturn, 0, days),
 		PortfolioCloseValues: make([]float64, 0, days),
+<<<<<<< Updated upstream
 	}
+=======
+		StartTime:            startTime,
+		EndTime:              endTime,
+		Tickers:              tickers,
+		StrategySpec:         strategySpec,
+		StrategyParams:       strategyParams,
+		Strategy:             strat,
+	}, nil
+>>>>>>> Stashed changes
 }
 
-func (p *Portfolio) Reset(buyingPower float64) {
-	p.BuyingPower = buyingPower
-	// Clear the map for the next simulation
-	for k := range p.Positions {
-		delete(p.Positions, k)
+// Clone returns a fresh portfolio with reset state and a new Strategy
+// instance built from StrategySpec. Used by the runner so each simulation
+// pass gets independent state and workers don't race on shared portfolios.
+func (p *Portfolio) Clone() (*Portfolio, error) {
+	strat, err := NewStrategy(p.StrategySpec, p.StrategyParams)
+	if err != nil {
+		return nil, err
 	}
-	p.DailyReturns = p.DailyReturns[:0]
-	p.PortfolioCloseValues = p.PortfolioCloseValues[:0]
+	days := cap(p.DailyReturns)
+	return &Portfolio{
+		Pname:                p.Pname,
+		BuyingPower:          p.InitialBuyingPower,
+		InitialBuyingPower:   p.InitialBuyingPower,
+		Positions:            make(map[string]*Position),
+		DailyReturns:         make([]DailyReturn, 0, days),
+		PortfolioCloseValues: make([]float64, 0, days),
+		StartTime:            p.StartTime,
+		EndTime:              p.EndTime,
+		Tickers:              p.Tickers,
+		StrategySpec:         p.StrategySpec,
+		StrategyParams:       p.StrategyParams,
+		Strategy:             strat,
+	}, nil
 }
 
 type Position struct {
@@ -58,8 +113,12 @@ func (p *Portfolio) PrintMetrics() {
 		log.Println("No positions")
 	}
 	for key, pos := range p.Positions {
-		log.Printf("Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n", key, pos.Amount, pos.AveragePrice, pos.CurrentPrice)
-		log.Println("Amount now is", pos.Amount*pos.CurrentPrice+p.BuyingPower)
+		log.Printf(
+			"Ticker: %s, Amount: %.2f, Average Price: %.2f, CurrentPrice: %.2f\n",
+			key, pos.Amount, pos.AveragePrice, pos.CurrentPrice,
+		)
+		currentValue := pos.Amount*pos.CurrentPrice + p.BuyingPower
+		log.Println("Amount now is", currentValue)
 	}
 	log.Println("=============================================")
 	log.Printf("Annual Metrics: \n")
@@ -71,7 +130,12 @@ func (p *Portfolio) PrintMetrics() {
 	log.Println("=============================================")
 }
 
-func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, time time.Time) {
+func (p *Portfolio) Buy(
+	ticker string,
+	amount float64,
+	initialPrice float64,
+	time time.Time,
+) {
 	if p.BuyingPower < amount*initialPrice {
 		return
 	}
@@ -87,10 +151,14 @@ func (p *Portfolio) Buy(ticker string, amount float64, initialPrice float64, tim
 		}
 	} else {
 		// Position exists, update it
-		pos.AveragePrice = (pos.AveragePrice*pos.Amount + initialPrice*amount) / (pos.Amount + amount)
+		pos.AveragePrice = (pos.AveragePrice*pos.Amount +
+			initialPrice*amount) / (pos.Amount + amount)
 		pos.Amount += amount
 	}
-	TransactionLogger.Printf("BUY: %s, Amount: %.2f, Price: %.2f, Date: %s\n", ticker, amount, initialPrice, time)
+	TransactionLogger.Printf(
+		"BUY: %s, Amount: %.2f, Price: %.2f, Date: %s\n",
+		ticker, amount, initialPrice, time,
+	)
 	p.BuyingPower -= amount * initialPrice
 }
 
@@ -102,38 +170,89 @@ func (p *Portfolio) Withdraw(cash float64) {
 	p.BuyingPower -= cash
 }
 
-func (p *Portfolio) Sell(ticker string, stockAmount float64, currentPrice float64, time time.Time) {
+func (p *Portfolio) Sell(
+	ticker string,
+	stockAmount float64,
+	currentPrice float64,
+	time time.Time,
+) {
 	pos, ok := p.FindPosition(ticker)
-	if !ok {
-	} else if pos.Amount >= stockAmount && pos.Amount > 0 {
-		TransactionLogger.Printf("SELL: %s, Amount: %.2f, Price: %.2f, Date: %s\n", ticker, stockAmount, currentPrice, time)
-		pos.Amount -= stockAmount
-		if pos.Amount == 0 {
-			delete(p.Positions, ticker) // Remove from map
-		}
-		p.Deposit(stockAmount * currentPrice)
-	} else {
+	if !ok || pos.Amount < stockAmount || pos.Amount <= 0 {
+		return
 	}
+	TransactionLogger.Printf(
+		"SELL: %s, Amount: %.2f, Price: %.2f, Date: %s\n",
+		ticker, stockAmount, currentPrice, time,
+	)
+	pos.Amount -= stockAmount
+	if pos.Amount == 0 {
+		delete(p.Positions, ticker)
+	}
+	p.Deposit(stockAmount * currentPrice)
 }
 
+<<<<<<< Updated upstream
 func (p *Portfolio) GetPortfolioValue(ticker string, price float64) float64 {
 	var amount float64
 	if position, ok := p.FindPosition(ticker); ok {
 		amount = position.Amount
+=======
+func (p *Portfolio) GetPortfolioValue(
+	tickers []string,
+	historicalData map[string][]data.AssetData,
+	day int,
+) float64 {
+	value := p.BuyingPower
+	for _, ticker := range tickers {
+		tickerData := historicalData[ticker]
+		if day >= len(tickerData) {
+			continue
+		}
+		if position, ok := p.Positions[ticker]; ok && position.Amount > 0 {
+			value += position.Amount * tickerData[day].Close
+		}
+>>>>>>> Stashed changes
 	}
 	return p.BuyingPower + amount*price
 }
 
+<<<<<<< Updated upstream
 func (p *Portfolio) AdjustPortfolioParameters(ticker string, currentDayData data.AssetData, startingValue float64, endingValue float64) {
+=======
+// AdjustPortfolioParameters records the day's return and refreshes
+// current prices on open positions.
+func (p *Portfolio) AdjustPortfolioParameters(
+	tickers []string,
+	currentDayData map[string][]data.AssetData,
+	day int,
+	startingValue float64,
+	endingValue float64,
+) {
+>>>>>>> Stashed changes
 	dailyChange := 0.0
 	if startingValue > 0.0 {
 		dailyChange = (endingValue - startingValue) / startingValue
 	}
 	TransactionLogger.Printf("dailyChange: %.4f\n", dailyChange*100)
+<<<<<<< Updated upstream
 	p.DailyReturns = append(p.DailyReturns, DailyReturn{Date: currentDayData.Date, Return: dailyChange})
 	p.PortfolioCloseValues = append(p.PortfolioCloseValues, endingValue)
 
 	if pos, _ := p.FindPosition(ticker); pos != nil {
 		pos.CurrentPrice = currentDayData.Close
+=======
+	date := currentDayData[tickers[0]][day].Date
+	p.DailyReturns = append(p.DailyReturns,
+		DailyReturn{Date: date, Return: dailyChange})
+	p.PortfolioCloseValues = append(p.PortfolioCloseValues, endingValue)
+
+	for _, ticker := range tickers {
+		if pos, ok := p.Positions[ticker]; ok && pos.Amount > 0 {
+			tickerData := currentDayData[ticker]
+			if day < len(tickerData) {
+				pos.CurrentPrice = tickerData[day].Close
+			}
+		}
+>>>>>>> Stashed changes
 	}
 }
