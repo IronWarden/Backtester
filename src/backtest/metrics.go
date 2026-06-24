@@ -99,15 +99,11 @@ func GetSharpeRatio(
 	return annualizedSharpe
 }
 
-<<<<<<< Updated upstream
-func (p *Portfolio) GetBacktestingData(params BacktesterParams) {
-=======
 func (p *Portfolio) GetBacktestingData(
 	riskFreeRates map[int64]float64,
 	hist map[string][]data.AssetData,
 	dataLen int,
 ) {
->>>>>>> Stashed changes
 	dailyAvg := make(map[int64]float64, len(p.DailyReturns))
 	dailyAvgSlice := make([]float64, 0, len(p.DailyReturns))
 	for _, dr := range p.DailyReturns {
@@ -117,8 +113,8 @@ func (p *Portfolio) GetBacktestingData(
 
 	// annualize standard deviation
 	standardDev := stat.StdDev(dailyAvgSlice, nil) * math.Sqrt(252.0)
-	sharpeRatio := GetSharpeRatio(params.RiskFreeRates, dailyAvg)
-	sortinoRatio := GetSortinoRatio(params.RiskFreeRates, dailyAvg)
+	sharpeRatio := GetSharpeRatio(riskFreeRates, dailyAvg)
+	sortinoRatio := GetSortinoRatio(riskFreeRates, dailyAvg)
 	annualReturn := GetAnnualReturn(dailyAvgSlice)
 	maxDrawdown := GetMaxDrawdown(p.PortfolioCloseValues)
 	avgCorrelation := AvgPairwiseCorrelation(p.Tickers, hist, dataLen)

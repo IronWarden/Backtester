@@ -18,17 +18,13 @@ type DailyReturn struct {
 }
 
 type Portfolio struct {
+	Pname                string // Portfolio name for tracking purposes
 	BuyingPower          float64
 	InitialBuyingPower   float64
 	Positions            map[string]*Position
 	DailyReturns         []DailyReturn
 	PortfolioCloseValues []float64
 	Metrics              Metrics
-<<<<<<< Updated upstream
-}
-
-func InitializePortfolio(buyingPower float64, days int) *Portfolio {
-=======
 	Tickers              []string
 	StrategySpec         string
 	StrategyParams       map[string]any
@@ -51,16 +47,13 @@ func InitializePortfolio(
 	}
 	days := int(endTime.Sub(startTime).Hours() / 24)
 
->>>>>>> Stashed changes
 	return &Portfolio{
+		Pname:                pname,
 		BuyingPower:          buyingPower,
 		InitialBuyingPower:   buyingPower,
 		Positions:            make(map[string]*Position),
 		DailyReturns:         make([]DailyReturn, 0, days),
 		PortfolioCloseValues: make([]float64, 0, days),
-<<<<<<< Updated upstream
-	}
-=======
 		StartTime:            startTime,
 		EndTime:              endTime,
 		Tickers:              tickers,
@@ -68,7 +61,6 @@ func InitializePortfolio(
 		StrategyParams:       strategyParams,
 		Strategy:             strat,
 	}, nil
->>>>>>> Stashed changes
 }
 
 // Clone returns a fresh portfolio with reset state and a new Strategy
@@ -191,12 +183,6 @@ func (p *Portfolio) Sell(
 	p.Deposit(stockAmount * currentPrice)
 }
 
-<<<<<<< Updated upstream
-func (p *Portfolio) GetPortfolioValue(ticker string, price float64) float64 {
-	var amount float64
-	if position, ok := p.FindPosition(ticker); ok {
-		amount = position.Amount
-=======
 func (p *Portfolio) GetPortfolioValue(
 	tickers []string,
 	historicalData map[string][]data.AssetData,
@@ -211,14 +197,10 @@ func (p *Portfolio) GetPortfolioValue(
 		if position, ok := p.Positions[ticker]; ok && position.Amount > 0 {
 			value += position.Amount * tickerData[day].Close
 		}
->>>>>>> Stashed changes
 	}
-	return p.BuyingPower + amount*price
+	return value
 }
 
-<<<<<<< Updated upstream
-func (p *Portfolio) AdjustPortfolioParameters(ticker string, currentDayData data.AssetData, startingValue float64, endingValue float64) {
-=======
 // AdjustPortfolioParameters records the day's return and refreshes
 // current prices on open positions.
 func (p *Portfolio) AdjustPortfolioParameters(
@@ -228,19 +210,11 @@ func (p *Portfolio) AdjustPortfolioParameters(
 	startingValue float64,
 	endingValue float64,
 ) {
->>>>>>> Stashed changes
 	dailyChange := 0.0
 	if startingValue > 0.0 {
 		dailyChange = (endingValue - startingValue) / startingValue
 	}
 	TransactionLogger.Printf("dailyChange: %.4f\n", dailyChange*100)
-<<<<<<< Updated upstream
-	p.DailyReturns = append(p.DailyReturns, DailyReturn{Date: currentDayData.Date, Return: dailyChange})
-	p.PortfolioCloseValues = append(p.PortfolioCloseValues, endingValue)
-
-	if pos, _ := p.FindPosition(ticker); pos != nil {
-		pos.CurrentPrice = currentDayData.Close
-=======
 	date := currentDayData[tickers[0]][day].Date
 	p.DailyReturns = append(p.DailyReturns,
 		DailyReturn{Date: date, Return: dailyChange})
@@ -253,6 +227,5 @@ func (p *Portfolio) AdjustPortfolioParameters(
 				pos.CurrentPrice = tickerData[day].Close
 			}
 		}
->>>>>>> Stashed changes
 	}
 }

@@ -12,40 +12,8 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// WorkItem represents a single unit of work.
-type WorkItem struct {
-	Ticker string
-}
-
 // Result holds the result of a backtest.
 type Result struct {
-<<<<<<< Updated upstream
-	Ticker  string
-	Metrics Metrics
-}
-
-type BacktesterParams struct {
-	StartTime      time.Time
-	EndTime        time.Time
-	HistoricalData map[string][]data.AssetData
-	RiskFreeRates  map[int64]float64
-	Tickers        []string
-}
-
-// Run runs the backtesting simulation.
-func Run(startTime, endTime time.Time, buyingPower float64, simulationTimes int) {
-	tickers := data.GetTickersWithSufficientData(startTime, endTime)
-	riskFreeRates := data.GetRiskFreeRates(startTime, endTime)
-	numWorkers := runtime.NumCPU()
-	backtesterParams := BacktesterParams{
-		StartTime:     startTime,
-		EndTime:       endTime,
-		RiskFreeRates: riskFreeRates,
-	}
-
-	jobs := make(chan WorkItem, len(tickers)*simulationTimes)
-	results := make(chan Result, len(tickers)*simulationTimes)
-=======
 	PortfolioName string
 	Strategy      string
 	Metrics       Metrics
@@ -134,7 +102,6 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 	totalJobs := len(portfolios)
 	jobs := make(chan *Portfolio, totalJobs)
 	results := make(chan Result, totalJobs)
->>>>>>> Stashed changes
 
 	var wg sync.WaitGroup
 
@@ -142,15 +109,6 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-<<<<<<< Updated upstream
-			days := int(endTime.Sub(startTime).Hours() / 24)
-			portfolio := InitializePortfolio(buyingPower, days)
-			for work := range jobs {
-				historicalData := data.QueryAssetData(work.Ticker, startTime, endTime)
-				backtesterParams.HistoricalData = historicalData
-				if historicalData == nil {
-					continue
-=======
 			for p := range jobs {
 				runOne(p, historicalData, riskFreeRates)
 				// DailyReturns and PortfolioCloseValues are appended together
@@ -165,29 +123,18 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					Metrics:       p.Metrics,
 					EquityCurve:   p.PortfolioCloseValues,
 					Dates:         dates,
->>>>>>> Stashed changes
 				}
-				portfolio.Reset(buyingPower)
-				portfolio.BuyAndHold(backtesterParams, "greedy")
-				portfolio.GetBacktestingData(backtesterParams)
-				results <- Result{Ticker: work.Ticker, Metrics: portfolio.Metrics}
 			}
 		}()
 	}
 
 	go func() {
-<<<<<<< Updated upstream
-		for i := 0; i < simulationTimes; i++ {
-			for _, ticker := range tickers {
-				jobs <- WorkItem{Ticker: ticker}
-=======
 		defer close(jobs)
 		for _, p := range portfolios {
 			clone, err := p.Clone()
 			if err != nil {
 				log.Printf("clone portfolio %s: %v", p.Pname, err)
 				continue
->>>>>>> Stashed changes
 			}
 			jobs <- clone
 		}
@@ -201,16 +148,6 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 			defer reporter.Close()
 		}
 		for result := range results {
-<<<<<<< Updated upstream
-			if result.Metrics.SharpeRatio > 1.0 {
-				str := fmt.Sprintf("%s, Sharpe Ratio: %.2f, Sortino Ratio: %.2f, Max Drawdown: %.2f, Annual Return: %.2f", result.Ticker, result.Metrics.SharpeRatio, result.Metrics.SortinoRatio, result.Metrics.MaxDrawdown, result.Metrics.AnnualReturn)
-				if _, err := file.WriteString(str + "\n"); err != nil {
-					log.Printf("Failed to write to file: %v", err)
-				}
-			}
-		}
-		log.Printf("Writing ticker time: %s\n", time.Since(writingTickerTime))
-=======
 			collected = append(collected, result)
 			if reporter != nil {
 				if werr := reporter.Write(result); werr != nil {
@@ -218,7 +155,6 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 				}
 			}
 		}
->>>>>>> Stashed changes
 	}()
 
 	wg.Wait()
