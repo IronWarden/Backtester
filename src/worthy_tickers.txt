@@ -1,2 +1,0 @@
-Portfolio: Lua SMA Cross, Strategy: lua:../strategies/sma_cross.lua, Sharpe Ratio: 0.61, Sortino Ratio: 0.91, Max Drawdown: 13.83, Annual Return: 13.33
-Portfolio: Lua RSI, Strategy: lua:../strategies/rsi.lua, Sharpe Ratio: 1.83, Sortino Ratio: 3.45, Max Drawdown: 5.74, Annual Return: 24.09

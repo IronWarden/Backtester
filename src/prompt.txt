@@ -1,1 +1,0 @@
-opencode run "Read TODO.md and implement all unchecked tasks one by one. For each task: 1. Write the code. 2. Verify it compiles. 3. Test the final output and see if it's aligns with expected values 4. Check off the box in todo.md. Continue until all tasks are [x]." -m opencode/grok-code 
