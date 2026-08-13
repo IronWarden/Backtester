@@ -15,9 +15,9 @@ type Config struct {
 // All fields are optional; an absent [Output] block disables file output.
 type OutputConfig struct {
 	Path   string   `toml:"path"`
-	Format string   `toml:"format"` // "txt" (default), "csv", "json"
-	Fields []string `toml:"fields"` // result fields to emit, in order
-	Filter string   `toml:"filter"` // Go-style expression, e.g. "SharpeRatio > 0.5 && AnnualReturn > 5"
+	Format string   `toml:"format"`  // "txt" (default), "csv", "json"
+	Fields []string `toml:"fields"`  // result fields to emit, in order
+	Filter string   `toml:"filter"`  // Go-style expression, e.g. "SharpeRatio > 0.5 && AnnualReturn > 5"
 	SortBy string   `toml:"sort_by"` // result field to sort by; empty disables sorting
 	Order  string   `toml:"order"`   // "asc" or "desc" (default "desc")
 	Limit  int      `toml:"limit"`   // emit at most N results; 0 means unlimited

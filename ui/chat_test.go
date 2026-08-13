@@ -10,15 +10,15 @@ import (
 
 func TestFirstSQLKeyword(t *testing.T) {
 	cases := map[string]string{
-		"SELECT * FROM x":                  "select",
-		"  \n\t WITH t AS (SELECT 1) ...":  "with",
-		"(select 1)":                       "select",
-		"-- comment\n-- more\nDESCRIBE x":  "describe",
-		"DELETE FROM t":                    "delete",
-		"-- only a comment":                "",
-		"":                                 "",
-		"\n\n":                             "",
-		"UPDATE t SET a=1 -- sneaky":       "update",
+		"SELECT * FROM x":                 "select",
+		"  \n\t WITH t AS (SELECT 1) ...": "with",
+		"(select 1)":                      "select",
+		"-- comment\n-- more\nDESCRIBE x": "describe",
+		"DELETE FROM t":                   "delete",
+		"-- only a comment":               "",
+		"":                                "",
+		"\n\n":                            "",
+		"UPDATE t SET a=1 -- sneaky":      "update",
 	}
 	for in, want := range cases {
 		if got := firstSQLKeyword(in); got != want {
