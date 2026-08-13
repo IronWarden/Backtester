@@ -31,6 +31,11 @@ type Portfolio struct {
 	Strategy             Strategy
 	StartTime            time.Time
 	EndTime              time.Time
+	// Costs is the trading-cost model applied by Buy and Sell. The zero
+	// value charges nothing. Clone must carry this across — the runner
+	// simulates clones, so a cost model left behind here would be silently
+	// absent from every real run.
+	Costs CostConfig
 }
 
 func InitializePortfolio(
@@ -85,6 +90,7 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		StrategySpec:         p.StrategySpec,
 		StrategyParams:       p.StrategyParams,
 		Strategy:             strat,
+		Costs:                p.Costs,
 	}, nil
 }
 

@@ -155,6 +155,119 @@ func TestLoadConfigDoesNotValidate(t *testing.T) {
 	}
 }
 
+// The cost model is opt-in: an absent [portfolio.Costs] block must leave a
+// zero CostConfig, which is what preserves the engine's original
+// frictionless behaviour for every config written before costs existed.
+func TestLoadConfigCosts(t *testing.T) {
+	path := writeConfig(t, `
+[[portfolio]]
+Name = "with costs"
+BuyingPower = 10000.0
+StartDate = "2020-01-01"
+EndDate = "2021-01-01"
+Tickers = ["AAPL"]
+Strategy = "greedy"
+
+  [portfolio.Costs]
+  commission_per_trade = 1.0
+  commission_bps = 2.5
+  slippage_bps = 5.0
+
+[[portfolio]]
+Name = "no costs block"
+BuyingPower = 10000.0
+StartDate = "2020-01-01"
+EndDate = "2021-01-01"
+Tickers = ["AAPL"]
+Strategy = "greedy"
+
+[[portfolio]]
+Name = "partial costs block"
+BuyingPower = 10000.0
+StartDate = "2020-01-01"
+EndDate = "2021-01-01"
+Tickers = ["AAPL"]
+Strategy = "greedy"
+
+  [portfolio.Costs]
+  slippage_bps = 3.0
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if len(cfg.Portfolios) != 3 {
+		t.Fatalf("loaded %d portfolios, want 3", len(cfg.Portfolios))
+	}
+
+	full := cfg.Portfolios[0].Costs
+	closeTo(t, "commission_per_trade", full.CommissionPerTrade, 1.0)
+	closeTo(t, "commission_bps", full.CommissionBps, 2.5)
+	closeTo(t, "slippage_bps", full.SlippageBps, 5.0)
+	if full.Zero() {
+		t.Error("a populated Costs block reports Zero()")
+	}
+
+	if got := cfg.Portfolios[1].Costs; !got.Zero() {
+		t.Errorf("absent Costs block decoded as %+v, want zero", got)
+	}
+
+	// Keys omitted inside the block default to 0 rather than to anything
+	// clever, so a partial block charges only what it names.
+	partial := cfg.Portfolios[2].Costs
+	closeTo(t, "partial slippage", partial.SlippageBps, 3.0)
+	closeTo(t, "partial commission", partial.CommissionPerTrade, 0)
+	closeTo(t, "partial commission bps", partial.CommissionBps, 0)
+	if partial.Zero() {
+		t.Error("a partial Costs block reports Zero()")
+	}
+}
+
+// ToPortfolio has to carry the costs onto the Portfolio, and Clone has to
+// carry them onto the object the runner actually simulates. Both links are
+// tested because breaking either one is silent.
+func TestToPortfolioCarriesCosts(t *testing.T) {
+	pc := PortfolioConfig{
+		Name:        "p",
+		BuyingPower: 1000,
+		StartTime:   "2020-01-01",
+		EndTime:     "2021-01-01",
+		Tickers:     []string{"AAPL"},
+		Strategy:    "greedy",
+		Costs: CostConfig{
+			CommissionPerTrade: 1.0,
+			CommissionBps:      2.5,
+			SlippageBps:        5.0,
+		},
+	}
+	p, err := pc.ToPortfolio()
+	if err != nil {
+		t.Fatalf("ToPortfolio: %v", err)
+	}
+	if p.Costs != pc.Costs {
+		t.Fatalf("Costs = %+v, want %+v", p.Costs, pc.Costs)
+	}
+
+	c, err := p.Clone()
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if c.Costs != pc.Costs {
+		t.Errorf("clone Costs = %+v, want %+v", c.Costs, pc.Costs)
+	}
+
+	// A config with no Costs block yields a portfolio that charges nothing.
+	pc.Costs = CostConfig{}
+	plain, err := pc.ToPortfolio()
+	if err != nil {
+		t.Fatalf("ToPortfolio: %v", err)
+	}
+	if !plain.Costs.Zero() {
+		t.Errorf("default portfolio Costs = %+v, want zero", plain.Costs)
+	}
+}
+
 func TestToPortfolio(t *testing.T) {
 	pc := PortfolioConfig{
 		Name:        "first",

@@ -250,3 +250,41 @@ func TestCloneResetsState(t *testing.T) {
 		t.Errorf("parent position mutated by clone activity: %v", pos.Amount)
 	}
 }
+
+// The runner simulates a Clone of every portfolio, never the original, so a
+// cost model that does not survive Clone is a cost model that never applies
+// to a real run — while every test that builds a Portfolio directly still
+// passes. That failure is silent and expensive, so it gets its own test.
+func TestCloneCarriesCosts(t *testing.T) {
+	p := newTestPortfolio(t, 1000)
+	p.Costs = CostConfig{
+		CommissionPerTrade: 1.5,
+		CommissionBps:      2.5,
+		SlippageBps:        5,
+	}
+
+	c, err := p.Clone()
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if c.Costs != p.Costs {
+		t.Errorf("clone dropped the cost model: got %+v, want %+v",
+			c.Costs, p.Costs)
+	}
+}
+
+func TestCostConfigZero(t *testing.T) {
+	if !(CostConfig{}).Zero() {
+		t.Error("the zero CostConfig must report Zero()")
+	}
+	cases := map[string]CostConfig{
+		"flat commission": {CommissionPerTrade: 1},
+		"bps commission":  {CommissionBps: 1},
+		"slippage":        {SlippageBps: 1},
+	}
+	for name, c := range cases {
+		if c.Zero() {
+			t.Errorf("%s: Zero() = true for %+v", name, c)
+		}
+	}
+}
