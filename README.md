@@ -287,6 +287,12 @@ With a `Benchmark` configured, additionally:
 - `InformationRatio` — annualized mean active return over tracking error.
 - `UpCapture` / `DownCapture` — percent of the benchmark's move captured on its up days and its down days. For down-capture, lower is better.
 
+Each result additionally carries time-sliced views of the same run, available to the UI (they are nested, so the table-shaped file reporter does not carry them):
+
+- **Drawdowns** — the ten deepest peak-to-trough declines, with the peak, trough and recovery dates and the days spent in each. A decline still underwater on the final day is reported as ongoing rather than omitted.
+- **Rolling Sharpe** — annualized Sharpe over each trailing 252-day window, dated at the window's last day.
+- **Calendar returns** — compounded return per year and per month. The first and last periods are usually partial; they are marked as such and reported as the plain return over the days present, never annualized.
+
 ## Adding a strategy
 
 Lua is the intended route — no rebuild, and the engine handles the day loop.
