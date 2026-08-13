@@ -120,6 +120,7 @@ Field reference:
 | `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. |
 | `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
 | `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. |
+| `Costs` | table | Optional trading-cost model (below). Absent means frictionless, which is how the engine behaved before costs existed. |
 
 Strategy specs:
 
@@ -132,6 +133,34 @@ Strategy specs:
 | `lua:<path>` | Run a Lua strategy file, e.g. `lua:strategies/sma_cross.lua`. |
 
 Note that config loading does no validation of its own: an omitted key simply zero-values, and the error surfaces later — a bad date or an unknown strategy spec fails in `ToPortfolio`, an uncovered date range in the runner's coverage check.
+
+### `[portfolio.Costs]`
+
+Trading is free unless you say otherwise. Every field defaults to `0.0`, so
+omitting the block reproduces the frictionless results the engine produced
+before this existed.
+
+```toml
+  [portfolio.Costs]
+  commission_per_trade = 1.0   # flat charge per filled order
+  commission_bps       = 2.0   # plus this many basis points of notional
+  slippage_bps         = 5.0   # fills move against you by this much
+```
+
+Slippage worsens the fill price on both sides — buys fill above the quoted
+close, sells below it — and the position's cost basis records the slipped
+price. Commission is charged per filled order and treated as a cash expense
+rather than capitalized into the basis.
+
+Neither can overdraw the account. An order whose commission the balance
+cannot cover does not fill at all. An order sized against the whole balance
+(what `buy_max` and most Lua strategies do) still fills: it is clamped down
+to the largest size whose fee the balance also covers, rather than being
+rejected for the fee alone.
+
+Costs make high-turnover strategies look worse, which is the point — the
+`Turnover` metric reports how much trading each strategy is doing, so the two
+can be read together.
 
 ### `[Output]`
 
@@ -229,6 +258,7 @@ Reported metrics per run:
 - `MaxDrawdown` — peak-to-trough drawdown of the daily close-value series, as a percent.
 - `AnnualReturn` — CAGR derived from the compounded daily return series.
 - `StandardDev` — annualized stdev of daily returns.
+- `Turnover` — annualized gross traded notional as a multiple of the portfolio's average value; `1.0` means it traded its own value once over a year. Both sides of a round trip count. Reported whether or not `[portfolio.Costs]` is set.
 
 ## Adding a strategy
 
