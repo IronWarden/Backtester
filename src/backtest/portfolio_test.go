@@ -495,6 +495,66 @@ func TestCostsDragScalesWithTurnover(t *testing.T) {
 	t.Logf("drag: buy_and_hold %.4f%%, dca %.4f%%", holdDrag*100, dcaDrag*100)
 }
 
+// Turnover is per-run state, not configuration: unlike Costs it must NOT
+// survive Clone, or a reused portfolio would report the previous pass's
+// trading on top of its own.
+func TestCloneResetsTradedNotional(t *testing.T) {
+	p := newTestPortfolio(t, 10000)
+	p.Buy("AAA", 10, 100, testDay)
+	if p.tradedNotional == 0 {
+		t.Fatal("a filled buy did not record any traded notional")
+	}
+
+	c, err := p.Clone()
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if c.tradedNotional != 0 {
+		t.Errorf("clone carried %v of traded notional, want 0", c.tradedNotional)
+	}
+}
+
+func TestTradedNotionalCountsBothSides(t *testing.T) {
+	p := newTestPortfolio(t, 10000)
+	p.Buy("AAA", 10, 100, testDay)  // 1000 notional
+	p.Sell("AAA", 5, 120, testDay)  // 600 notional
+	p.Sell("AAA", 99, 120, testDay) // rejected: more than held
+	p.Buy("AAA", 10, 0, testDay)    // rejected: zero price
+
+	closeTo(t, "gross traded notional", p.tradedNotional, 1600)
+}
+
+// End to end: the metric a real run reports must reflect how much the
+// strategy actually traded.
+func TestTurnoverReflectsStrategyActivity(t *testing.T) {
+	turnoverOf := func(script string) float64 {
+		t.Helper()
+		hist := synthHist(42)
+		p := libPortfolio(nil)
+		strat, err := NewLuaStrategy(
+			strategiesDir(t)+"/"+script, shippedStrategies()[script],
+		)
+		if err != nil {
+			t.Fatalf("%s: %v", script, err)
+		}
+		defer strat.Close()
+		p.Strategy = strat
+		runOne(p, hist, map[int64]float64{})
+		return p.Metrics.Turnover
+	}
+
+	hold := turnoverOf("buy_and_hold.lua")
+	dca := turnoverOf("dca.lua")
+
+	if hold <= 0 {
+		t.Errorf("buy-and-hold turnover = %v; the day-0 entry should count", hold)
+	}
+	if dca <= hold {
+		t.Errorf("DCA turnover %v should exceed buy-and-hold %v", dca, hold)
+	}
+	t.Logf("turnover: buy_and_hold %.4f, dca %.4f", hold, dca)
+}
+
 func TestCostConfigZero(t *testing.T) {
 	if !(CostConfig{}).Zero() {
 		t.Error("the zero CostConfig must report Zero()")

@@ -118,6 +118,45 @@ func TestGetSortinoRatio(t *testing.T) {
 	}
 }
 
+func TestGetTurnover(t *testing.T) {
+	// A portfolio worth 1000 every day for 252 days that traded 1000 of
+	// notional turned over exactly 1x annually.
+	year := make([]float64, 252)
+	for i := range year {
+		year[i] = 1000
+	}
+	closeTo(t, "one full turn", GetTurnover(1000, year), 1)
+	closeTo(t, "two full turns", GetTurnover(2000, year), 2)
+
+	// Half a year at the same trading pace annualizes to the same rate:
+	// 500 traded over 126 days of a 1000 portfolio is still 1x.
+	closeTo(t, "annualized from a half year", GetTurnover(500, year[:126]), 1)
+
+	// Turnover measures against average value, not starting value.
+	// avg(1000, 3000) = 2000; 1000 traded over 2 days -> 0.5 * 252/2 = 63.
+	closeTo(t, "average value", GetTurnover(1000, []float64{1000, 3000}), 63)
+
+	// Nothing traded, nothing to report.
+	closeTo(t, "no trades", GetTurnover(0, year), 0)
+
+	// Guards: no series, and a portfolio that went to zero.
+	for _, tc := range []struct {
+		name     string
+		notional float64
+		closes   []float64
+	}{
+		{"nil series", 100, nil},
+		{"empty series", 100, []float64{}},
+		{"zero-valued portfolio", 100, []float64{0, 0}},
+		{"negative average", 100, []float64{-100, -100}},
+		{"negative notional", -100, year},
+	} {
+		if got := GetTurnover(tc.notional, tc.closes); got != 0 {
+			t.Errorf("%s: GetTurnover = %v, want 0", tc.name, got)
+		}
+	}
+}
+
 // No metric may emit NaN or Inf into the results table, whatever the input.
 func TestMetricsNeverNaN(t *testing.T) {
 	inputs := [][]float64{
@@ -130,10 +169,11 @@ func TestMetricsNeverNaN(t *testing.T) {
 	}
 	for _, in := range inputs {
 		for name, got := range map[string]float64{
-			"Sharpe":  GetSharpeRatio(in),
-			"Sortino": GetSortinoRatio(in),
-			"MaxDD":   GetMaxDrawdown(in),
-			"Annual":  GetAnnualReturn(in, 1),
+			"Sharpe":   GetSharpeRatio(in),
+			"Sortino":  GetSortinoRatio(in),
+			"MaxDD":    GetMaxDrawdown(in),
+			"Annual":   GetAnnualReturn(in, 1),
+			"Turnover": GetTurnover(1000, in),
 		} {
 			if math.IsNaN(got) || math.IsInf(got, 0) {
 				t.Errorf("%s(%v) = %v — must be finite", name, in, got)

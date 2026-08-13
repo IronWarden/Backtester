@@ -15,6 +15,41 @@ type Metrics struct {
 	StandardDev       float64
 	AvgCorrelation    float64
 	CointegratedPairs int
+	// Turnover is annualized gross traded notional as a multiple of the
+	// portfolio's average value. 1.0 means the portfolio traded its own
+	// value once over a year. Reported whether or not costs are configured,
+	// since it is the thing costs are charged against.
+	Turnover float64
+}
+
+// GetTurnover annualizes gross traded notional against the portfolio's
+// average value over the same 252-trading-day year the other metrics use.
+// Both sides of a round trip count, so a buy-and-hold portfolio that opens
+// its position and never trades again still reports the entry.
+//
+// Returns 0 rather than NaN or Inf for an empty series or a portfolio whose
+// average value is not positive.
+func GetTurnover(tradedNotional float64, closeValues []float64) float64 {
+	n := len(closeValues)
+	if n == 0 || tradedNotional <= 0 {
+		return 0
+	}
+	var total float64
+	for _, v := range closeValues {
+		total += v
+	}
+	avgValue := total / float64(n)
+	if avgValue <= 0 {
+		return 0
+	}
+	turnover := (tradedNotional / avgValue) * (252.0 / float64(n))
+	// A vanishingly small average value divides to +Inf even though it
+	// passed the > 0 check above. No metric may put a non-finite number in
+	// the results table, so a portfolio worth that little reports no turnover.
+	if math.IsInf(turnover, 0) || math.IsNaN(turnover) {
+		return 0
+	}
+	return turnover
 }
 
 // GetSortinoRatio annualizes mean excess return divided by the downside
@@ -126,6 +161,7 @@ func (p *Portfolio) GetBacktestingData(
 		AnnualReturn:      annualReturn,
 		AvgCorrelation:    avgCorrelation,
 		CointegratedPairs: cointegratedPairs,
+		Turnover:          GetTurnover(p.tradedNotional, p.PortfolioCloseValues),
 	}
 	p.Metrics = metrics
 }

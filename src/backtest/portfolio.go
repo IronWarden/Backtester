@@ -36,6 +36,11 @@ type Portfolio struct {
 	// simulates clones, so a cost model left behind here would be silently
 	// absent from every real run.
 	Costs CostConfig
+	// tradedNotional accumulates the gross value of every filled order and
+	// feeds the Turnover metric. Unlike Costs this is per-run state, so
+	// Clone deliberately leaves it at zero, exactly as it does for
+	// DailyReturns and PortfolioCloseValues.
+	tradedNotional float64
 }
 
 func InitializePortfolio(
@@ -192,6 +197,7 @@ func (p *Portfolio) Buy(
 		ticker, amount, fillPrice, cost-notional, time,
 	)
 	p.BuyingPower -= cost
+	p.tradedNotional += notional
 }
 
 func (p *Portfolio) Deposit(cash float64) {
@@ -233,6 +239,7 @@ func (p *Portfolio) Sell(
 		delete(p.Positions, ticker)
 	}
 	p.Deposit(proceeds)
+	p.tradedNotional += notional
 }
 
 func (p *Portfolio) GetPortfolioValue(
