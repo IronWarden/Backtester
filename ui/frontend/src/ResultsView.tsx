@@ -37,6 +37,24 @@ function fmtDollars(v: number): string {
 
 // Profit in dollars and as a % of starting capital, measured against the cash
 // the portfolio began with. Null when the run reported no starting capital.
+// Go's time.Time arrives as an RFC3339 string, typed `any` by the wails
+// binding generator. An ongoing drawdown has no recovery date and is sent
+// as the zero time, which we render as a dash rather than as year 1.
+function fmtDate(v: any): string {
+  if (!v) return "—";
+  const d = new Date(v as string);
+  if (isNaN(d.getTime()) || d.getUTCFullYear() < 1900) return "—";
+  return d.toISOString().slice(0, 10);
+}
+
+// The benchmark columns are only meaningful when a benchmark was set, and
+// a wall of zeros is worse than no column at all.
+function hasBenchmark(results: main.RunResult[]): boolean {
+  return results.some(
+    (r) => r.beta !== 0 || r.alpha !== 0 || r.trackingError !== 0,
+  );
+}
+
 function profit(r: main.RunResult): { abs: number; pct: number } | null {
   if (!r.initialCapital) return null;
   const abs = r.finalValue - r.initialCapital;
@@ -276,6 +294,8 @@ export default function ResultsView({ results, fontSize }: Props) {
 
   const tipOnLeft = hover !== null && hover.px > width * 0.62;
 
+  const benchmarked = hasBenchmark(results);
+
   return (
     <div className="results-view">
       <div className="stat-grid">
@@ -478,8 +498,19 @@ export default function ResultsView({ results, fontSize }: Props) {
                 <th className="num">Max DD %</th>
                 <th className="num">Annual %</th>
                 <th className="num">Std Dev</th>
+                <th className="num">Turnover</th>
                 <th className="num">Avg Corr</th>
                 <th className="num">Coint Pairs</th>
+                {benchmarked && (
+                  <>
+                    <th className="num">Alpha %</th>
+                    <th className="num">Beta</th>
+                    <th className="num">Track Err</th>
+                    <th className="num">Info Ratio</th>
+                    <th className="num">Up Cap %</th>
+                    <th className="num">Down Cap %</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -512,8 +543,19 @@ export default function ResultsView({ results, fontSize }: Props) {
                     <td className="num">{r.maxDrawdown.toFixed(2)}</td>
                     <td className="num">{r.annualReturn.toFixed(2)}</td>
                     <td className="num">{r.standardDev.toFixed(4)}</td>
+                    <td className="num">{r.turnover.toFixed(2)}</td>
                     <td className="num">{r.avgCorrelation.toFixed(2)}</td>
                     <td className="num">{r.cointegratedPairs}</td>
+                    {benchmarked && (
+                      <>
+                        <td className="num">{r.alpha.toFixed(2)}</td>
+                        <td className="num">{r.beta.toFixed(2)}</td>
+                        <td className="num">{r.trackingError.toFixed(4)}</td>
+                        <td className="num">{r.informationRatio.toFixed(2)}</td>
+                        <td className="num">{r.upCapture.toFixed(1)}</td>
+                        <td className="num">{r.downCapture.toFixed(1)}</td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
@@ -521,6 +563,121 @@ export default function ResultsView({ results, fontSize }: Props) {
           </table>
         </div>
       </div>
+
+      {results.some((r) => (r.drawdowns ?? []).length > 0) && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-title">Deepest drawdowns</span>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th className="num">Depth %</th>
+                  <th>Peak</th>
+                  <th>Trough</th>
+                  <th>Recovered</th>
+                  <th className="num">Days down</th>
+                  <th className="num">Days to recover</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  (r.drawdowns ?? []).slice(0, 5).map((d, j) => (
+                    <tr key={`${i}-${j}`}>
+                      <td>
+                        <span
+                          className="swatch"
+                          style={{
+                            background: COLORS[i % COLORS.length],
+                            display: "inline-block",
+                            marginRight: "0.5em",
+                          }}
+                        />
+                        {r.portfolioName}
+                      </td>
+                      <td className="num neg">{d.depthPct.toFixed(2)}</td>
+                      <td>{fmtDate(d.start)}</td>
+                      <td>{fmtDate(d.trough)}</td>
+                      <td>{d.ongoing ? "ongoing" : fmtDate(d.recovered)}</td>
+                      <td className="num">{d.durationDays}</td>
+                      <td className="num">
+                        {d.ongoing ? "—" : d.recoveryDays}
+                      </td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {results.some((r) => (r.yearlyReturns ?? []).length > 0) && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-title">Calendar year returns</span>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  {results.map((r, i) => (
+                    <th className="num" key={i} title={r.portfolioName}>
+                      <span
+                        className="swatch"
+                        style={{
+                          background: COLORS[i % COLORS.length],
+                          display: "inline-block",
+                          marginRight: "0.5em",
+                        }}
+                      />
+                      {r.portfolioName}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from(
+                  new Set(
+                    results.flatMap((r) =>
+                      (r.yearlyReturns ?? []).map((y) => y.period),
+                    ),
+                  ),
+                )
+                  .sort()
+                  .map((period) => (
+                    <tr key={period}>
+                      <td>{period}</td>
+                      {results.map((r, i) => {
+                        const y = (r.yearlyReturns ?? []).find(
+                          (p) => p.period === period,
+                        );
+                        if (!y) return <td className="num" key={i}>—</td>;
+                        return (
+                          <td
+                            className={`num ${y.returnPct < 0 ? "neg" : "pos"}`}
+                            key={i}
+                            title={y.partial ? "partial year" : undefined}
+                          >
+                            {y.returnPct.toFixed(2)}
+                            {y.partial ? "*" : ""}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="panel-note">
+            * partial period — the run does not span the whole year. Shown as
+            the plain return over the days present, not annualized.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
