@@ -121,6 +121,7 @@ Field reference:
 | `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
 | `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. |
 | `Costs` | table | Optional trading-cost model (below). Absent means frictionless, which is how the engine behaved before costs existed. |
+| `Benchmark` | string | Optional ticker to score against, e.g. `"$SP500"`. Never traded — see below. |
 
 Strategy specs:
 
@@ -161,6 +162,24 @@ rejected for the fee alone.
 Costs make high-turnover strategies look worse, which is the point — the
 `Turnover` metric reports how much trading each strategy is doing, so the two
 can be read together.
+
+### `Benchmark`
+
+Set `Benchmark = "$SP500"` on a portfolio to score it against that series.
+The benchmark is **never traded**: it does not receive capital, does not
+affect which days are simulated, and is not valued as a holding. Adding it
+changes nothing about what the portfolio does — only what gets measured.
+A portfolio may hold and benchmark against the same ticker.
+
+With it set, six extra metrics are reported: `Alpha`, `Beta`,
+`TrackingError`, `InformationRatio`, `UpCapture` and `DownCapture`. Beta and
+alpha are computed on returns excess of the risk-free rate; the rest on raw
+returns.
+
+If the benchmark's data does not cover every trading day of the window, the
+six metrics are left at zero and a line is logged. The backtest itself still
+runs — a benchmark is a measurement, and a missing one is not a reason to
+lose the result.
 
 ### `[Output]`
 
@@ -259,6 +278,14 @@ Reported metrics per run:
 - `AnnualReturn` — CAGR derived from the compounded daily return series.
 - `StandardDev` — annualized stdev of daily returns.
 - `Turnover` — annualized gross traded notional as a multiple of the portfolio's average value; `1.0` means it traded its own value once over a year. Both sides of a round trip count. Reported whether or not `[portfolio.Costs]` is set.
+
+With a `Benchmark` configured, additionally:
+
+- `Alpha` — annualized return in percent beyond what the portfolio's beta exposure explains.
+- `Beta` — slope against the benchmark; `1.0` means it moved one-for-one.
+- `TrackingError` — annualized stdev of the return difference, as a decimal.
+- `InformationRatio` — annualized mean active return over tracking error.
+- `UpCapture` / `DownCapture` — percent of the benchmark's move captured on its up days and its down days. For down-capture, lower is better.
 
 ## Adding a strategy
 
