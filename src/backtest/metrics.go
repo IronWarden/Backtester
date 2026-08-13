@@ -17,50 +17,41 @@ type Metrics struct {
 	CointegratedPairs int
 }
 
-func GetSortinoRatio(
-	riskFreeRates map[int64]float64,
-	dailyAvg map[int64]float64,
-) float64 {
-	excessReturns := make([]float64, 0, len(dailyAvg))
-	downsideReturns := make([]float64, 0)
-
-	for key, val := range dailyAvg {
-		if rate, ok := riskFreeRates[key]; ok {
-			excessReturn := val - rate
-			excessReturns = append(excessReturns, excessReturn)
-			if excessReturn < 0 {
-				downsideReturns = append(downsideReturns, excessReturn)
-			}
+// GetSortinoRatio annualizes mean excess return divided by the downside
+// deviation. Downside deviation is the target semideviation with target = the
+// risk-free rate: the root-mean-square of the negative excess returns taken
+// over ALL periods (positive periods contribute 0), not the standard deviation
+// of only the negative days. Returns 0 when there is no downside or no data.
+func GetSortinoRatio(excess []float64) float64 {
+	if len(excess) == 0 {
+		return 0.0
+	}
+	var sumSq float64
+	for _, e := range excess {
+		if e < 0 {
+			sumSq += e * e
 		}
 	}
-
-	if len(downsideReturns) == 0 {
-		return 0.0 // Avoid division by zero if there are no negative returns
-	}
-
-	averageExcessReturn := stat.Mean(excessReturns, nil)
-	downsideDeviation := stat.StdDev(downsideReturns, nil)
-
+	downsideDeviation := math.Sqrt(sumSq / float64(len(excess)))
 	if downsideDeviation == 0 {
 		return 0.0 // Avoid division by zero
 	}
-
-	sortinoRatio := averageExcessReturn / downsideDeviation
-	// Annualize
-	annualizedSortino := sortinoRatio * math.Sqrt(252.0)
-	return annualizedSortino
+	return stat.Mean(excess, nil) / downsideDeviation * math.Sqrt(252.0)
 }
 
-func GetAnnualReturn(dailyAvg []float64) float64 {
-	startValue := 1.0
-
-	for i := range dailyAvg {
-		startValue *= (1 + dailyAvg[i])
+// GetAnnualReturn is the CAGR of the compounded daily returns, annualized over
+// the actual elapsed calendar time (numYears) rather than a fixed 252-day
+// count, so it matches date-based CAGR conventions.
+func GetAnnualReturn(dailyReturns []float64, numYears float64) float64 {
+	if numYears <= 0 {
+		return 0.0
 	}
-	numYears := float64(len(dailyAvg)) / 252.0
-	// Compound Annual Growth Rate - (end/start) ^ 1/n - 1
-	CAGR := math.Pow(startValue, 1/numYears) - 1
-	return CAGR * 100
+	growth := 1.0
+	for _, r := range dailyReturns {
+		growth *= 1 + r
+	}
+	// Compound Annual Growth Rate - (end/start) ^ 1/years - 1
+	return (math.Pow(growth, 1/numYears) - 1) * 100
 }
 
 func GetMaxDrawdown(portfolioCloseValues []float64) float64 {
@@ -83,20 +74,18 @@ func GetMaxDrawdown(portfolioCloseValues []float64) float64 {
 	return maxDrawdown * 100
 }
 
-func GetSharpeRatio(
-	riskFreeRates map[int64]float64,
-	dailyAvg map[int64]float64,
-) float64 {
-	excessReturns := make([]float64, 0, len(dailyAvg))
-	for key, val := range dailyAvg {
-		if rate, ok := riskFreeRates[key]; ok {
-			excessReturns = append(excessReturns, val-rate)
-		}
+// GetSharpeRatio annualizes the daily excess-return series (portfolio return
+// minus the per-day risk-free rate). Returns 0 when the series has no
+// dispersion, avoiding a divide-by-zero NaN.
+func GetSharpeRatio(excess []float64) float64 {
+	// stat.StdDev is NaN for fewer than two samples (the sample stdev's
+	// n-1 denominator is 0), which a bare `== 0` check would let through
+	// and surface as "NaN" in the results table.
+	excessStdev := stat.StdDev(excess, nil)
+	if excessStdev == 0 || math.IsNaN(excessStdev) {
+		return 0.0
 	}
-	excessStdev := stat.StdDev(excessReturns, nil)
-	sharpeRatio := stat.Mean(excessReturns, nil) / excessStdev
-	annualizedSharpe := sharpeRatio * math.Sqrt(252.0)
-	return annualizedSharpe
+	return stat.Mean(excess, nil) / excessStdev * math.Sqrt(252.0)
 }
 
 func (p *Portfolio) GetBacktestingData(
@@ -104,18 +93,28 @@ func (p *Portfolio) GetBacktestingData(
 	hist map[string][]data.AssetData,
 	dataLen int,
 ) {
-	dailyAvg := make(map[int64]float64, len(p.DailyReturns))
-	dailyAvgSlice := make([]float64, 0, len(p.DailyReturns))
+	dailyReturns := make([]float64, 0, len(p.DailyReturns))
+	excess := make([]float64, 0, len(p.DailyReturns))
 	for _, dr := range p.DailyReturns {
-		dailyAvg[dr.Date.Unix()] = dr.Return
-		dailyAvgSlice = append(dailyAvgSlice, dr.Return)
+		dailyReturns = append(dailyReturns, dr.Return)
+		// A day absent from riskFreeRates contributes a 0 rate rather than
+		// dropping the return, so Sharpe/Sortino span the whole window instead
+		// of only the days the risk-free table happens to cover.
+		excess = append(excess, dr.Return-riskFreeRates[dr.Date.Unix()])
+	}
+
+	// Annualize over the actual elapsed time between the first and last day.
+	numYears := 0.0
+	if n := len(p.DailyReturns); n > 1 {
+		span := p.DailyReturns[n-1].Date.Sub(p.DailyReturns[0].Date)
+		numYears = span.Hours() / 24 / 365.25
 	}
 
 	// annualize standard deviation
-	standardDev := stat.StdDev(dailyAvgSlice, nil) * math.Sqrt(252.0)
-	sharpeRatio := GetSharpeRatio(riskFreeRates, dailyAvg)
-	sortinoRatio := GetSortinoRatio(riskFreeRates, dailyAvg)
-	annualReturn := GetAnnualReturn(dailyAvgSlice)
+	standardDev := stat.StdDev(dailyReturns, nil) * math.Sqrt(252.0)
+	sharpeRatio := GetSharpeRatio(excess)
+	sortinoRatio := GetSortinoRatio(excess)
+	annualReturn := GetAnnualReturn(dailyReturns, numYears)
 	maxDrawdown := GetMaxDrawdown(p.PortfolioCloseValues)
 	avgCorrelation := AvgPairwiseCorrelation(p.Tickers, hist, dataLen)
 	cointegratedPairs := CountCointegratedPairs(p.Tickers, hist, dataLen)

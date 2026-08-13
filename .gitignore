@@ -1,2 +1,60 @@
-go.mod
-go.sum
+# --- Secrets -----------------------------------------------------------
+.env
+src/.env
+
+# --- Data --------------------------------------------------------------
+# stock_data.db is ~2.9 GB and is rebuilt by the Python loaders.
+stock_data.db
+stock_data.db.wal
+*.duckdb
+
+# --- Build artifacts ---------------------------------------------------
+src/backtester
+build/bin/
+ui/ui
+ui/frontend/node_modules/
+ui/frontend/dist/
+
+# --- Run output / logs -------------------------------------------------
+*.log
+backfill_checkpoint.json
+full_refetch_done.txt
+full_refetch_failed.txt
+processed_tickers.txt
+worthy_tickers.txt
+*_output.txt
+
+# --- Python ------------------------------------------------------------
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Scratch / generated ----------------------------------------------
+scratch_collections/
+*.png
+
+# --- Scratch configs & reference data ---------------------------------
+# Ad-hoc portfolio configs, one-off analysis scripts, and manually
+# downloaded ticker lists. Nothing in the app reads these. The two TOMLs
+# that ARE load-bearing stay tracked: config.toml (src/main.go) and
+# strategy_library.toml (ui/chat.go, strategies/README.md).
+comprehensive_test.toml
+error_test.toml
+final_test.toml
+lua_test.toml
+test.toml
+diversified_buy_hold.toml
+megacap_buy_hold.toml
+nasdaqlisted.txt
+otherlisted.txt
+appconstraints.txt
+analysis/
+
+# --- Agent workflow scaffolding ---------------------------------------
+# Local tooling, not part of the application. Present on disk so the
+# unattended agent can read them; never tracked, so they stay out of PRs.
+CLAUDE.md
+TASKS.md
+AGENT_LOG.md
+.claude/

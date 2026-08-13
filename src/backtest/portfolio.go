@@ -128,11 +128,20 @@ func (p *Portfolio) Buy(
 	initialPrice float64,
 	time time.Time,
 ) {
-	if p.BuyingPower < amount*initialPrice {
+	if amount <= 0.0 || initialPrice <= 0.0 {
 		return
 	}
-	if amount == 0.0 {
-		return
+	cost := amount * initialPrice
+	// Reject orders that genuinely overshoot available cash, but tolerate the
+	// sub-cent float overshoot that arises when a strategy sizes fractional
+	// shares to spend all of its cash — clamp to the exact remaining balance so
+	// the order still fills and BuyingPower never drifts negative.
+	if cost > p.BuyingPower {
+		if cost > p.BuyingPower*(1.0+1e-9) {
+			return
+		}
+		cost = p.BuyingPower
+		amount = cost / initialPrice
 	}
 	pos, ok := p.FindPosition(ticker)
 	if !ok {
@@ -148,10 +157,10 @@ func (p *Portfolio) Buy(
 		pos.Amount += amount
 	}
 	TransactionLogger.Printf(
-		"BUY: %s, Amount: %.2f, Price: %.2f, Date: %s\n",
+		"BUY: %s, Amount: %.6f, Price: %.2f, Date: %s\n",
 		ticker, amount, initialPrice, time,
 	)
-	p.BuyingPower -= amount * initialPrice
+	p.BuyingPower -= cost
 }
 
 func (p *Portfolio) Deposit(cash float64) {

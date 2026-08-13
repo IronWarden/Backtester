@@ -5,6 +5,7 @@ import (
 	"log"
 	"my-backtester/src/data"
 	"os"
+	"path/filepath"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
@@ -23,7 +24,10 @@ import (
 // (numbers as Lua numbers, bools as booleans, arrays as 1-indexed tables,
 // sub-tables as nested tables).
 type LuaStrategy struct {
+	// Path is the resolved, openable location; Spec is the path exactly as
+	// the config wrote it, kept for display.
 	Path   string
+	Spec   string
 	Params map[string]any
 
 	L      *lua.LState
@@ -36,13 +40,48 @@ func NewLuaStrategy(
 	if path == "" {
 		return nil, fmt.Errorf("lua script path required")
 	}
-	if _, err := os.Stat(path); err != nil {
+	resolved, err := resolveLuaPath(path)
+	if err != nil {
 		return nil, fmt.Errorf("lua script %q: %w", path, err)
 	}
-	return &LuaStrategy{Path: path, Params: params}, nil
+	return &LuaStrategy{Path: resolved, Spec: path, Params: params}, nil
 }
 
-func (s *LuaStrategy) Name() string { return "lua:" + s.Path }
+// resolveLuaPath locates a script relative to the working directory or to a
+// parent of it. The CLI runs from the repo root while the desktop app runs
+// from ui/, so a config saying "lua:strategies/foo.lua" must work from
+// both without the user hand-editing "../" prefixes per launcher.
+func resolveLuaPath(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		if _, err := os.Stat(path); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
+	candidates := []string{
+		path,
+		filepath.Join("..", path),
+		filepath.Join("..", "..", path),
+	}
+	var firstErr error
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		} else if firstErr == nil {
+			firstErr = err
+		}
+	}
+	return "", firstErr
+}
+
+// Name reports the spec as the user wrote it, so results stay labelled the
+// same however the process happened to be launched.
+func (s *LuaStrategy) Name() string {
+	if s.Spec != "" {
+		return "lua:" + s.Spec
+	}
+	return "lua:" + s.Path
+}
 
 // Close releases the underlying lua.LState. Safe to call multiple times.
 func (s *LuaStrategy) Close() {

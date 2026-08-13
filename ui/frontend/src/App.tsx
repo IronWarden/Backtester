@@ -2,9 +2,23 @@ import { useEffect, useState } from "react";
 
 const BASE_FONT_SIZE = 16;
 const MIN_FONT_SIZE = 9;
-const MAX_FONT_SIZE = 28;
+const MAX_FONT_SIZE = 40;
 const clampFont = (n: number) =>
     Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, n));
+
+// DPI-aware default zoom. On a hi-res display without OS scaling (e.g. 4K
+// at devicePixelRatio 1) screen.width reports ~3840 CSS px and a 16px base
+// font renders tiny, with the em-based max-widths leaving the screen mostly
+// empty. Scale the default so the UI occupies a 4K screen the way it
+// occupies a 1080p one; with OS scaling active, screen.width is already
+// divided down and this returns the plain base size.
+function defaultFontSize(): number {
+    const s = Math.min(
+        window.screen.width / 1920,
+        window.screen.height / 1080,
+    );
+    return clampFont(Math.round(BASE_FONT_SIZE * Math.max(1, s)));
+}
 import Editor from "@monaco-editor/react";
 import {
     FileExists,
@@ -19,12 +33,25 @@ import { main } from "../wailsjs/go/models";
 import SimpleForm from "./SimpleForm";
 import type { SimpleForm as SimpleFormData } from "./buildToml";
 import ResultsView from "./ResultsView";
+import ChatPanel from "./ChatPanel";
+import QueryConsole from "./QueryConsole";
 import "./App.css";
 
 const today = new Date().toISOString().slice(0, 10);
 
+// Remember the zoom level across app restarts. v2: bumped when the default
+// became DPI-aware, so previously stored pre-4K-fix sizes re-default once.
+const FONT_STORAGE_KEY = "backtester-font-size-v2";
+
+// Assistant panel width in base pixels (at zoom 1), persisted like the font.
+const CHAT_WIDTH_STORAGE_KEY = "backtester-chat-width";
+const DEFAULT_CHAT_WIDTH = 432;
+
+// Last path segment, for compact chips ("/a/b/config.toml" -> "config.toml").
+const baseName = (p: string) => p.split(/[\\/]/).pop() || p;
+
 type Tab = "toml" | "lua";
-type Mode = "simple" | "advanced";
+type Mode = "simple" | "advanced" | "data";
 
 // Default DB path, relative to the app's working directory (ui/). Points at
 // the bundled database so simple-mode users can run without picking a file.
@@ -63,10 +90,24 @@ function App() {
     const [luaPath, setLuaPath] = useState<string>(DEFAULT_LUA_PATH);
     const [dbPath, setDbPath] = useState<string>(DEFAULT_DB_PATH);
     const [running, setRunning] = useState(false);
+    const [chatOpen, setChatOpen] = useState(false);
     const [results, setResults] = useState<main.RunResult[]>([]);
     const [errorMsg, setErrorMsg] = useState<string>("");
     const [statusMsg, setStatusMsg] = useState<string>("");
-    const [fontSize, setFontSize] = useState<number>(BASE_FONT_SIZE);
+    const [fontSize, setFontSize] = useState<number>(() => {
+        const stored = Number(localStorage.getItem(FONT_STORAGE_KEY));
+        return Number.isFinite(stored) && stored >= MIN_FONT_SIZE
+            ? clampFont(stored)
+            : defaultFontSize();
+    });
+    // Assistant panel width in base pixels; rendered at chatWidth * scale so
+    // it grows and shrinks with the zoom, like the results panel height.
+    const [chatWidth, setChatWidth] = useState<number>(() => {
+        const stored = Number(localStorage.getItem(CHAT_WIDTH_STORAGE_KEY));
+        return Number.isFinite(stored) && stored >= 200
+            ? stored
+            : DEFAULT_CHAT_WIDTH;
+    });
     // Zoom factor relative to the base size. The whole UI sizes itself in `em`
     // off .app's font-size, but a few pixel-valued dimensions (the results
     // panel, the SVG chart) have to be multiplied by this to scale in step.
@@ -113,6 +154,31 @@ function App() {
         document.addEventListener("mouseup", onUp);
     }
 
+    // Same idea horizontally, for the handle on the assistant panel's left
+    // edge: dragging left widens the panel. Bounds scale with the zoom.
+    function startChatResize(e: React.MouseEvent) {
+        e.preventDefault();
+        const startRendered = chatWidth * scale;
+        const startX = e.clientX;
+        const maxRendered = window.innerWidth * 0.7;
+        const minRendered = 220 * scale;
+        const onMove = (ev: MouseEvent) => {
+            const next = startRendered + (startX - ev.clientX);
+            const clamped = Math.max(minRendered, Math.min(maxRendered, next));
+            setChatWidth(clamped / scale);
+        };
+        const onUp = () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+        };
+        document.body.style.cursor = "ew-resize";
+        document.body.style.userSelect = "none";
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+    }
+
     // Ctrl + scroll wheel / Ctrl + ArrowUp/Down adjust font size for the
     // whole UI (Monaco picks it up via its fontSize option; the rest of the
     // app uses em units that cascade from .app's inline font-size). Ctrl+0
@@ -134,7 +200,7 @@ function App() {
                 setFontSize((s) => clampFont(s - 1));
             } else if (e.key === "0") {
                 e.preventDefault();
-                setFontSize(BASE_FONT_SIZE);
+                setFontSize(defaultFontSize());
             }
         };
         document.addEventListener("wheel", onWheel, {
@@ -147,6 +213,21 @@ function App() {
             document.removeEventListener("keydown", onKey, true);
         };
     }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(FONT_STORAGE_KEY, String(fontSize));
+        } catch {}
+    }, [fontSize]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(
+                CHAT_WIDTH_STORAGE_KEY,
+                String(Math.round(chatWidth)),
+            );
+        } catch {}
+    }, [chatWidth]);
 
     // Whenever the TOML changes (or its on-disk path), look for a lua:<path>
     // strategy and reload the referenced script into the Lua tab. When no
@@ -276,13 +357,36 @@ function App() {
         setStatusMsg("Loaded generated config — edit freely.");
     }
 
+    // Claude's "Insert into … editor" buttons land here: swap the buffer in
+    // and jump to the right tab so the user sees what changed before running.
+    function applyClaudeToml(toml: string) {
+        setTomlText(toml);
+        setTab("toml");
+        setMode("advanced");
+        setStatusMsg("Claude's config loaded into the TOML editor.");
+    }
+    function applyClaudeLua(lua: string) {
+        setLuaText(lua);
+        setTab("lua");
+        setMode("advanced");
+        setStatusMsg(`Claude's strategy loaded — Save writes ${luaPath}.`);
+    }
+
     const language = tab === "toml" ? "ini" : "lua"; // monaco doesn't ship TOML, ini is close
     const value = tab === "toml" ? tomlText : luaText;
     const setValue = tab === "toml" ? setTomlText : setLuaText;
 
     return (
         <div className="app" style={{ fontSize: `${fontSize}px` }}>
-            <div className="topbar">
+            <header className="topbar">
+                <div className="brand">
+                    <svg className="brand-mark" viewBox="0 0 16 16" aria-hidden>
+                        <rect x="1" y="9" width="3.5" height="6" rx="1" />
+                        <rect x="6.25" y="5" width="3.5" height="10" rx="1" />
+                        <rect x="11.5" y="1" width="3.5" height="14" rx="1" />
+                    </svg>
+                    <span className="brand-name">Backtester</span>
+                </div>
                 <div className="mode-toggle">
                     <button
                         className={mode === "simple" ? "active" : ""}
@@ -296,13 +400,34 @@ function App() {
                     >
                         Advanced
                     </button>
+                    <button
+                        className={mode === "data" ? "active" : ""}
+                        onClick={() => setMode("data")}
+                    >
+                        Data
+                    </button>
                 </div>
-                <button onClick={chooseDB}>Choose DB…</button>
-                <div className="paths">
-                    <div>db: {dbPath || "(not chosen)"}</div>
-                </div>
-            </div>
+                <div className="topbar-spacer" />
+                <button
+                    className="db-chip"
+                    onClick={chooseDB}
+                    title={dbPath ? `Database: ${dbPath}` : "Choose a database"}
+                >
+                    <span className="db-ico">⛁</span>
+                    <span className="db-name">
+                        {dbPath ? baseName(dbPath) : "Choose DB…"}
+                    </span>
+                </button>
+                <button
+                    className={chatOpen ? "chat-toggle active" : "chat-toggle"}
+                    onClick={() => setChatOpen((o) => !o)}
+                >
+                    ✦ Assistant
+                </button>
+            </header>
 
+            <div className="mid-row">
+            <div className="mid-main">
             {mode === "simple" ? (
                 <div className="main-scroll">
                     <SimpleForm
@@ -314,6 +439,8 @@ function App() {
                         onEditAsToml={editAsToml}
                     />
                 </div>
+            ) : mode === "data" ? (
+                <QueryConsole dbPath={dbPath} fontSize={fontSize} />
             ) : (
                 <>
                     <div className="toolbar">
@@ -321,17 +448,27 @@ function App() {
                         <button onClick={save} disabled={!tomlPath && !luaPath}>
                             Save
                         </button>
+                        <div className="paths">
+                            <span
+                                className="path-chip"
+                                title={tomlPath || "Config not saved to disk yet"}
+                            >
+                                toml · {tomlPath ? baseName(tomlPath) : "unsaved"}
+                            </span>
+                            <span
+                                className="path-chip"
+                                title={luaPath || "No Lua script"}
+                            >
+                                lua · {luaPath ? baseName(luaPath) : "none"}
+                            </span>
+                        </div>
                         <button
                             onClick={() => runConfig(tomlText, true)}
                             disabled={running}
                             className="run"
                         >
-                            {running ? "Running…" : "Run backtest"}
+                            {running ? "Running…" : "▶ Run backtest"}
                         </button>
-                        <div className="paths">
-                            <div>config: {tomlPath || "(unsaved)"}</div>
-                            <div>lua: {luaPath || "(none)"}</div>
-                        </div>
                     </div>
 
                     <div className="tabs">
@@ -354,7 +491,7 @@ function App() {
                         <Editor
                             height="100%"
                             language={language}
-                            theme="vs-dark"
+                            theme="backtester-dark"
                             value={value}
                             onChange={(v) => setValue(v ?? "")}
                             options={{
@@ -366,6 +503,26 @@ function App() {
                     </div>
                 </>
             )}
+            </div>
+            {chatOpen && (
+                <>
+                    <div
+                        className="vresize-handle"
+                        onMouseDown={startChatResize}
+                        title="Drag to resize assistant panel"
+                    />
+                    <ChatPanel
+                        width={chatWidth * scale}
+                        dbPath={dbPath}
+                        cfgText={tomlText}
+                        luaText={luaText}
+                        onApplyToml={applyClaudeToml}
+                        onApplyLua={applyClaudeLua}
+                        onClose={() => setChatOpen(false)}
+                    />
+                </>
+            )}
+            </div>
 
             <div
                 className="resize-handle"
@@ -373,17 +530,21 @@ function App() {
                 title="Drag to resize results panel"
             />
 
-            <div className="status">
-                {errorMsg ? (
-                    <span className="err">{errorMsg}</span>
-                ) : (
-                    <span>{statusMsg}</span>
-                )}
-            </div>
-
             <div className="results" style={{ height: resultsHeight * scale }}>
                 <ResultsView results={results} fontSize={fontSize} />
             </div>
+
+            <footer className="status">
+                {errorMsg ? (
+                    <span className="err">⚠ {errorMsg}</span>
+                ) : (
+                    <span>{statusMsg}</span>
+                )}
+                <span className="status-spacer" />
+                <span className="zoom-hint" title="Ctrl+scroll or Ctrl+↑/↓ to zoom, Ctrl+0 to reset">
+                    {Math.round(scale * 100)}%
+                </span>
+            </footer>
         </div>
     );
 }

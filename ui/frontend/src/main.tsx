@@ -11,6 +11,7 @@ import App from "./App";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import "monaco-editor/esm/vs/basic-languages/lua/lua.contribution";
 import "monaco-editor/esm/vs/basic-languages/ini/ini.contribution";
+import "monaco-editor/esm/vs/basic-languages/sql/sql.contribution";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { loader } from "@monaco-editor/react";
 
@@ -20,6 +21,19 @@ self.MonacoEnvironment = {
   },
 };
 loader.config({ monaco });
+
+// vs-dark's #1e1e1e clashes with the app's warm-neutral surfaces; every
+// editor (TOML, Lua, SQL console) uses this re-grounded variant instead.
+monaco.editor.defineTheme("backtester-dark", {
+  base: "vs-dark",
+  inherit: true,
+  rules: [],
+  colors: {
+    "editor.background": "#121211",
+    "editorGutter.background": "#121211",
+    "editor.lineHighlightBackground": "#1a1a19",
+  },
+});
 
 const container = document.getElementById("root");
 const root = createRoot(container!);

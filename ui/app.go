@@ -37,6 +37,10 @@ type RunResult struct {
 	StandardDev       float64 `json:"standardDev"`
 	AvgCorrelation    float64 `json:"avgCorrelation"`
 	CointegratedPairs int     `json:"cointegratedPairs"`
+	// InitialCapital is the starting cash and FinalValue the ending worth, so
+	// the frontend can show the profit in dollars alongside the percentages.
+	InitialCapital float64 `json:"initialCapital"`
+	FinalValue     float64 `json:"finalValue"`
 	// EquityCurve is the portfolio's daily total value; Dates are the
 	// matching trading days (YYYY-MM-DD), 1:1 with EquityCurve. The frontend
 	// plots these as the equity-curve chart.
@@ -73,6 +77,8 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			StandardDev:       r.Metrics.StandardDev,
 			AvgCorrelation:    r.Metrics.AvgCorrelation,
 			CointegratedPairs: r.Metrics.CointegratedPairs,
+			InitialCapital:    r.InitialCapital,
+			FinalValue:        r.FinalValue,
 			EquityCurve:       r.EquityCurve,
 			Dates:             r.Dates,
 		})
@@ -112,6 +118,32 @@ func (a *App) ListTickers(dbPath string) ([]string, error) {
 		return nil, fmt.Errorf("open db %q: %w", dbPath, err)
 	}
 	return data.ListTickers()
+}
+
+// TickerDateRanges returns, for every ticker in the DB, the earliest and
+// latest date it has data for, as {"SYMBOL": ["YYYY-MM-DD", "YYYY-MM-DD"]}.
+// The simple-mode form uses these to constrain the date pickers to the span
+// the selected tickers actually cover, so a user can't request a window with
+// no data.
+func (a *App) TickerDateRanges(dbPath string) (map[string][]string, error) {
+	if dbPath == "" {
+		return nil, fmt.Errorf("db path is empty")
+	}
+	if _, err := data.InitDB(dbPath); err != nil {
+		return nil, fmt.Errorf("open db %q: %w", dbPath, err)
+	}
+	ranges, err := data.TickerDateRanges(nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(ranges))
+	for sym, r := range ranges {
+		out[sym] = []string{
+			r.Min.Format("2006-01-02"),
+			r.Max.Format("2006-01-02"),
+		}
+	}
+	return out, nil
 }
 
 // PickLuaFile opens a native file picker for Lua strategy scripts.

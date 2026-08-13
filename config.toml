@@ -1,0 +1,29 @@
+# Portfolio configuration for backtesting
+#
+# [Output] options:
+#   path:    destination file (truncated each run)
+#   format:  "txt" (default), "csv", or "json"
+#   fields:  result fields to emit, in order. Available:
+#            PortfolioName, Strategy, SharpeRatio, SortinoRatio,
+#            MaxDrawdown, AnnualReturn, StandardDev
+#   filter:  Go-style expression; identifiers match `fields`.
+#   sort_by: result field to sort by (empty = no sort)
+#   order:   "asc" or "desc" (default "desc")
+#   limit:   keep at most N results after filtering/sorting (0 = unlimited)
+[Output]
+path = "output.txt"
+format = "txt"
+fields = ["PortfolioName", "Strategy", "SharpeRatio", "SortinoRatio", "MaxDrawdown", "AnnualReturn"]
+filter = "AnnualReturn > 0"
+sort_by = "SharpeRatio"
+order = "desc"
+limit = 2
+
+[[Portfolio]]
+Name = "My Portfolio"
+BuyingPower = 10000.0
+StartDate = "2015-05-26"
+EndDate = "2025-05-26"
+Tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
+Strategy = "lua:../strategies/buy_and_hold_weighted.lua"
+Params = { weights = { AAPL = 20.0, MSFT = 20.0, GOOGL = 20.0, AMZN = 20.0, NVDA = 20.0 } }

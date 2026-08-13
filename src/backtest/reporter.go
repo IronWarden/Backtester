@@ -45,6 +45,9 @@ var resultFields = []string{
 	"StandardDev",
 	"AvgCorrelation",
 	"CointegratedPairs",
+	"InitialCapital",
+	"FinalValue",
+	"Profit",
 }
 
 func resultValue(r Result, name string) (any, bool) {
@@ -67,6 +70,12 @@ func resultValue(r Result, name string) (any, bool) {
 		return r.Metrics.AvgCorrelation, true
 	case "CointegratedPairs":
 		return float64(r.Metrics.CointegratedPairs), true
+	case "InitialCapital":
+		return r.InitialCapital, true
+	case "FinalValue":
+		return r.FinalValue, true
+	case "Profit":
+		return r.FinalValue - r.InitialCapital, true
 	}
 	return nil, false
 }

@@ -1,0 +1,146 @@
+# Strategy library — every shipped strategy over the same tickers and
+# window, so the results table compares them directly. Open this in
+# Advanced mode and hit "Run backtest".
+#
+# To adapt: change Tickers / dates once per block, or delete the blocks you
+# don't care about. Each Strategy points at a file in strategies/ that you
+# can copy and edit — see strategies/README.md for the Lua API.
+#
+# Note the two families need different universes:
+#   - Per-ticker signal strategies (trend, breakout, RSI, Bollinger) decide
+#     each ticker independently, so a basket of individual stocks is right.
+#   - Allocation strategies (rotation, risk parity, rebalance) split capital
+#     across the universe, so mixing asset classes ($SP500 with $CASH) is
+#     where they earn their keep.
+
+# --- Baselines -----------------------------------------------------------
+
+[[portfolio]]
+Name = "Baseline: buy & hold"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "buyAndHold:equalWeights"
+
+[[portfolio]]
+Name = "Baseline: dollar-cost averaging"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/dca.lua"
+# ~115 monthly buys over the window; 870/buy fully invests the balance.
+[portfolio.Params]
+amount = 870.0
+every_days = 21
+
+# --- Trend following -----------------------------------------------------
+
+[[portfolio]]
+Name = "Trend: 200-day timing"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/trend_following.lua"
+[portfolio.Params]
+period = 200
+buffer_pct = 1.0
+
+[[portfolio]]
+Name = "Trend: SMA crossover"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/sma_cross.lua"
+[portfolio.Params]
+short = 50
+long = 200
+
+[[portfolio]]
+Name = "Trend: Donchian breakout"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/donchian_breakout.lua"
+[portfolio.Params]
+entry_period = 55
+exit_period = 20
+
+# --- Mean reversion ------------------------------------------------------
+
+[[portfolio]]
+Name = "Reversion: RSI oversold"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/rsi.lua"
+[portfolio.Params]
+period = 14
+buy_thresh = 30
+sell_thresh = 70
+
+[[portfolio]]
+Name = "Reversion: Bollinger bands"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/bollinger_reversion.lua"
+[portfolio.Params]
+period = 20
+k = 2.0
+
+# --- Allocation ----------------------------------------------------------
+# These split capital across the universe, so they get a mixed one.
+
+[[portfolio]]
+Name = "Alloc: 60/40 rebalanced"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["$SP500", "$CASH"]
+Strategy = "lua:strategies/rebalance.lua"
+[portfolio.Params]
+rebalance_days = 63
+weights = { "$SP500" = 60, "$CASH" = 40 }
+
+[[portfolio]]
+Name = "Alloc: 60/40 buy & hold (no rebalance)"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["$SP500", "$CASH"]
+Strategy = "lua:strategies/buy_and_hold_weighted.lua"
+[portfolio.Params]
+weights = { "$SP500" = 60, "$CASH" = 40 }
+
+# Expect a near-flat curve here: inverse-volatility weighting is uncapped,
+# so pairing an index with $CASH parks almost everything in cash. Swap
+# $CASH for a bond fund (or another equity index) to see it allocate.
+[[portfolio]]
+Name = "Alloc: risk parity"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["$SP500", "$CASH"]
+Strategy = "lua:strategies/risk_parity.lua"
+[portfolio.Params]
+lookback = 60
+rebalance_days = 21
+
+[[portfolio]]
+Name = "Alloc: momentum rotation"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL", "$CASH"]
+Strategy = "lua:strategies/momentum_rotation.lua"
+[portfolio.Params]
+lookback = 126
+top_n = 2
+rebalance_days = 21

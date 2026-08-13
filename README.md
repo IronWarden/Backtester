@@ -23,6 +23,42 @@ The runtime is structured around four components:
 
 Dependencies (`github.com/marcboeker/go-duckdb`, `gonum.org/v1/gonum`, `github.com/BurntSushi/toml`) are pulled via `go mod`.
 
+## Long-history benchmark assets
+
+`add_collections.py` populates `stock_data_optimized` with index / asset-class
+benchmarks (the kind testfol.io exposes) so portfolios can hold and test against
+them. Each is one daily **total-return** series under a `$`-prefixed pseudo-ticker
+so it never collides with a real stock, and all share the NYSE trading calendar
+so they can be mixed with each other and with real stocks in one portfolio.
+
+| Ticker | Collection | Coverage |
+| --- | --- | --- |
+| `$SP500` | S&P 500 | 1927– |
+| `$USTOT` | Total U.S. Market | 1927– |
+| `$SP400` | S&P 400 MidCap | 1981– |
+| `$SP100` | S&P 100 | 1982– |
+| `$RUS2K` | Russell 2000 | 1987– |
+| `$SP600` | S&P 600 SmallCap | 1989– |
+| `$EM` | Emerging Markets | 2005– |
+| `$EXUS` | Total ex-US Market | 2007– |
+| `$WORLD` | Total World Market | 2008– |
+| `$CASH` | Cash (T-bill) | 1927– |
+
+Modern history uses a real ETF's dividend-adjusted close (true total return);
+pre-ETF history uses the real index price level plus an estimated dividend from
+Shiller's monthly S&P 500 yield (so only the early *dividend* is approximated,
+never the price). `$CASH` compounds the FRED 3-month T-bill rate (daily, 1954+)
+spliced onto Ken French's 1-month T-bill return (monthly, 1926–1953, since a
+daily 3-month series doesn't exist that far back). Rebuild or
+refresh anytime (idempotent per symbol; close the UI first — DuckDB is
+single-writer):
+
+```bash
+python3 add_collections.py            # build/refresh all
+python3 add_collections.py --dry-run  # preview coverage, no write
+python3 add_collections.py --only '$SP500' '$CASH'
+```
+
 ## Configuration
 
 Define one `[[Portfolio]]` block per portfolio in `config.toml`. The runner will execute every strategy listed for every portfolio.
@@ -77,6 +113,45 @@ cd src
 go build -o backtester
 ./backtester -debug
 ```
+
+## AI assistant (UI) — Claude or local Ollama models
+
+The Wails UI has a built-in AI chat, toggled with the **✦ Assistant**
+button in the topbar. It is specialized for this app: its system prompt
+carries the TOML config schema, the strategy spec strings, the full Lua
+strategy API, the metric definitions, the live schema of the chosen DuckDB
+(every table, bar counts, date span, available `$`-benchmarks), the saved
+`*.toml` configs and `strategies/*.lua` library, and whatever TOML/Lua is
+open (even unsaved) in the editors.
+
+- **Models**: the header dropdown lists the Claude models (Sonnet 5 /
+  Opus 4.8 / Haiku 4.5) plus every model your local Ollama server has
+  pulled (labelled "(local)", discovered live from `/api/tags`;
+  `OLLAMA_HOST` overrides the default `localhost:11434`). The choice is
+  remembered across restarts.
+- It can query the database itself through a read-only SQL tool
+  (SELECT-family statements only, capped at 100 rows) — e.g. to check
+  ticker coverage before proposing a date range. Queries it runs are shown
+  inline in the chat. Local models get the tool too if they advertise the
+  `tools` capability (qwen3.5 does); models that don't simply chat over
+  the embedded context.
+- Fenced ` ```toml `/` ```lua ` blocks in its replies get an
+  **Insert into … editor** button, so a generated config or strategy lands
+  directly in the corresponding editor tab.
+- Setup: Claude models need an Anthropic API key — set
+  `ANTHROPIC_API_KEY` in the repo-root `.env` (or the environment), or
+  paste it into the panel's first-run form, which writes that `.env`
+  entry for you. Local Ollama models need no key at all.
+- Local-model notes: the request pins `num_ctx` to 16384 (Ollama's default
+  is too small for the embedded context) and sends a leaner system prompt
+  (the saved-config dump is skipped); "thinking" models have thinking
+  disabled for snappier replies.
+
+Backend: `ui/chat.go` (shared prompt/tool/dispatch), `ui/claude.go`
+(streaming Anthropic client), `ui/ollama.go` (streaming Ollama client),
+`data.RunQuery` in `src/data/database.go`; frontend:
+`ui/frontend/src/ChatPanel.tsx`. Live tests: `go test ./ui` (the Ollama
+ones skip when no server is running).
 
 ## Output
 

@@ -189,18 +189,23 @@ func generalBuy(
 	strategyType string,
 	tickers []string,
 ) float64 {
-	amount := 0.0
 	switch strategyType {
 	case "greedy":
-		amount = float64(greedyBuy(buyingPower, stockValue))
+		return greedyBuy(buyingPower, stockValue)
 	case "equalWeights":
-		amount = float64(
-			greedyBuy(buyingPower/float64(len(tickers)), stockValue),
-		)
+		return greedyBuy(buyingPower/float64(len(tickers)), stockValue)
 	}
-	return amount
+	return 0.0
 }
 
-func greedyBuy(buyingPower float64, stockValue float64) int {
-	return int(buyingPower / stockValue)
+// greedyBuy returns the (fractional) share quantity that spends all of
+// buyingPower at stockValue. Fractional shares mean the full allocation is
+// invested regardless of the asset's price scale, instead of whole-share
+// truncation leaving a chunk of capital idle (or, for high-priced synthetic
+// index series, buying zero shares).
+func greedyBuy(buyingPower float64, stockValue float64) float64 {
+	if stockValue <= 0 {
+		return 0.0
+	}
+	return buyingPower / stockValue
 }
