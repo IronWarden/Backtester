@@ -30,7 +30,24 @@ type Result struct {
 	// so the frontend can plot value-over-time directly.
 	EquityCurve []float64
 	Dates       []string
+	// Time-sliced views of the same run, derived from EquityCurve and the
+	// daily returns: the deepest drawdowns with their recovery, a rolling
+	// Sharpe series, and compounded calendar-year and month returns. These
+	// are nested rather than scalar, so the reporter (which is table-shaped)
+	// does not carry them; they exist for the UI.
+	Drawdowns      []Drawdown
+	RollingSharpe  []RollingPoint
+	YearlyReturns  []PeriodReturn
+	MonthlyReturns []PeriodReturn
 }
+
+// topDrawdowns is how many peak-to-trough declines a Result carries. Enough
+// to see the shape of the bad periods, few enough to render as a table.
+const topDrawdowns = 10
+
+// rollingSharpeWindow is one trading year, matching the 252-day convention
+// the metrics use.
+const rollingSharpeWindow = 252
 
 // dateRange returns the earliest StartTime and the latest EndTime across
 // every portfolio. Panics if portfolios is empty.
@@ -277,8 +294,12 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 				// DailyReturns and PortfolioCloseValues are appended together
 				// each day, so they share length and ordering.
 				dates := make([]string, len(p.DailyReturns))
+				dayTimes := make([]time.Time, len(p.DailyReturns))
+				returns := make([]float64, len(p.DailyReturns))
 				for i, dr := range p.DailyReturns {
 					dates[i] = dr.Date.Format("2006-01-02")
+					dayTimes[i] = dr.Date
+					returns[i] = dr.Return
 				}
 				// A portfolio with no simulated days never traded, so it is
 				// still worth exactly what it started with.
@@ -294,6 +315,20 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					FinalValue:     finalValue,
 					EquityCurve:    p.PortfolioCloseValues,
 					Dates:          dates,
+					// EquityCurve and dayTimes are appended together each
+					// day, so they share length and ordering.
+					Drawdowns: GetDrawdowns(
+						p.PortfolioCloseValues, dayTimes, topDrawdowns,
+					),
+					RollingSharpe: GetRollingSharpe(
+						returns, dayTimes, rollingSharpeWindow,
+					),
+					YearlyReturns: GetCalendarReturns(
+						p.PortfolioCloseValues, dayTimes, false,
+					),
+					MonthlyReturns: GetCalendarReturns(
+						p.PortfolioCloseValues, dayTimes, true,
+					),
 				}
 			}
 		}()

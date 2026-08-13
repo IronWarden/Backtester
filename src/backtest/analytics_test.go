@@ -17,6 +17,78 @@ func days(n int) []time.Time {
 	return out
 }
 
+// The analytics attached to a Result must describe the same run the
+// scalar metrics describe. This drives a real strategy through runOne and
+// reconciles the two.
+func TestResultAnalyticsMatchTheRun(t *testing.T) {
+	hist := synthHist(42)
+	p := libPortfolio(nil)
+	strat, err := NewLuaStrategy(
+		strategiesDir(t)+"/rebalance.lua", shippedStrategies()["rebalance.lua"],
+	)
+	if err != nil {
+		t.Fatalf("NewLuaStrategy: %v", err)
+	}
+	defer strat.Close()
+	p.Strategy = strat
+	runOne(p, hist, map[int64]float64{})
+
+	dayTimes := make([]time.Time, len(p.DailyReturns))
+	returns := make([]float64, len(p.DailyReturns))
+	for i, dr := range p.DailyReturns {
+		dayTimes[i] = dr.Date
+		returns[i] = dr.Return
+	}
+
+	// The deepest reported drawdown must equal the metric the results table
+	// already shows.
+	ds := GetDrawdowns(p.PortfolioCloseValues, dayTimes, topDrawdowns)
+	if len(ds) == 0 {
+		t.Fatal("a real run produced no drawdowns at all")
+	}
+	closeTo(t, "deepest drawdown vs MaxDrawdown",
+		ds[0].DepthPct, p.Metrics.MaxDrawdown)
+	if len(ds) > topDrawdowns {
+		t.Errorf("got %d drawdowns, capped at %d", len(ds), topDrawdowns)
+	}
+	for _, d := range ds {
+		if d.DepthPct <= 0 {
+			t.Errorf("non-positive drawdown depth: %+v", d)
+		}
+		if d.Trough.Before(d.Start) {
+			t.Errorf("trough precedes peak: %+v", d)
+		}
+		if !d.Ongoing && d.Recovered.Before(d.Trough) {
+			t.Errorf("recovery precedes trough: %+v", d)
+		}
+	}
+
+	// Compounded yearly returns reproduce the run's total return.
+	years := GetCalendarReturns(p.PortfolioCloseValues, dayTimes, false)
+	if len(years) == 0 {
+		t.Fatal("no calendar years")
+	}
+	compounded := 1.0
+	for _, y := range years {
+		compounded *= 1 + y.ReturnPct/100.0
+	}
+	curve := p.PortfolioCloseValues
+	want := curve[len(curve)-1] / curve[0]
+	if math.Abs(compounded-want) > 1e-9 {
+		t.Errorf("compounded years %v, actual total %v", compounded, want)
+	}
+
+	// The rolling series is dated within the run and never non-finite.
+	for _, pt := range GetRollingSharpe(returns, dayTimes, rollingSharpeWindow) {
+		if math.IsNaN(pt.Value) || math.IsInf(pt.Value, 0) {
+			t.Errorf("rolling Sharpe at %v = %v — must be finite", pt.Date, pt.Value)
+		}
+		if pt.Date.Before(dayTimes[0]) || pt.Date.After(dayTimes[len(dayTimes)-1]) {
+			t.Errorf("rolling point dated outside the run: %v", pt.Date)
+		}
+	}
+}
+
 func TestGetDrawdownsBasics(t *testing.T) {
 	// 100 -> 80 (-20%) -> back to 100 -> 200 -> 150 (-25%) -> 200 again.
 	values := []float64{100, 80, 100, 200, 150, 200}

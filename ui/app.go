@@ -53,6 +53,13 @@ type RunResult struct {
 	// plots these as the equity-curve chart.
 	EquityCurve []float64 `json:"equityCurve"`
 	Dates       []string  `json:"dates"`
+	// Time-sliced views of the same run: the deepest drawdowns with their
+	// recovery, a rolling one-year Sharpe series, and compounded calendar
+	// returns by year and by month.
+	Drawdowns      []backtest.Drawdown     `json:"drawdowns"`
+	RollingSharpe  []backtest.RollingPoint `json:"rollingSharpe"`
+	YearlyReturns  []backtest.PeriodReturn `json:"yearlyReturns"`
+	MonthlyReturns []backtest.PeriodReturn `json:"monthlyReturns"`
 }
 
 // RunBacktest executes the in-editor TOML config against the chosen DB.
@@ -95,6 +102,10 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			FinalValue:        r.FinalValue,
 			EquityCurve:       r.EquityCurve,
 			Dates:             r.Dates,
+			Drawdowns:         r.Drawdowns,
+			RollingSharpe:     r.RollingSharpe,
+			YearlyReturns:     r.YearlyReturns,
+			MonthlyReturns:    r.MonthlyReturns,
 		})
 	}
 	return results, nil
