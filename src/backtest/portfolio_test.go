@@ -273,6 +273,228 @@ func TestCloneCarriesCosts(t *testing.T) {
 	}
 }
 
+// Every figure in this file's cost tests is computed by hand in the
+// comment above it. The point of the cost model is to make results
+// slightly worse in a precisely known way; an assertion derived from the
+// implementation would prove nothing.
+
+func TestBuyWithCosts(t *testing.T) {
+	p := newTestPortfolio(t, 10000)
+	p.Costs = CostConfig{
+		CommissionPerTrade: 1.0,
+		CommissionBps:      10, // 0.10% of notional
+		SlippageBps:        50, // 0.50% worse fill
+	}
+
+	// Quoted 100, slippage 50bps -> fill 100 * 1.005 = 100.5
+	// notional      = 10 * 100.5            = 1005
+	// commission    = 1.0 + 1005 * 0.001    = 2.005
+	// total         = 1005 + 2.005          = 1007.005
+	// buying power  = 10000 - 1007.005      = 8992.995
+	p.Buy("AAA", 10, 100, testDay)
+
+	pos, ok := p.FindPosition("AAA")
+	if !ok {
+		t.Fatal("order did not fill")
+	}
+	closeTo(t, "shares", pos.Amount, 10)
+	closeTo(t, "cost basis is the slipped price", pos.AveragePrice, 100.5)
+	closeTo(t, "buying power", p.BuyingPower, 8992.995)
+}
+
+func TestSellWithCosts(t *testing.T) {
+	p := newTestPortfolio(t, 10000)
+	p.Costs = CostConfig{
+		CommissionPerTrade: 1.0,
+		CommissionBps:      10,
+		SlippageBps:        50,
+	}
+	p.Buy("AAA", 10, 100, testDay) // leaves 8992.995, 10 shares
+
+	// Quoted 120, slippage 50bps -> fill 120 * 0.995 = 119.4
+	// notional     = 10 * 119.4           = 1194
+	// commission   = 1.0 + 1194 * 0.001   = 2.194
+	// proceeds     = 1194 - 2.194         = 1191.806
+	// buying power = 8992.995 + 1191.806  = 10184.801
+	p.Sell("AAA", 10, 120, testDay)
+
+	if _, ok := p.FindPosition("AAA"); ok {
+		t.Error("fully sold position should be deleted")
+	}
+	closeTo(t, "buying power", p.BuyingPower, 10184.801)
+}
+
+// Costs are a drag, never a boost: a round trip at an unchanged price must
+// end with less cash than it started with, and the loss is exactly the two
+// commissions plus the two slippage legs.
+func TestCostsAreAlwaysADrag(t *testing.T) {
+	p := newTestPortfolio(t, 10000)
+	p.Costs = CostConfig{CommissionPerTrade: 1.0, SlippageBps: 50}
+
+	p.Buy("AAA", 10, 100, testDay)
+	p.Sell("AAA", 10, 100, testDay)
+
+	// Buy:  notional 1005,  fee 1 -> -1006
+	// Sell: notional 995,   fee 1 -> +994
+	// Net: 10000 - 1006 + 994 = 9988
+	closeTo(t, "round-trip cost", p.BuyingPower, 9988)
+	if p.BuyingPower >= 10000 {
+		t.Error("a round trip must never leave the portfolio better off")
+	}
+}
+
+// The clamp is the delicate part of the cost model: a strategy sizing
+// fractional shares against its whole balance must still fill, and the
+// commission has to come out of that same balance rather than overdrawing
+// it.
+func TestBuyClampLeavesRoomForCommission(t *testing.T) {
+	cases := []struct {
+		name  string
+		costs CostConfig
+	}{
+		{"flat commission only", CostConfig{CommissionPerTrade: 1}},
+		{"bps commission only", CostConfig{CommissionBps: 10}},
+		{"both", CostConfig{CommissionPerTrade: 1, CommissionBps: 10}},
+		{"with slippage", CostConfig{CommissionPerTrade: 1, CommissionBps: 10, SlippageBps: 50}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newTestPortfolio(t, 1000)
+			p.Costs = tc.costs
+
+			// Size the order the way a "spend it all" strategy does, then
+			// overshoot by a rounding error.
+			price := 3.0
+			amount := 1000.0/p.Costs.BuyFill(price) + 1e-9
+
+			p.Buy("AAA", amount, price, testDay)
+
+			if p.BuyingPower < 0 {
+				t.Fatalf("clamped buy overdrew the account: %v", p.BuyingPower)
+			}
+			pos, ok := p.FindPosition("AAA")
+			if !ok {
+				t.Fatal("clamped order did not fill at all")
+			}
+			// It filled for slightly fewer shares than the uncosted order
+			// would have, because the fee had to come out of the same cash.
+			if pos.Amount >= amount {
+				t.Errorf("filled %v shares, expected fewer than the "+
+					"requested %v once the fee is paid", pos.Amount, amount)
+			}
+			closeTo(t, "spent the whole balance", p.BuyingPower, 0)
+		})
+	}
+}
+
+// An order whose commission alone exceeds the balance cannot fill. It must
+// leave the portfolio untouched rather than filling and overdrawing.
+func TestBuyRejectsUnaffordableCommission(t *testing.T) {
+	p := newTestPortfolio(t, 5)
+	p.Costs = CostConfig{CommissionPerTrade: 10}
+
+	// The shares are affordable; the fee is not.
+	p.Buy("AAA", 1, 4, testDay)
+
+	if _, ok := p.FindPosition("AAA"); ok {
+		t.Error("order filled despite an unaffordable commission")
+	}
+	closeTo(t, "buying power", p.BuyingPower, 5)
+}
+
+// The same rule on the way out: a sale whose fee would overdraw the account
+// does not happen, and the shares stay put.
+func TestSellRejectsWhenFeeWouldOverdraw(t *testing.T) {
+	p := newTestPortfolio(t, 1000)
+	p.Buy("AAA", 10, 100, testDay) // 0 cash left, 10 shares
+	closeTo(t, "cash after buy", p.BuyingPower, 0)
+
+	p.Costs = CostConfig{CommissionPerTrade: 50}
+	// Sell one share for 1: proceeds 1 - 50 = -49, against 0 cash.
+	p.Sell("AAA", 1, 1, testDay)
+
+	pos, ok := p.FindPosition("AAA")
+	if !ok {
+		t.Fatal("rejected sell removed the position")
+	}
+	closeTo(t, "shares untouched", pos.Amount, 10)
+	closeTo(t, "buying power", p.BuyingPower, 0)
+}
+
+// Slippage alone, with no commission, moves the fill price in the right
+// direction on both sides.
+func TestSlippageDirection(t *testing.T) {
+	c := CostConfig{SlippageBps: 100} // 1%
+	closeTo(t, "buys fill higher", c.BuyFill(100), 101)
+	closeTo(t, "sells fill lower", c.SellFill(100), 99)
+
+	// A zero cost model must return the quoted price bit for bit, which is
+	// what makes existing results reproducible.
+	var zero CostConfig
+	for _, quoted := range []float64{1, 3, 99.99, 1234.5678, 1e-8} {
+		if got := zero.BuyFill(quoted); got != quoted {
+			t.Errorf("zero-cost BuyFill(%v) = %v, want the quote unchanged", quoted, got)
+		}
+		if got := zero.SellFill(quoted); got != quoted {
+			t.Errorf("zero-cost SellFill(%v) = %v, want the quote unchanged", quoted, got)
+		}
+	}
+	if got := zero.Commission(1e6); got != 0 {
+		t.Errorf("zero-cost Commission = %v, want 0", got)
+	}
+}
+
+// The point of the cost model is that it penalises trading, so the drag has
+// to scale with how much a strategy trades. This runs real shipped
+// strategies through the runner's own path, twice each, and compares.
+func TestCostsDragScalesWithTurnover(t *testing.T) {
+	finalValue := func(script string, params map[string]any, costs CostConfig) float64 {
+		t.Helper()
+		hist := synthHist(42)
+		p := libPortfolio(nil)
+		p.Costs = costs
+		strat, err := NewLuaStrategy(strategiesDir(t)+"/"+script, params)
+		if err != nil {
+			t.Fatalf("%s: %v", script, err)
+		}
+		defer strat.Close()
+		p.Strategy = strat
+		runOne(p, hist, map[int64]float64{})
+		n := len(p.PortfolioCloseValues)
+		if n == 0 {
+			t.Fatalf("%s produced no simulated days", script)
+		}
+		return p.PortfolioCloseValues[n-1]
+	}
+
+	costs := CostConfig{CommissionPerTrade: 5, CommissionBps: 10, SlippageBps: 20}
+	all := shippedStrategies()
+
+	// One entry per ticker on day 0 and nothing after.
+	holdFree := finalValue("buy_and_hold.lua", all["buy_and_hold.lua"], CostConfig{})
+	holdCost := finalValue("buy_and_hold.lua", all["buy_and_hold.lua"], costs)
+	// Buys on a cadence for the whole window.
+	dcaFree := finalValue("dca.lua", all["dca.lua"], CostConfig{})
+	dcaCost := finalValue("dca.lua", all["dca.lua"], costs)
+
+	if holdCost >= holdFree {
+		t.Errorf("buy-and-hold with costs (%v) should trail the free run (%v)",
+			holdCost, holdFree)
+	}
+	if dcaCost >= dcaFree {
+		t.Errorf("DCA with costs (%v) should trail the free run (%v)",
+			dcaCost, dcaFree)
+	}
+
+	holdDrag := (holdFree - holdCost) / holdFree
+	dcaDrag := (dcaFree - dcaCost) / dcaFree
+	if dcaDrag <= holdDrag {
+		t.Errorf("DCA drag %.6f should exceed buy-and-hold drag %.6f — "+
+			"costs are not scaling with turnover", dcaDrag, holdDrag)
+	}
+	t.Logf("drag: buy_and_hold %.4f%%, dca %.4f%%", holdDrag*100, dcaDrag*100)
+}
+
 func TestCostConfigZero(t *testing.T) {
 	if !(CostConfig{}).Zero() {
 		t.Error("the zero CostConfig must report Zero()")

@@ -137,34 +137,59 @@ func (p *Portfolio) Buy(
 	if amount <= 0.0 || initialPrice <= 0.0 {
 		return
 	}
-	cost := amount * initialPrice
+	// The order executes at the slipped price, not the quoted one. With a
+	// zero cost model this is a multiplication by exactly 1.0, so every
+	// figure below is bit-identical to the pre-costs arithmetic.
+	fillPrice := p.Costs.BuyFill(initialPrice)
+	if fillPrice <= 0.0 {
+		return
+	}
+	notional := amount * fillPrice
+	cost := notional + p.Costs.Commission(notional)
 	// Reject orders that genuinely overshoot available cash, but tolerate the
 	// sub-cent float overshoot that arises when a strategy sizes fractional
 	// shares to spend all of its cash — clamp to the exact remaining balance so
 	// the order still fills and BuyingPower never drifts negative.
+	//
+	// Affordability is judged on the notional, not on the total: a strategy
+	// that sizes itself against cash() is asking for shares it can afford, and
+	// it is the commission on top that no longer fits. Rejecting those would
+	// silently stop every spend-it-all strategy from trading the moment costs
+	// were switched on, which would read as "costs killed the returns" rather
+	// than as an error. So an order that clears this gate but cannot cover its
+	// fee is clamped down to the largest size whose fee the balance does
+	// cover, exactly as a broker filling against available cash would.
+	if notional > p.BuyingPower*(1.0+1e-9) {
+		return
+	}
 	if cost > p.BuyingPower {
-		if cost > p.BuyingPower*(1.0+1e-9) {
+		notional = p.Costs.MaxAffordableNotional(p.BuyingPower)
+		if notional <= 0.0 {
+			// The balance cannot even cover the flat fee.
 			return
 		}
+		amount = notional / fillPrice
+		// By construction notional + Commission(notional) == BuyingPower;
+		// assigning it directly keeps that exact rather than a rounding step
+		// away from it, which is what stops the balance going negative.
 		cost = p.BuyingPower
-		amount = cost / initialPrice
 	}
 	pos, ok := p.FindPosition(ticker)
 	if !ok {
 		// Position does not exist, create a new one
 		p.Positions[ticker] = &Position{
 			Amount:       amount,
-			AveragePrice: initialPrice,
+			AveragePrice: fillPrice,
 		}
 	} else {
 		// Position exists, update it
 		pos.AveragePrice = (pos.AveragePrice*pos.Amount +
-			initialPrice*amount) / (pos.Amount + amount)
+			fillPrice*amount) / (pos.Amount + amount)
 		pos.Amount += amount
 	}
 	TransactionLogger.Printf(
-		"BUY: %s, Amount: %.6f, Price: %.2f, Date: %s\n",
-		ticker, amount, initialPrice, time,
+		"BUY: %s, Amount: %.6f, Price: %.2f, Fee: %.2f, Date: %s\n",
+		ticker, amount, fillPrice, cost-notional, time,
 	)
 	p.BuyingPower -= cost
 }
@@ -187,15 +212,27 @@ func (p *Portfolio) Sell(
 	if !ok || pos.Amount < stockAmount || pos.Amount <= 0 {
 		return
 	}
+	// Slippage moves the fill against the seller; the commission comes out of
+	// the proceeds. With a zero cost model both are no-ops and the arithmetic
+	// is bit-identical to the pre-costs version.
+	fillPrice := p.Costs.SellFill(currentPrice)
+	notional := stockAmount * fillPrice
+	proceeds := notional - p.Costs.Commission(notional)
+	// A sale small enough that its fee exceeds the proceeds would withdraw
+	// cash. That is allowed as long as the balance covers it — but an order
+	// that would overdraw the account does not fill at all, matching Buy.
+	if p.BuyingPower+proceeds < 0 {
+		return
+	}
 	TransactionLogger.Printf(
-		"SELL: %s, Amount: %.2f, Price: %.2f, Date: %s\n",
-		ticker, stockAmount, currentPrice, time,
+		"SELL: %s, Amount: %.2f, Price: %.2f, Fee: %.2f, Date: %s\n",
+		ticker, stockAmount, fillPrice, notional-proceeds, time,
 	)
 	pos.Amount -= stockAmount
 	if pos.Amount == 0 {
 		delete(p.Positions, ticker)
 	}
-	p.Deposit(stockAmount * currentPrice)
+	p.Deposit(proceeds)
 }
 
 func (p *Portfolio) GetPortfolioValue(

@@ -46,6 +46,46 @@ func (c CostConfig) Zero() bool {
 	return c.CommissionPerTrade == 0 && c.CommissionBps == 0 && c.SlippageBps == 0
 }
 
+// bps converts a basis-point figure to a plain multiplier.
+func bps(v float64) float64 { return v / 10000.0 }
+
+// BuyFill is the price a buy actually executes at: slippage moves it
+// against the buyer. With zero slippage this multiplies by exactly 1.0 and
+// so returns quoted unchanged, bit for bit.
+func (c CostConfig) BuyFill(quoted float64) float64 {
+	return quoted * (1.0 + bps(c.SlippageBps))
+}
+
+// SellFill is the price a sell actually executes at: slippage moves it
+// against the seller. Floored at 0 so an absurd slippage setting cannot
+// produce a negative price.
+func (c CostConfig) SellFill(quoted float64) float64 {
+	fill := quoted * (1.0 - bps(c.SlippageBps))
+	if fill < 0 {
+		return 0
+	}
+	return fill
+}
+
+// Commission is the fee charged on one filled order of the given notional
+// value: a flat amount plus a proportional one.
+func (c CostConfig) Commission(notional float64) float64 {
+	return c.CommissionPerTrade + notional*bps(c.CommissionBps)
+}
+
+// MaxAffordableNotional is the largest notional value whose commission the
+// given cash balance can also cover, i.e. the n solving
+// n + Commission(n) = cash. Returns 0 when the cash cannot even cover the
+// flat fee. This is what lets the sub-cent clamp in Buy stay exact once
+// commissions exist.
+func (c CostConfig) MaxAffordableNotional(cash float64) float64 {
+	n := (cash - c.CommissionPerTrade) / (1.0 + bps(c.CommissionBps))
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
 type PortfolioConfig struct {
 	Name        string         `toml:"Name"`
 	BuyingPower float64        `toml:"BuyingPower"`
