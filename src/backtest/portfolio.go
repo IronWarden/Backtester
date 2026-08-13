@@ -36,6 +36,12 @@ type Portfolio struct {
 	// simulates clones, so a cost model left behind here would be silently
 	// absent from every real run.
 	Costs CostConfig
+	// Benchmark is an optional ticker this portfolio is scored against. It
+	// is deliberately kept out of Tickers: that slice drives allocation, the
+	// trading-day intersection, and valuation, so adding the benchmark to it
+	// would change what the portfolio actually does. Like Costs it is
+	// configuration, so Clone must carry it across.
+	Benchmark string
 	// tradedNotional accumulates the gross value of every filled order and
 	// feeds the Turnover metric. Unlike Costs this is per-run state, so
 	// Clone deliberately leaves it at zero, exactly as it does for
@@ -96,6 +102,7 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		StrategyParams:       p.StrategyParams,
 		Strategy:             strat,
 		Costs:                p.Costs,
+		Benchmark:            p.Benchmark,
 	}, nil
 }
 

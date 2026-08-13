@@ -95,6 +95,11 @@ type PortfolioConfig struct {
 	Strategy    string         `toml:"Strategy"`
 	Params      map[string]any `toml:"Params"`
 	Costs       CostConfig     `toml:"Costs"`
+	// Benchmark is an optional ticker to score this portfolio against, e.g.
+	// "$SP500". It is NOT traded and never joins Tickers — it only supplies
+	// a return series for the benchmark-relative metrics. Empty means those
+	// metrics are not computed.
+	Benchmark string `toml:"Benchmark"`
 }
 
 func LoadConfig(filepath string) (*Config, error) {
@@ -133,5 +138,6 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 	// InitializePortfolio, which is already at the limit of what a positional
 	// signature carries readably.
 	p.Costs = pc.Costs
+	p.Benchmark = pc.Benchmark
 	return p, nil
 }

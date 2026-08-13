@@ -224,6 +224,69 @@ Strategy = "greedy"
 	}
 }
 
+// The benchmark is configuration, so it must survive Clone — and it must
+// never be mistaken for a holding.
+func TestBenchmarkConfigPlumbing(t *testing.T) {
+	path := writeConfig(t, `
+[[portfolio]]
+Name = "benchmarked"
+BuyingPower = 10000.0
+StartDate = "2020-01-01"
+EndDate = "2021-01-01"
+Tickers = ["AAPL", "MSFT"]
+Strategy = "greedy"
+Benchmark = "$SP500"
+
+[[portfolio]]
+Name = "unbenchmarked"
+BuyingPower = 10000.0
+StartDate = "2020-01-01"
+EndDate = "2021-01-01"
+Tickers = ["AAPL"]
+Strategy = "greedy"
+`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got := cfg.Portfolios[0].Benchmark; got != "$SP500" {
+		t.Errorf("Benchmark = %q, want $SP500", got)
+	}
+	if got := cfg.Portfolios[1].Benchmark; got != "" {
+		t.Errorf("absent Benchmark = %q, want empty", got)
+	}
+
+	p, err := cfg.Portfolios[0].ToPortfolio()
+	if err != nil {
+		t.Fatalf("ToPortfolio: %v", err)
+	}
+	if p.Benchmark != "$SP500" {
+		t.Errorf("portfolio Benchmark = %q, want $SP500", p.Benchmark)
+	}
+	// The critical invariant: the benchmark is not a holding. Tickers drives
+	// allocation, the trading-day intersection and valuation, so a benchmark
+	// that leaked into it would silently change what the portfolio does.
+	for _, tk := range p.Tickers {
+		if tk == p.Benchmark {
+			t.Fatalf("benchmark %q leaked into Tickers %v", p.Benchmark, p.Tickers)
+		}
+	}
+	if len(p.Tickers) != 2 {
+		t.Errorf("Tickers = %v, want the 2 configured holdings", p.Tickers)
+	}
+
+	c, err := p.Clone()
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if c.Benchmark != "$SP500" {
+		t.Errorf("clone Benchmark = %q, want $SP500", c.Benchmark)
+	}
+	if len(c.Tickers) != 2 {
+		t.Errorf("clone Tickers = %v, want the 2 configured holdings", c.Tickers)
+	}
+}
+
 // ToPortfolio has to carry the costs onto the Portfolio, and Clone has to
 // carry them onto the object the runner actually simulates. Both links are
 // tested because breaking either one is silent.
