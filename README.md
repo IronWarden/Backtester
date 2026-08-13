@@ -1,17 +1,19 @@
 # Backtester
 
-A concurrent Go backtesting engine that simulates one or more portfolios over historical equity data stored in DuckDB. Portfolios, date ranges, tickers, and strategies are defined in a TOML config; each `(portfolio, strategy)` pair runs in parallel on a worker pool sized to the host's CPU count.
+A concurrent Go backtesting engine that simulates one or more portfolios over historical equity data stored in DuckDB. Portfolios, date ranges, tickers, and strategies are defined in a TOML config; each portfolio runs in parallel on a worker pool sized to the host's CPU count. Strategies are written in Lua, and a Wails desktop UI (with a built-in AI assistant) drives the same engine.
 
 ## How it works
 
-The runtime is structured around four components:
-
-- **`src/main.go`** — entry point. Opens the DuckDB file, loads `config.toml`, converts each TOML portfolio entry into a `Portfolio` struct, and hands them to the runner.
-- **`src/data/database.go`** — DuckDB access layer. Reads OHLCV bars from `stock_data_optimized` and daily risk-free rates from `3MTreasuryYields`.
-- **`src/backtest/runner.go`** — orchestrates the simulation. Pre-fetches historical data for every unique ticker once, then fans out `(portfolio, strategy)` jobs across `runtime.NumCPU()` workers. Results with `SharpeRatio > 0.5` are written to `worthy_tickers.txt`.
-- **`src/backtest/strategy.go`** — strategy implementations. Currently exercises `BuyAndHold`; `SMACross` and `RSI` helpers are defined for extension.
+- **`src/main.go`** — CLI entry point. Opens the DuckDB file, loads `config.toml`, converts each TOML portfolio entry into a `Portfolio`, and hands them to the runner.
+- **`src/data/database.go`** — DuckDB access layer. Reads OHLCV bars from `stock_data_optimized`, daily risk-free rates from `3MTreasuryYields`, and serves the read-only `RunQuery` used by the UI and the assistant.
+- **`src/backtest/runner.go`** — orchestrates the simulation. Validates that every portfolio's window is covered by its tickers' data, pre-fetches history for every unique ticker in one union-range query, aligns each portfolio onto the trading days common to its own tickers, then fans the portfolios out across `runtime.NumCPU()` workers. Each worker runs on a `Clone()` of the portfolio, so strategy state is never shared. Results come back as a `[]Result` (metrics plus the equity curve and its dates) and are additionally written to a file when the config has an `[Output]` block.
+- **`src/backtest/strategy.go`** — the `Strategy` interface and `NewStrategy`, which builds one from a spec string (`greedy`, `equalWeights`, `buyAndHold:<type>`, `smaCross:<short>:<long>:<type>`, `lua:<path>`). `BuyAndHold` and `SMACross` both implement it; the package-level `SMA` and `RSI` helpers are used by `SMACross` and are also exposed to Lua as `sma()` / `rsi()`.
+- **`src/backtest/strategy_lua.go`** — the Lua strategy host. Loads a `.lua` file, injects the price/account/order API, and calls its `step(day)` once per trading day.
 - **`src/backtest/portfolio.go`** — portfolio state, `Buy` / `Sell` / `Deposit` / `Withdraw`, and end-of-day mark-to-market via `AdjustPortfolioParameters`.
 - **`src/backtest/metrics.go`** — Sharpe, Sortino, max drawdown, annualized return, and standard deviation, all annualized over a 252-trading-day year.
+- **`src/backtest/reporter.go`** — writes results as txt / csv / json, with optional filtering, sorting, and a row limit.
+- **`src/backtest/correlation.go`** — cross-asset correlation over the fetched history.
+- **`ui/`** — the Wails desktop app: backtest runs, a SQL console, quotes, screening, and the AI assistant.
 
 ## Prerequisites
 
@@ -21,7 +23,29 @@ The runtime is structured around four components:
   - `"3MTreasuryYields"(Date, daily_risk_free_rate_decimal)`
 - A `config.toml` in the repository root (see below).
 
-Dependencies (`github.com/marcboeker/go-duckdb`, `gonum.org/v1/gonum`, `github.com/BurntSushi/toml`) are pulled via `go mod`.
+Dependencies (`github.com/marcboeker/go-duckdb`, `gonum.org/v1/gonum`, `github.com/BurntSushi/toml`, `github.com/yuin/gopher-lua`, and the Wails runtime) are pulled via `go mod`.
+
+### Building from a fresh clone
+
+`go build ./...` fails on a clean checkout with:
+
+```
+pattern all:frontend/dist: no matching files found
+```
+
+This is expected. `ui/main.go` embeds `frontend/dist`, which is a build output ignored by `ui/.gitignore`, so the frontend has to be built before the Go build can embed it — normal for a Wails project. Either build the whole app:
+
+```bash
+wails build -tags webkit2_41   # the webkit tag is required on this setup
+```
+
+or just the frontend, if you only want `go build ./...` to succeed:
+
+```bash
+cd ui/frontend && npm install && npm run build
+```
+
+Do not "fix" this by committing `dist`. The engine itself needs no such step: `go build ./src/...` works on a bare clone.
 
 ## Long-history benchmark assets
 
@@ -61,40 +85,70 @@ python3 add_collections.py --only '$SP500' '$CASH'
 
 ## Configuration
 
-Define one `[[Portfolio]]` block per portfolio in `config.toml`. The runner will execute every strategy listed for every portfolio.
+Define one `[[portfolio]]` block per portfolio in `config.toml`. Each block names exactly one strategy; to compare strategies, write one block per strategy. Every portfolio runs as its own job.
 
 ```toml
-[[Portfolio]]
+[[portfolio]]
 Name        = "Tech Giants"
 BuyingPower = 20000.0
 StartDate   = "2015-03-31"   # YYYY-MM-DD
 EndDate     = "2025-03-31"
 Tickers     = ["AAPL", "MSFT", "GOOGL", "AMZN"]
-Strategies  = ["greedy"]      # "greedy" or "equalWeights"
+Strategy    = "greedy"
 
-[[Portfolio]]
-Name        = "Multi Strategy"
+[[portfolio]]
+Name        = "Momentum"
 BuyingPower = 25000.0
-StartDate   = "2023-01-01"
-EndDate     = "2023-03-31"
-Tickers     = ["MSFT", "GOOGL"]
-Strategies  = ["greedy", "equalWeights"]
+StartDate   = "2015-01-02"
+EndDate     = "2024-01-01"
+Tickers     = ["AAPL", "MSFT", "JNJ", "$CASH"]
+Strategy    = "lua:strategies/momentum_rotation.lua"
+
+  [portfolio.Params]
+  lookback       = 126
+  top_n          = 2
+  rebalance_days = 21
 ```
 
 Field reference:
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `Name` | string | Identifier shown in metric output and `worthy_tickers.txt`. |
+| `Name` | string | Identifier shown in metric output and results files. |
 | `BuyingPower` | float | Starting cash. |
-| `StartDate` / `EndDate` | string | `YYYY-MM-DD`. |
+| `StartDate` / `EndDate` | string | `YYYY-MM-DD`. Both must be fully covered by every ticker's data or the run is rejected with an error naming the offending ticker and its real range. |
 | `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. |
-| `Strategies` | []string | Allocation modes consumed by `BuyAndHold`. Each runs as a separate job. |
+| `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
+| `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. |
 
-Built-in allocation modes (selected via the `Strategies` list):
+Strategy specs:
 
-- `greedy` — pour all available buying power into each ticker in order.
-- `equalWeights` — split buying power evenly across the portfolio's tickers.
+| Spec | Meaning |
+| --- | --- |
+| `greedy` | Pour all available buying power into each ticker in order. |
+| `equalWeights` | Split buying power evenly across the portfolio's tickers. |
+| `buyAndHold:<greedy\|equalWeights>` | The explicit form of the two above. |
+| `smaCross:<short>:<long>:<buyType>` | Built-in moving-average crossover. |
+| `lua:<path>` | Run a Lua strategy file, e.g. `lua:strategies/sma_cross.lua`. |
+
+Note that config loading does no validation of its own: an omitted key simply zero-values, and the error surfaces later — a bad date or an unknown strategy spec fails in `ToPortfolio`, an uncovered date range in the runner's coverage check.
+
+### `[Output]`
+
+An optional block that writes results to a file. Omit it and results are returned in memory only (the UI's path).
+
+```toml
+[Output]
+path    = "results.csv"
+format  = "csv"                              # "txt" (default), "csv", "json"
+fields  = ["PortfolioName", "SharpeRatio"]   # emitted in this order
+filter  = "SharpeRatio > 0.5 && AnnualReturn > 5"
+sort_by = "SharpeRatio"
+order   = "desc"                             # "asc" or "desc" (default)
+limit   = 20                                 # 0 means unlimited
+```
+
+`filter` is a Go-style boolean expression over the same field names as `fields`.
 
 ## Running
 
@@ -102,8 +156,9 @@ The binary expects to be launched from `src/` because it resolves `../stock_data
 
 ```bash
 cd src
-go run main.go              # quiet run; logs are discarded
-go run main.go -debug       # writes backtester.log + transactions.log, and serves pprof on :6060
+go run main.go                          # quiet run; logs are discarded
+go run main.go -debug                   # writes backtester.log + transactions.log, and serves pprof on :6060
+go run main.go -config ../strategy_library.toml
 ```
 
 To build a binary:
@@ -112,6 +167,13 @@ To build a binary:
 cd src
 go build -o backtester
 ./backtester -debug
+```
+
+### Desktop UI
+
+```bash
+wails dev -tags webkit2_41              # live-reloading development build
+wails build -tags webkit2_41 && cp build/bin/ui ui/ui
 ```
 
 ## AI assistant (UI) — Claude or local Ollama models
@@ -157,7 +219,7 @@ ones skip when no server is running).
 
 - **stdout / `backtester.log`** — query timings, debug info, and per-portfolio metrics when `PrintMetrics` is invoked.
 - **`transactions.log`** (debug only) — every `BUY` / `SELL` and the day's percentage change.
-- **`worthy_tickers.txt`** — one line per `(portfolio, strategy)` whose annualized Sharpe ratio exceeds 0.5, with Sharpe / Sortino / Max Drawdown / Annual Return.
+- **the `[Output]` file** — one record per portfolio in txt, csv, or json, honouring `filter`, `fields`, `sort_by`, `order`, and `limit`. Without an `[Output]` block nothing is written to disk.
 - **pprof** (debug only) — `http://localhost:6060/debug/pprof/` for CPU and heap profiling.
 
 Reported metrics per run:
@@ -170,9 +232,19 @@ Reported metrics per run:
 
 ## Adding a strategy
 
-1. Add a new method on `*Portfolio` in `src/backtest/strategy.go` that walks `historicalData` day-by-day, calls `Buy` / `Sell`, and finishes each day with `AdjustPortfolioParameters` so daily returns and close values are recorded.
-2. Either extend `BuyAndHold` to dispatch on `strategyType`, or wire the new strategy into the worker loop in `src/backtest/runner.go` (currently hard-coded to `BuyAndHold`).
-3. Add the strategy name to a portfolio's `Strategies` list in `config.toml`.
+Lua is the intended route — no rebuild, and the engine handles the day loop.
+
+1. Copy a file from `strategies/` and edit it. A strategy is one global `step(day)` function, called once per trading day with `day` counting from 0; the engine provides `price()`, `sma()`, `rsi()`, `cash()`, `position()`, `buy()`, `buy_max()`, `sell()`, `sell_all()`, and the `tickers` / `params` globals. Full API, patterns, and gotchas: [`strategies/README.md`](strategies/README.md).
+2. Point a portfolio at it with `Strategy = "lua:strategies/your_file.lua"` and pass any settings in a `[portfolio.Params]` block.
+3. Add it to `shippedStrategies()` in `src/backtest/strategies_library_test.go`, which runs every shipped strategy against synthetic data and fails if it errors, overspends, or never trades.
+
+The Go path is the lower-level alternative — worth it only for something that needs engine internals or has to be fast enough to matter in a large sweep:
+
+1. Implement the `Strategy` interface (`Name()` and `Step(p, hist, day)`) in `src/backtest/strategy.go`, as `BuyAndHold` and `SMACross` do. `Step` calls `Buy` / `Sell`; the runner's day loop takes care of `AdjustPortfolioParameters` and the metrics.
+2. Add a case for its spec string to `NewStrategy`. The runner is not hard-coded to any strategy — it builds whatever `NewStrategy` returns for the portfolio's `Strategy` field, so nothing in `runner.go` needs to change.
+3. Set `Strategy = "<your spec>"` on a portfolio in `config.toml`.
+
+Per-strategy state lives on the implementing struct, so a `Strategy` instance is single-use; the runner clones the portfolio (rebuilding the strategy from its spec) for each pass.
 
 ## Project layout
 
@@ -181,14 +253,32 @@ Reported metrics per run:
 ├── config.toml              # portfolio definitions consumed at runtime
 ├── stock_data.db            # DuckDB file (OHLCV + risk-free rates)
 ├── go.mod / go.sum
-└── src/
-    ├── main.go              # entry point
-    ├── backtest/
-    │   ├── config.go        # TOML loading + Portfolio construction
-    │   ├── portfolio.go     # Portfolio / Position state and trade execution
-    │   ├── runner.go        # worker pool, data prefetch, result collection
-    │   ├── strategy.go      # BuyAndHold, SMACross, RSI helpers
-    │   └── metrics.go       # Sharpe, Sortino, drawdown, CAGR
-    └── data/
-        └── database.go      # DuckDB queries
+├── *.py                     # data loaders (add_collections, fetch_history,
+│                            #   add_ticker, update_treasury_yields, …)
+├── strategies/              # Lua strategy library + its API reference
+│   ├── README.md
+│   └── *.lua
+├── src/
+│   ├── main.go              # CLI entry point
+│   ├── backtest/
+│   │   ├── config.go        # TOML loading + Portfolio construction
+│   │   ├── portfolio.go     # Portfolio / Position state and trade execution
+│   │   ├── runner.go        # worker pool, data prefetch, result collection
+│   │   ├── strategy.go      # Strategy interface, NewStrategy, BuyAndHold,
+│   │   │                    #   SMACross, SMA/RSI helpers
+│   │   ├── strategy_lua.go  # Lua strategy host and API surface
+│   │   ├── metrics.go       # Sharpe, Sortino, drawdown, CAGR
+│   │   ├── reporter.go      # txt/csv/json output, filtering and sorting
+│   │   └── correlation.go   # cross-asset correlation
+│   └── data/
+│       └── database.go      # DuckDB queries and read-only RunQuery
+└── ui/                      # Wails desktop app
+    ├── app.go               # bound methods (run backtests, load/save configs)
+    ├── chat.go              # assistant prompt, tools, dispatch
+    ├── claude.go            # streaming Anthropic client
+    ├── ollama.go            # streaming Ollama client
+    ├── query.go             # SQL console backend
+    ├── quote.go / fetch.go / screen.go
+    └── frontend/src/        # React: App, ChatPanel, QueryConsole,
+                             #   ResultsView, SimpleForm
 ```
