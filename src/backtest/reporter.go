@@ -46,6 +46,12 @@ var resultFields = []string{
 	"AvgCorrelation",
 	"CointegratedPairs",
 	"Turnover",
+	"Alpha",
+	"Beta",
+	"TrackingError",
+	"InformationRatio",
+	"UpCapture",
+	"DownCapture",
 	"InitialCapital",
 	"FinalValue",
 	"Profit",
@@ -73,6 +79,18 @@ func resultValue(r Result, name string) (any, bool) {
 		return float64(r.Metrics.CointegratedPairs), true
 	case "Turnover":
 		return r.Metrics.Turnover, true
+	case "Alpha":
+		return r.Metrics.Alpha, true
+	case "Beta":
+		return r.Metrics.Beta, true
+	case "TrackingError":
+		return r.Metrics.TrackingError, true
+	case "InformationRatio":
+		return r.Metrics.InformationRatio, true
+	case "UpCapture":
+		return r.Metrics.UpCapture, true
+	case "DownCapture":
+		return r.Metrics.DownCapture, true
 	case "InitialCapital":
 		return r.InitialCapital, true
 	case "FinalValue":

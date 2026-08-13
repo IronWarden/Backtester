@@ -38,6 +38,12 @@ type RunResult struct {
 	AvgCorrelation    float64 `json:"avgCorrelation"`
 	CointegratedPairs int     `json:"cointegratedPairs"`
 	Turnover          float64 `json:"turnover"`
+	Alpha             float64 `json:"alpha"`
+	Beta              float64 `json:"beta"`
+	TrackingError     float64 `json:"trackingError"`
+	InformationRatio  float64 `json:"informationRatio"`
+	UpCapture         float64 `json:"upCapture"`
+	DownCapture       float64 `json:"downCapture"`
 	// InitialCapital is the starting cash and FinalValue the ending worth, so
 	// the frontend can show the profit in dollars alongside the percentages.
 	InitialCapital float64 `json:"initialCapital"`
@@ -79,6 +85,12 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			AvgCorrelation:    r.Metrics.AvgCorrelation,
 			CointegratedPairs: r.Metrics.CointegratedPairs,
 			Turnover:          r.Metrics.Turnover,
+			Alpha:             r.Metrics.Alpha,
+			Beta:              r.Metrics.Beta,
+			TrackingError:     r.Metrics.TrackingError,
+			InformationRatio:  r.Metrics.InformationRatio,
+			UpCapture:         r.Metrics.UpCapture,
+			DownCapture:       r.Metrics.DownCapture,
 			InitialCapital:    r.InitialCapital,
 			FinalValue:        r.FinalValue,
 			EquityCurve:       r.EquityCurve,

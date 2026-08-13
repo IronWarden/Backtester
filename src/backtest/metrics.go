@@ -1,8 +1,10 @@
 package backtest
 
 import (
+	"log"
 	"math"
 	"my-backtester/src/data"
+	"time"
 
 	"gonum.org/v1/gonum/stat"
 )
@@ -209,6 +211,100 @@ func GetUpCapture(portfolio, benchmark []float64) float64 {
 // which is the desirable direction — unlike up-capture, lower is better.
 func GetDownCapture(portfolio, benchmark []float64) float64 {
 	return capture(portfolio, benchmark, false)
+}
+
+// benchmarkReturns aligns a benchmark's bars onto the portfolio's own
+// trading days and returns the day-over-day returns for days 1..n-1, so the
+// result lines up 1:1 with the portfolio's DailyReturns.
+//
+// ok is false when the benchmark does not cover every one of those days, or
+// when a day's previous close is not positive. A partial series is worse
+// than none here: metrics computed over a benchmark that silently skipped
+// the days it was missing would be quietly wrong rather than absent.
+func benchmarkReturns(
+	bars []data.AssetData, dates []time.Time,
+) ([]float64, bool) {
+	if len(dates) < 2 || len(bars) == 0 {
+		return nil, false
+	}
+	byDate := make(map[int64]float64, len(bars))
+	for _, b := range bars {
+		byDate[b.Date.Unix()] = b.Close
+	}
+	returns := make([]float64, len(dates)-1)
+	for i := 1; i < len(dates); i++ {
+		prev, okPrev := byDate[dates[i-1].Unix()]
+		curr, okCurr := byDate[dates[i].Unix()]
+		if !okPrev || !okCurr || prev <= 0 {
+			return nil, false
+		}
+		returns[i-1] = (curr - prev) / prev
+	}
+	return returns, true
+}
+
+// applyBenchmarkMetrics fills in the benchmark-relative fields of p.Metrics.
+// It is a no-op for a portfolio with no Benchmark configured, and logs and
+// leaves the fields zeroed when the benchmark's data does not cover the
+// simulated window — an uncoverable benchmark must never fail a backtest
+// that would otherwise succeed.
+//
+// Beta and alpha are computed on returns excess of the risk-free rate, as
+// CAPM defines them. Tracking error, information ratio and the capture
+// ratios are computed on raw returns, which is how those are conventionally
+// quoted.
+func (p *Portfolio) applyBenchmarkMetrics(
+	hist map[string][]data.AssetData,
+	dates []time.Time,
+	riskFreeRates map[int64]float64,
+) {
+	if p.Benchmark == "" {
+		return
+	}
+	bars, ok := hist[p.Benchmark]
+	if !ok || len(bars) == 0 {
+		log.Printf(
+			"portfolio %q: benchmark %q has no data; skipping benchmark metrics",
+			p.Pname, p.Benchmark,
+		)
+		return
+	}
+	benchmark, ok := benchmarkReturns(bars, dates)
+	if !ok {
+		log.Printf(
+			"portfolio %q: benchmark %q does not cover every trading day in "+
+				"the window; skipping benchmark metrics",
+			p.Pname, p.Benchmark,
+		)
+		return
+	}
+
+	portfolio := make([]float64, len(p.DailyReturns))
+	portfolioExcess := make([]float64, len(p.DailyReturns))
+	benchmarkExcess := make([]float64, 0, len(benchmark))
+	for i, dr := range p.DailyReturns {
+		portfolio[i] = dr.Return
+		rf := riskFreeRates[dr.Date.Unix()]
+		portfolioExcess[i] = dr.Return - rf
+		if i < len(benchmark) {
+			benchmarkExcess = append(benchmarkExcess, benchmark[i]-rf)
+		}
+	}
+	if len(portfolio) != len(benchmark) {
+		log.Printf(
+			"portfolio %q: benchmark %q produced %d returns against the "+
+				"portfolio's %d; skipping benchmark metrics",
+			p.Pname, p.Benchmark, len(benchmark), len(portfolio),
+		)
+		return
+	}
+
+	p.Metrics.Beta = GetBeta(portfolioExcess, benchmarkExcess)
+	p.Metrics.Alpha = GetAlpha(portfolioExcess, benchmarkExcess)
+	p.Metrics.TrackingError = GetTrackingError(portfolio, benchmark)
+	p.Metrics.InformationRatio = GetInformationRatio(portfolio, benchmark)
+	p.Metrics.UpCapture = GetUpCapture(portfolio, benchmark)
+	p.Metrics.DownCapture = GetDownCapture(portfolio, benchmark)
 }
 
 // GetSortinoRatio annualizes mean excess return divided by the downside

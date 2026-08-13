@@ -146,6 +146,15 @@ func runOne(
 		prev = curr
 	}
 	p.GetBacktestingData(riskFreeRates, windowed, dataLen)
+	// The benchmark is scored against the portfolio's own trading days, taken
+	// from the aligned window. It is read from the unaligned prefetch, never
+	// from windowed, because it is not one of p.Tickers and must not become
+	// one — that slice is what drives allocation and valuation.
+	dates := make([]time.Time, dataLen)
+	for i, bar := range windowed[p.Tickers[0]] {
+		dates[i] = bar.Date
+	}
+	p.applyBenchmarkMetrics(hist, dates, riskFreeRates)
 	if c, ok := p.Strategy.(interface{ Close() }); ok {
 		c.Close()
 	}
@@ -235,6 +244,12 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 	for _, p := range portfolios {
 		for _, ticker := range p.Tickers {
 			allTickersMap[ticker] = true
+		}
+		// Benchmarks are fetched alongside the holdings but are not holdings:
+		// this is the only place they enter the run, and they never reach
+		// p.Tickers.
+		if p.Benchmark != "" {
+			allTickersMap[p.Benchmark] = true
 		}
 	}
 	allTickers := make([]string, 0, len(allTickersMap))
