@@ -584,3 +584,70 @@ func TestDonchianEntersOnTheBreakAndExitsOnTheBreakdown(t *testing.T) {
 	// Both sides of the round trip count toward traded notional.
 	almost(t, "traded notional", p.tradedNotional, exactCash+exactCash*80.0/120.0)
 }
+
+// A sweep must produce genuinely different runs, not N copies of one. On a
+// path that declines and then recovers, a short-lookback RSI sees the dip and
+// buys; a lookback longer than the whole window never has enough history to
+// act at all. So the two runs must differ in the direction the parameter
+// implies: one holds shares, the other never trades.
+func TestSweepProducesGenuinelyDifferentRuns(t *testing.T) {
+	closes := []float64{100, 90, 80, 70, 60, 90, 120}
+	cfg := &PortfolioConfig{
+		Name:        "rsi",
+		BuyingPower: exactCash,
+		StartTime:   exactEpoch.Format("2006-01-02"),
+		EndTime:     exactEpoch.AddDate(0, 0, len(closes)).Format("2006-01-02"),
+		Tickers:     []string{"AAA"},
+		Strategy:    "lua:" + filepath.Join(strategiesDir(t), "rsi.lua"),
+		Sweep: map[string]any{
+			// 2 acts on day 3; 99 exceeds the window, so step returns early
+			// every day and the portfolio never trades.
+			"period": []any{int64(2), int64(99)},
+		},
+	}
+	portfolios, err := cfg.ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	if len(portfolios) != 2 {
+		t.Fatalf("sweep gave %d runs, want 2", len(portfolios))
+	}
+
+	hist := histFrom(map[string][]float64{"AAA": closes})
+	byName := map[string]*Portfolio{}
+	for _, p := range portfolios {
+		runOne(p, hist, map[int64]float64{})
+		byName[p.Pname] = p
+	}
+
+	short, ok := byName["rsi [period=2]"]
+	if !ok {
+		t.Fatalf("missing the short-lookback run; got %v", byName)
+	}
+	long, ok := byName["rsi [period=99]"]
+	if !ok {
+		t.Fatalf("missing the long-lookback run; got %v", byName)
+	}
+
+	// The short lookback buys the dip at day 3's close of 70, then exits when
+	// the recovery drives RSI back above the overbought threshold, filling at
+	// day 5's close of 90. It ends flat, holding the proceeds in cash.
+	almost(t, "short-lookback shares", shares(short, "AAA"), 0)
+	almost(t, "short-lookback cash", short.BuyingPower, exactCash/70.0*90.0)
+	almost(t, "short-lookback final value", finalValue(t, short),
+		exactCash/70.0*90.0)
+	// Both sides of the round trip, which pins the entry and exit prices.
+	almost(t, "short-lookback traded notional", short.tradedNotional,
+		exactCash+exactCash/70.0*90.0)
+
+	// The long lookback never gets enough history, so it holds cash and ends
+	// worth exactly what it started with.
+	almost(t, "long-lookback shares", shares(long, "AAA"), 0)
+	almost(t, "long-lookback final value", finalValue(t, long), exactCash)
+
+	// Which is the whole point: same block, different numbers.
+	if short.Metrics.AnnualReturn <= long.Metrics.AnnualReturn {
+		t.Errorf("swept runs did not differ: %.4f vs %.4f",
+			short.Metrics.AnnualReturn, long.Metrics.AnnualReturn)
+	}
+}

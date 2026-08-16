@@ -405,11 +405,13 @@ func RunFromConfigText(cfgText, dbPath, defaultLuaPath string) ([]Result, error)
 			}
 			pc.Strategy = "lua:" + defaultLuaPath
 		}
-		p, err := pc.ToPortfolio()
+		// ToPortfolios, not ToPortfolio: one block expands to many when it
+		// carries a Sweep, and to exactly one when it does not.
+		expanded, err := pc.ToPortfolios()
 		if err != nil {
 			return nil, fmt.Errorf("portfolio %q: %w", pc.Name, err)
 		}
-		portfolios = append(portfolios, p)
+		portfolios = append(portfolios, expanded...)
 	}
 	if len(portfolios) == 0 {
 		return nil, fmt.Errorf("config defines no portfolios")

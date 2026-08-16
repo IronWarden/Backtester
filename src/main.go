@@ -61,16 +61,17 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Convert config to portfolios
+	// Convert config to portfolios. One block expands to several when it
+	// carries a Sweep, and to exactly one when it does not.
 	portfolios := make([]*backtest.Portfolio, 0, len(config.Portfolios))
 	for _, pc := range config.Portfolios {
-		portfolio, err := pc.ToPortfolio()
+		expanded, err := pc.ToPortfolios()
 		if err != nil {
 			log.Fatalf(
 				"Failed to convert portfolio %s: %v", pc.Name, err,
 			)
 		}
-		portfolios = append(portfolios, portfolio)
+		portfolios = append(portfolios, expanded...)
 	}
 
 	if _, err := backtest.Run(portfolios, config.Output); err != nil {

@@ -210,6 +210,57 @@ six metrics are left at zero, the curve and stats are left empty, and a line
 is logged. The backtest itself still runs — a benchmark is a measurement, and
 a missing one is not a reason to lose the result.
 
+### `[portfolio.Sweep]`
+
+Turns one portfolio block into many runs. Every key maps to a **list**, and
+the block expands to the cartesian product of them:
+
+```toml
+[[Portfolio]]
+Name        = "RSI"
+BuyingPower = 10000.0
+StartDate   = "2015-01-01"
+EndDate     = "2025-01-01"
+Tickers     = ["AAPL"]
+Strategy    = "lua:strategies/rsi.lua"
+[Portfolio.Params]
+  period     = 14        # base values
+  buy_thresh = 30
+[Portfolio.Sweep]
+  period     = [7, 14, 21]
+  buy_thresh = [20, 30]
+```
+
+That is 3 × 2 = 6 backtests, executed concurrently by the same worker pool
+that runs multiple portfolios. Each takes `Params` with its own sweep values
+written over the top, so a swept key overrides its base value and an unswept
+key is inherited. Runs are named for their parameters — `RSI [buy_thresh=20
+period=7]` — since the name is the only place the parameter set reaches the
+results table and `[Output]`.
+
+Expansion order is deterministic (keys sorted, values in written order), so
+the same config always produces the same runs in the same sequence and two
+runs can be diffed. The product is capped at 1000 runs; an oversized sweep is
+rejected with an error naming the count rather than started.
+
+Omit the block and the portfolio is exactly one run with exactly `Params`,
+identical to every config written before sweeps existed.
+
+Pair it with `[Output]` to rank the results:
+
+```toml
+[Output]
+sort_by = "SharpeRatio"
+order   = "desc"
+limit   = 10
+```
+
+> **A sweep makes overfitting easy.** Two hundred parameter combinations over
+> one window will always yield a flattering best-of-N: that winner was chosen
+> using the same data it is being scored on. Treat a swept result as a
+> hypothesis, and confirm it on a period it was not selected on before
+> believing it.
+
 ### `[Output]`
 
 An optional block that writes results to a file. Omit it and results are returned in memory only (the UI's path).

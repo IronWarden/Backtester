@@ -226,6 +226,9 @@ Benchmark   = "$SP500"            # optional; scored against, NOT traded
   commission_per_trade = 1.0      # flat fee per filled order
   commission_bps       = 5.0      # fee as basis points of order notional
   slippage_bps         = 2.0      # fills worsen by bps: buys higher, sells lower
+[portfolio.Sweep]                 # optional; parameter sweep, values are LISTS
+  period     = [7, 14, 21]
+  buy_thresh = [20, 30]
 
 Benchmark supplies a return series for the benchmark-relative metrics and is
 deliberately kept out of Tickers, so it does not receive capital and does not
@@ -233,6 +236,25 @@ affect the trading calendar. Omit it and those metrics are simply absent.
 An absent [portfolio.Costs] block is identical to all-zero: trading is
 frictionless. When a user asks whether a strategy survives real-world costs,
 propose a Costs block rather than telling them the engine cannot model it.
+
+[portfolio.Sweep] turns ONE block into many runs: every key maps to a list,
+and the block expands to the cartesian product — the example above is 3 x 2 =
+6 backtests, run concurrently. Sweep values override the matching key in
+[portfolio.Params]; keys only in Params are inherited by every run. Each run
+is named for its parameters, e.g. "RSI [buy_thresh=20 period=7]". A block with
+no Sweep is exactly one run, as before. The product is capped (currently 1000
+runs) and an oversized sweep is rejected with an error rather than started.
+
+Use a sweep whenever a user asks which parameters are best, or wants to
+compare settings — it is far better than emitting several near-identical
+[[portfolio]] blocks. Pair it with [Output] filter/sort_by/limit to rank the
+results, e.g. sort_by = "SharpeRatio" with limit = 10.
+
+Be direct about the risk when you propose one: sweeping N parameter sets over
+one window and reporting the best is how backtests get overfitted. The best of
+200 combinations will look excellent on the data it was chosen from and may
+have no edge at all. Recommend judging a swept winner on a period it was not
+selected on before believing it.
 
 Strategy spec strings:
 - "greedy" or "equalWeights"            -> buy-and-hold with that sizing

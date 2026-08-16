@@ -1,8 +1,11 @@
 package backtest
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -394,5 +397,319 @@ func TestToPortfolioRejectsBadFields(t *testing.T) {
 				t.Errorf("got a portfolio alongside the error: %+v", p)
 			}
 		})
+	}
+}
+
+// --- parameter sweeps -------------------------------------------------------
+
+// sweepCfg is a minimal, valid portfolio config to hang a Sweep block on.
+func sweepCfg(params map[string]any, sweep map[string]any) *PortfolioConfig {
+	return &PortfolioConfig{
+		Name:        "RSI",
+		BuyingPower: 10_000,
+		StartTime:   "2020-01-01",
+		EndTime:     "2020-12-31",
+		Tickers:     []string{"AAA"},
+		Strategy:    "buyAndHold:equalWeights",
+		Params:      params,
+		Sweep:       sweep,
+	}
+}
+
+// paramSets pulls the expanded Params out of a set of portfolios, so a test
+// can assert the whole product rather than just its size — a count-only
+// assertion passes for a sweep that produces six copies of one combination.
+func paramSets(ps []*Portfolio) []map[string]any {
+	out := make([]map[string]any, len(ps))
+	for i, p := range ps {
+		out[i] = p.StrategyParams
+	}
+	return out
+}
+
+func TestSweepExpandsToTheFullCartesianProduct(t *testing.T) {
+	cfg := sweepCfg(
+		map[string]any{"period": int64(14), "buy_thresh": int64(30)},
+		map[string]any{
+			"period":     []any{int64(7), int64(14), int64(21)},
+			"buy_thresh": []any{int64(20), int64(30)},
+		},
+	)
+	got, err := cfg.ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	if len(got) != 6 {
+		t.Fatalf("expanded to %d portfolios, want 3x2=6", len(got))
+	}
+
+	// Every combination appears exactly once.
+	seen := map[string]int{}
+	for _, ps := range paramSets(got) {
+		seen[fmt.Sprintf("%v/%v", ps["period"], ps["buy_thresh"])]++
+	}
+	for _, period := range []int64{7, 14, 21} {
+		for _, thresh := range []int64{20, 30} {
+			key := fmt.Sprintf("%d/%d", period, thresh)
+			if seen[key] != 1 {
+				t.Errorf("combination %s appeared %d times, want exactly 1",
+					key, seen[key])
+			}
+		}
+	}
+}
+
+// A swept key replaces its base value; a key that is only in Params must
+// survive into every run untouched.
+func TestSweepOverridesParamsAndInheritsTheRest(t *testing.T) {
+	cfg := sweepCfg(
+		map[string]any{"period": int64(14), "buyType": "greedy"},
+		map[string]any{"period": []any{int64(7), int64(21)}},
+	)
+	got, err := cfg.ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	for i, ps := range paramSets(got) {
+		if ps["buyType"] != "greedy" {
+			t.Errorf("run %d lost the unswept base key: buyType = %v", i, ps["buyType"])
+		}
+		if ps["period"] == int64(14) {
+			t.Errorf("run %d kept the base period; the sweep should override it", i)
+		}
+	}
+
+	// The base map itself must not have been written through.
+	if cfg.Params["period"] != int64(14) {
+		t.Errorf("expansion mutated the shared base Params: period = %v",
+			cfg.Params["period"])
+	}
+}
+
+// Expansion order must be stable, or two runs of the same config cannot be
+// diffed against each other — which is most of what a sweep is for.
+func TestSweepOrderIsDeterministic(t *testing.T) {
+	cfg := sweepCfg(nil, map[string]any{
+		"zeta":  []any{int64(1), int64(2)},
+		"alpha": []any{"a", "b"},
+		"mid":   []any{true, false},
+	})
+	var first []string
+	for attempt := 0; attempt < 8; attempt++ {
+		got, err := cfg.ToPortfolios()
+		if err != nil {
+			t.Fatalf("ToPortfolios: %v", err)
+		}
+		names := make([]string, len(got))
+		for i, p := range got {
+			names[i] = p.Pname
+		}
+		if attempt == 0 {
+			first = names
+			continue
+		}
+		for i := range names {
+			if names[i] != first[i] {
+				t.Fatalf("expansion %d differs at %d: %q vs %q",
+					attempt, i, names[i], first[i])
+			}
+		}
+	}
+	// Pin the whole sequence, not just its first entry. Keys are visited in
+	// sorted order (alpha, mid, zeta) and the odometer advances the LAST key
+	// fastest, so runs sharing a prefix stay adjacent. Asserting only the
+	// first name would pass even with the key order reversed, since the
+	// leading combination takes index 0 of every list either way.
+	want := []string{
+		"RSI [alpha=a mid=true zeta=1]",
+		"RSI [alpha=a mid=true zeta=2]",
+		"RSI [alpha=a mid=false zeta=1]",
+		"RSI [alpha=a mid=false zeta=2]",
+		"RSI [alpha=b mid=true zeta=1]",
+		"RSI [alpha=b mid=true zeta=2]",
+		"RSI [alpha=b mid=false zeta=1]",
+		"RSI [alpha=b mid=false zeta=2]",
+	}
+	if !reflect.DeepEqual(first, want) {
+		t.Errorf("expansion order:\n got %v\nwant %v", first, want)
+	}
+}
+
+// Six rows all called "RSI" is an unreadable results table, and the name is
+// the only place the parameter set reaches [Output].
+func TestSweepNamesAreUniqueAndCarryTheParameters(t *testing.T) {
+	cfg := sweepCfg(nil, map[string]any{
+		"period": []any{int64(7), int64(21)},
+		"k":      []any{2.5},
+	})
+	got, err := cfg.ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	names := map[string]bool{}
+	for _, p := range got {
+		if names[p.Pname] {
+			t.Errorf("duplicate portfolio name %q", p.Pname)
+		}
+		names[p.Pname] = true
+	}
+	for _, want := range []string{"RSI [k=2.5 period=7]", "RSI [k=2.5 period=21]"} {
+		if !names[want] {
+			t.Errorf("missing expected name %q; got %v", want, names)
+		}
+	}
+}
+
+// The regression guard for every config written before sweeps existed.
+func TestNoSweepIsExactlyOnePortfolioWithTheBaseParams(t *testing.T) {
+	base := map[string]any{"period": int64(14), "buyType": "greedy"}
+	cfg := sweepCfg(base, nil)
+
+	got, err := cfg.ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expanded to %d portfolios, want exactly 1", len(got))
+	}
+	if got[0].Pname != "RSI" {
+		t.Errorf("name = %q, want the unchanged %q", got[0].Pname, "RSI")
+	}
+	if !reflect.DeepEqual(got[0].StrategyParams, base) {
+		t.Errorf("Params = %v, want the base map %v", got[0].StrategyParams, base)
+	}
+
+	// An empty (but present) block must behave the same as an absent one.
+	empty, err := sweepCfg(base, map[string]any{}).ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios (empty sweep): %v", err)
+	}
+	if len(empty) != 1 || empty[0].Pname != "RSI" {
+		t.Errorf("empty sweep gave %d portfolios named %q, want 1 named RSI",
+			len(empty), empty[0].Pname)
+	}
+}
+
+func TestSweepRejectsBadBlocks(t *testing.T) {
+	cases := []struct {
+		name  string
+		sweep map[string]any
+		want  string
+	}{
+		{
+			name:  "scalar instead of a list",
+			sweep: map[string]any{"period": int64(14)},
+			want:  "must be a list",
+		},
+		{
+			name:  "empty list",
+			sweep: map[string]any{"period": []any{}},
+			want:  "empty list",
+		},
+		{
+			// 11 keys of 2 values is 2048, over the 1000 cap.
+			name: "product over the cap",
+			sweep: func() map[string]any {
+				s := map[string]any{}
+				for i := 0; i < 11; i++ {
+					s[fmt.Sprintf("k%02d", i)] = []any{int64(1), int64(2)}
+				}
+				return s
+			}(),
+			want: "more than 1000 runs",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := sweepCfg(nil, tc.sweep).ToPortfolios()
+			if err == nil {
+				t.Fatal("expected an error, got none")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// The cap must reject before building, not after: a 1000-run refusal that
+// first allocates the product is the hang it exists to prevent.
+func TestSweepCapRejectsWithoutBuildingTheProduct(t *testing.T) {
+	sweep := map[string]any{}
+	for i := 0; i < 20; i++ {
+		sweep[fmt.Sprintf("k%02d", i)] = []any{int64(1), int64(2), int64(3)}
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := sweepCfg(nil, sweep).ToPortfolios()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("3^20 combinations expanded without error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("expansion did not refuse promptly; the cap is checked too late")
+	}
+}
+
+// The TOML key name is a user-facing contract, exactly like Costs and
+// Benchmark: renaming the struct tag would silently stop honouring existing
+// configs rather than failing loudly.
+func TestLoadConfigSweep(t *testing.T) {
+	path := writeConfig(t, `
+[[Portfolio]]
+Name        = "RSI"
+BuyingPower = 10000.0
+StartDate   = "2020-01-01"
+EndDate     = "2020-12-31"
+Tickers     = ["AAA"]
+Strategy    = "buyAndHold:equalWeights"
+[Portfolio.Params]
+  period = 14
+[Portfolio.Sweep]
+  period     = [7, 14, 21]
+  buy_thresh = [20, 30]
+`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if len(cfg.Portfolios) != 1 {
+		t.Fatalf("decoded %d portfolios, want 1", len(cfg.Portfolios))
+	}
+	pc := cfg.Portfolios[0]
+	if len(pc.Sweep) != 2 {
+		t.Fatalf("Sweep decoded as %v, want 2 keys", pc.Sweep)
+	}
+	got, err := pc.ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	if len(got) != 6 {
+		t.Errorf("expanded to %d runs, want 6", len(got))
+	}
+}
+
+// A config with no Sweep block must decode to a nil Sweep, so the expansion
+// path is never entered for the configs that existed before this feature.
+func TestLoadConfigNoSweepBlock(t *testing.T) {
+	path := writeConfig(t, `
+[[Portfolio]]
+Name        = "plain"
+BuyingPower = 10000.0
+StartDate   = "2020-01-01"
+EndDate     = "2020-12-31"
+Tickers     = ["AAA"]
+Strategy    = "buyAndHold:equalWeights"
+`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Portfolios[0].Sweep != nil {
+		t.Errorf("Sweep = %v, want nil for a config that omits the block",
+			cfg.Portfolios[0].Sweep)
 	}
 }
