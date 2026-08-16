@@ -842,3 +842,134 @@ func TestSplitTooNarrowDegradesWithoutLosingTheRun(t *testing.T) {
 	almost(t, "final value", finalValue(t, p),
 		exactCash*closes[len(closes)-1]/closes[0])
 }
+
+// --- overfitting statistics, end to end -------------------------------------
+
+// A sweep must stamp every run with the size of the search it came from, so
+// the correction has something to work with.
+func TestSweepRecordsItsTrialCount(t *testing.T) {
+	cfg := sweepCfg(nil, map[string]any{
+		"period": []any{int64(7), int64(14), int64(21)},
+		"k":      []any{2.0, 3.0},
+	})
+	got, err := cfg.ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	for _, p := range got {
+		if p.Trials != 6 {
+			t.Errorf("%s: Trials = %d, want 6", p.Pname, p.Trials)
+		}
+		if p.TrialGroup != "RSI" {
+			t.Errorf("%s: TrialGroup = %q, want %q", p.Pname, p.TrialGroup, "RSI")
+		}
+	}
+
+	// An unswept block is one trial in a group of one, which is what makes
+	// the correction a no-op for every config written before this.
+	plain, err := sweepCfg(nil, nil).ToPortfolios()
+	if err != nil {
+		t.Fatalf("ToPortfolios: %v", err)
+	}
+	if plain[0].Trials != 1 {
+		t.Errorf("unswept Trials = %d, want 1", plain[0].Trials)
+	}
+}
+
+// Clone is what the runner actually simulates, so a trial count left behind
+// here would reach every result as zero.
+func TestCloneCarriesTrialsAndSplit(t *testing.T) {
+	p, err := InitializePortfolio(exactCash, exactEpoch,
+		exactEpoch.AddDate(0, 1, 0), "orig", []string{"AAA"},
+		"buyAndHold:equalWeights", nil)
+	if err != nil {
+		t.Fatalf("InitializePortfolio: %v", err)
+	}
+	p.Trials = 12
+	p.TrialGroup = "grp"
+	p.InSampleEnd = exactEpoch.AddDate(0, 0, 10)
+
+	clone, err := p.Clone()
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if clone.Trials != 12 || clone.TrialGroup != "grp" {
+		t.Errorf("Clone lost the trial count: %d/%q", clone.Trials, clone.TrialGroup)
+	}
+	if !clone.InSampleEnd.Equal(p.InSampleEnd) {
+		t.Errorf("Clone lost InSampleEnd: %v", clone.InSampleEnd)
+	}
+	// Per-run results must NOT survive a clone.
+	if len(clone.Splits) != 0 {
+		t.Errorf("Clone carried %d split segments", len(clone.Splits))
+	}
+}
+
+// applyOverfittingStats groups by the config block, so two unrelated sweeps
+// in one config must not deflate each other.
+func TestOverfittingStatsGroupPerConfigBlock(t *testing.T) {
+	mk := func(group string, trials int, sharpe float64) Result {
+		return Result{
+			PortfolioName:  group,
+			TrialGroup:     group,
+			Trials:         trials,
+			Metrics:        Metrics{SharpeRatio: sharpe},
+			EquityCurve:    make([]float64, 300),
+			returnSkew:     0,
+			returnKurtosis: 3,
+		}
+	}
+	results := []Result{
+		// A wide search: same trial count, wildly different outcomes, so luck
+		// had a lot of room and the bar should be high.
+		mk("wide", 100, 2.0), mk("wide", 100, 0.1), mk("wide", 100, -1.5),
+		// A tight search: same trial count, candidates that all behaved
+		// alike, so luck had almost none and the bar should be low. The two
+		// groups differ ONLY in spread, which is what makes this sensitive to
+		// the grouping — pooling them would hand the tight group the wide
+		// group's spread.
+		mk("tight", 100, 0.50), mk("tight", 100, 0.51), mk("tight", 100, 0.49),
+		// A single untried portfolio, which has no search to correct for.
+		mk("solo", 1, 2.0),
+	}
+	applyOverfittingStats(results)
+
+	var wideBar, tightBar, soloBar float64
+	var wideDeflated, soloDeflated float64
+	for _, r := range results {
+		switch {
+		case r.TrialGroup == "wide" && r.Metrics.SharpeRatio == 2.0:
+			wideBar, wideDeflated = r.ExpectedMaxSharpe, r.DeflatedSharpe
+		case r.TrialGroup == "tight" && r.Metrics.SharpeRatio == 0.50:
+			tightBar = r.ExpectedMaxSharpe
+		case r.TrialGroup == "solo":
+			soloBar, soloDeflated = r.ExpectedMaxSharpe, r.DeflatedSharpe
+		}
+	}
+
+	if soloBar != 0 {
+		t.Errorf("a single untried portfolio got a bar of %v, want 0", soloBar)
+	}
+	if wideBar <= 0 {
+		t.Errorf("a 100-trial search got a bar of %v, want a positive one", wideBar)
+	}
+	// The whole point of grouping: the tight sweep must be judged on its own
+	// spread, not on the wide sweep's.
+	if tightBar >= wideBar/10 {
+		t.Errorf("tight group's bar (%.4f) is not far below the wide "+
+			"group's (%.4f); the two sweeps are being pooled",
+			tightBar, wideBar)
+	}
+	// Same headline Sharpe, same series length: the only difference is how
+	// hard the search worked, so the searched one must score lower.
+	if wideDeflated >= soloDeflated {
+		t.Errorf("searched result (%.4f) scored no worse than the untried "+
+			"one (%.4f) at the same Sharpe", wideDeflated, soloDeflated)
+	}
+	for _, r := range results {
+		if r.DeflatedSharpe < 0 || r.DeflatedSharpe > 1 {
+			t.Errorf("%s: deflated Sharpe %v is not a probability",
+				r.PortfolioName, r.DeflatedSharpe)
+		}
+	}
+}

@@ -269,6 +269,26 @@ When you read results back to a user, the OUT-OF-SAMPLE segment is the honest
 one: the in-sample figure for a swept winner is the number that was optimised.
 Say so plainly rather than quoting the flattering half.
 
+## Overfitting statistics
+Every result also carries three fields that discount it by the size of the
+search that found it:
+- Trials: how many parameter sets the config block expanded to.
+- ExpectedMaxSharpe: the Sharpe the BEST of those trials would be expected to
+  show with no edge at all — the bar luck alone sets.
+- DeflatedSharpe: the probability, 0 to 1, that the result's true Sharpe beats
+  that bar. It is a CONFIDENCE, not a Sharpe. 0.95 survives the correction;
+  0.10 means the headline number is most likely selection bias.
+
+For scale: 200 pure random walks with zero expected return produce a
+best-of-N Sharpe of about 1.7, an ExpectedMaxSharpe of about 2.0, and a
+DeflatedSharpe of about 0.34. A high Sharpe from a big sweep is not evidence
+on its own, and you should say so.
+
+When a user asks you to rank sweep results, sort by DeflatedSharpe rather
+than SharpeRatio, and quote Trials alongside any headline Sharpe that came
+from a sweep. An unswept portfolio has 1 trial, a bar of 0, and no correction
+to apply.
+
 Strategy spec strings:
 - "greedy" or "equalWeights"            -> buy-and-hold with that sizing
 - "buyAndHold:<greedy|equalWeights>"    -> same, explicit form
@@ -285,7 +305,8 @@ sort_by, order ("asc"|"desc"), limit.
 Result fields usable in fields/filter/sort_by: PortfolioName, Strategy,
 SharpeRatio, SortinoRatio, MaxDrawdown, AnnualReturn, StandardDev,
 AvgCorrelation, CointegratedPairs, Turnover, Alpha, Beta, TrackingError,
-InformationRatio, UpCapture, DownCapture, InitialCapital, FinalValue, Profit.
+InformationRatio, UpCapture, DownCapture, InitialCapital, FinalValue, Profit,
+Trials, ExpectedMaxSharpe, DeflatedSharpe.
 
 ## Lua strategy API
 A strategy script must define a global function step(day). day is a

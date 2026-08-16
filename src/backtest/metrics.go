@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gonum.org/v1/gonum/stat"
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
 type Metrics struct {
@@ -614,4 +615,98 @@ func (p *Portfolio) applySplitMetrics(riskFreeRates map[int64]float64) {
 		segmentStats("out-of-sample",
 			p.DailyReturns[cut:], p.PortfolioCloseValues[cut:], excess[cut:]),
 	}
+}
+
+// --- overfitting statistics -------------------------------------------------
+//
+// Bailey & López de Prado, "The Deflated Sharpe Ratio: Correcting for
+// Selection Bias, Backtest Overfitting and Non-Normality" (Journal of
+// Portfolio Management, 2014). The point of both functions below is that the
+// best of N backtests is not the same thing as a good strategy: search hard
+// enough over a fixed window and something will look excellent by luck alone.
+//
+// Both take and return ANNUALIZED Sharpe ratios, matching every other figure
+// in this file, and de-annualize internally where the published formula needs
+// a per-period ratio.
+
+// eulerGamma is the Euler-Mascheroni constant, which appears in the
+// expected-maximum-of-N-normals approximation below.
+const eulerGamma = 0.5772156649015329
+
+// ExpectedMaxSharpe is the Sharpe the BEST of `trials` strategies would be
+// expected to show even if not one of them had any edge — the bar a swept
+// winner has to clear before it means anything.
+//
+// sharpeStdev is the spread of Sharpe ratios actually observed across the
+// trials: a sweep whose candidates all behave alike offers luck little room
+// to work, while a spread of wildly different Sharpes offers it a lot. Both
+// arguments describe the search, not the winner, which is why a single
+// untried strategy (trials < 2) has a bar of zero.
+func ExpectedMaxSharpe(trials int, sharpeStdev float64) float64 {
+	if trials < 2 || sharpeStdev <= 0 || math.IsNaN(sharpeStdev) {
+		return 0
+	}
+	n := float64(trials)
+	z := distuv.Normal{Mu: 0, Sigma: 1}
+	// E[max of n standard normals] ~= (1-γ)·Φ⁻¹(1 - 1/n) + γ·Φ⁻¹(1 - 1/(n·e))
+	expected := (1-eulerGamma)*z.Quantile(1-1/n) +
+		eulerGamma*z.Quantile(1-1/(n*math.E))
+	out := sharpeStdev * expected
+	if math.IsNaN(out) || math.IsInf(out, 0) {
+		return 0
+	}
+	return out
+}
+
+// GetDeflatedSharpe is the probability, in [0,1], that a strategy's true
+// Sharpe exceeds `benchmark` — given how many observations support it, how
+// non-normal its returns are, and (through the benchmark) how hard the search
+// that found it had to work.
+//
+// It is a CONFIDENCE, not a Sharpe: 0.95 means the result survives the
+// correction, 0.10 means the same headline Sharpe is most likely selection
+// bias. Read alongside ExpectedMaxSharpe, which is on the Sharpe scale.
+//
+// Returns 0 for series too short or too degenerate to say anything, in
+// keeping with the rest of this file: no metric may put a non-finite number
+// in the results table.
+func GetDeflatedSharpe(observed, benchmark float64, returns []float64) float64 {
+	return deflatedSharpeFromMoments(
+		observed, benchmark, len(returns),
+		stat.Skew(returns, nil),
+		// The formula uses raw kurtosis; gonum reports excess.
+		stat.ExKurtosis(returns, nil)+3.0,
+	)
+}
+
+// deflatedSharpeFromMoments is the core of GetDeflatedSharpe, taking the
+// return series' moments rather than the series itself. The runner needs this
+// form: it computes the correction after collecting every result, by which
+// point the raw returns are gone but their moments were captured.
+func deflatedSharpeFromMoments(
+	observed, benchmark float64, n int, skew, kurtosis float64,
+) float64 {
+	t := float64(n)
+	if t < 2 || math.IsNaN(skew) || math.IsNaN(kurtosis) {
+		return 0
+	}
+	const periods = 252.0
+	sr := observed / math.Sqrt(periods)
+	srBench := benchmark / math.Sqrt(periods)
+
+	// Variance of the Sharpe estimator under non-normal returns.
+	variance := 1 - skew*sr + (kurtosis-1)/4*sr*sr
+	if variance <= 0 || math.IsNaN(variance) {
+		return 0
+	}
+	z := (sr - srBench) * math.Sqrt(t-1) / math.Sqrt(variance)
+	if math.IsNaN(z) {
+		return 0
+	}
+	p := distuv.Normal{Mu: 0, Sigma: 1}.CDF(z)
+	if math.IsNaN(p) {
+		return 0
+	}
+	// Guard the tails against float noise pushing it outside [0,1].
+	return math.Min(1, math.Max(0, p))
 }

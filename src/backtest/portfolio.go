@@ -62,6 +62,14 @@ type Portfolio struct {
 	// the per-run result and Clone leaves it empty.
 	InSampleEnd time.Time
 	Splits      []SegmentStats
+	// Trials is how many parameter sets the config block this portfolio came
+	// from expanded to, and TrialGroup names that block. Together they let
+	// the runner discount a swept winner by the size of the search that found
+	// it — the best of 200 combinations is not the same thing as a good
+	// strategy. Both are configuration, so Clone carries them; a block with
+	// no Sweep is one trial in a group of one.
+	Trials     int
+	TrialGroup string
 }
 
 func InitializePortfolio(
@@ -119,6 +127,8 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		Costs:                p.Costs,
 		Benchmark:            p.Benchmark,
 		InSampleEnd:          p.InSampleEnd,
+		Trials:               p.Trials,
+		TrialGroup:           p.TrialGroup,
 	}, nil
 }
 

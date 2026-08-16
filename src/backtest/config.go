@@ -290,6 +290,10 @@ func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
 		if err != nil {
 			return nil, err
 		}
+		// An unswept block is one trial in a group of one, which is what
+		// makes the overfitting correction a no-op for it.
+		p.Trials = 1
+		p.TrialGroup = pc.Name
 		return []*Portfolio{p}, nil
 	}
 
@@ -302,6 +306,10 @@ func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", sweepLabel(combo), err)
 		}
+		// Every run from this block shares a group and knows how many
+		// candidates it was chosen from.
+		p.Trials = len(combos)
+		p.TrialGroup = pc.Name
 		portfolios = append(portfolios, p)
 	}
 	return portfolios, nil

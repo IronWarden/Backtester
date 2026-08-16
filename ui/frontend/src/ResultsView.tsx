@@ -330,6 +330,10 @@ export default function ResultsView({ results, fontSize }: Props) {
   const tipOnLeft = hover !== null && hover.px > width * 0.62;
 
   const benchmarked = hasBenchmark(results);
+  // Only meaningful when something was actually searched: a single untried
+  // portfolio has no selection bias to correct for, and showing a bar of 0.00
+  // next to it would imply otherwise.
+  const swept = results.some((r) => (r.trials ?? 0) > 1);
 
   // The benchmark's own figures, deduped by ticker exactly as the chart does,
   // so N portfolios sharing $SP500 contribute one row rather than N identical
@@ -568,6 +572,13 @@ export default function ResultsView({ results, fontSize }: Props) {
                 <th className="num">Turnover</th>
                 <th className="num">Avg Corr</th>
                 <th className="num">Coint Pairs</th>
+                {swept && (
+                  <>
+                    <th className="num">Trials</th>
+                    <th className="num">Luck bar</th>
+                    <th className="num">Confidence</th>
+                  </>
+                )}
                 {benchmarked && (
                   <>
                     <th className="num">Alpha %</th>
@@ -613,6 +624,20 @@ export default function ResultsView({ results, fontSize }: Props) {
                     <td className="num">{r.turnover.toFixed(2)}</td>
                     <td className="num">{r.avgCorrelation.toFixed(2)}</td>
                     <td className="num">{r.cointegratedPairs}</td>
+                    {swept && (
+                      <>
+                        <td className="num">{r.trials}</td>
+                        <td className="num">{r.expectedMaxSharpe.toFixed(2)}</td>
+                        {/* Confidence below 0.5 means the headline Sharpe is
+                            more likely selection bias than edge, so it is
+                            coloured as a negative rather than left neutral. */}
+                        <td
+                          className={`num ${r.deflatedSharpe < 0.5 ? "neg" : "pos"}`}
+                        >
+                          {r.deflatedSharpe.toFixed(2)}
+                        </td>
+                      </>
+                    )}
                     {benchmarked && (
                       <>
                         <td className="num">{r.alpha.toFixed(2)}</td>
@@ -658,6 +683,13 @@ export default function ResultsView({ results, fontSize }: Props) {
                   <td className="num">—</td>
                   <td className="num">—</td>
                   <td className="num">—</td>
+                  {swept && (
+                    <>
+                      <td className="num">—</td>
+                      <td className="num">—</td>
+                      <td className="num">—</td>
+                    </>
+                  )}
                   {benchmarked && (
                     <>
                       <td className="num">—</td>

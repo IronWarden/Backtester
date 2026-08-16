@@ -70,6 +70,13 @@ type RunResult struct {
 	// Splits holds the in-sample and out-of-sample segments of this run when
 	// [portfolio.Validation] is set, in-sample first, and is empty otherwise.
 	Splits []backtest.SegmentStats `json:"splits"`
+	// Trials is how many parameter sets the config block that produced this
+	// result expanded to. ExpectedMaxSharpe is the Sharpe the best of them
+	// would be expected to show with no edge at all, and DeflatedSharpe is
+	// the probability in [0,1] that this result beats that bar.
+	Trials            int     `json:"trials"`
+	ExpectedMaxSharpe float64 `json:"expectedMaxSharpe"`
+	DeflatedSharpe    float64 `json:"deflatedSharpe"`
 }
 
 // RunBacktest executes the in-editor TOML config against the chosen DB.
@@ -119,6 +126,9 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			BenchmarkCurve:    r.BenchmarkCurve,
 			BenchmarkStats:    r.BenchmarkStats,
 			Splits:            r.Splits,
+			Trials:            r.Trials,
+			ExpectedMaxSharpe: r.ExpectedMaxSharpe,
+			DeflatedSharpe:    r.DeflatedSharpe,
 		})
 	}
 	return results, nil

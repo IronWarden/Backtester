@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"gonum.org/v1/gonum/stat"
 )
 
 // Result holds the result of a backtest.
@@ -48,6 +49,23 @@ type Result struct {
 	// the window.
 	BenchmarkCurve []float64
 	BenchmarkStats BenchmarkStats
+	// Trials is how many parameter sets the config block that produced this
+	// result expanded to, and TrialGroup names that block. ExpectedMaxSharpe
+	// is the Sharpe the best of those trials would be expected to show with
+	// no edge at all, and DeflatedSharpe is the probability in [0,1] that
+	// this result's true Sharpe beats that bar. For an unswept portfolio the
+	// bar is 0 and DeflatedSharpe is the plain probabilistic Sharpe.
+	Trials            int
+	TrialGroup        string
+	ExpectedMaxSharpe float64
+	DeflatedSharpe    float64
+	// returnSkew and returnKurtosis feed the deflated-Sharpe correction,
+	// which is computed after every result is collected (it needs the spread
+	// of Sharpes across the whole trial group). They are captured here in the
+	// worker because that is the only place the raw daily returns exist.
+	// Unexported: they are inputs to a metric, not a metric.
+	returnSkew     float64
+	returnKurtosis float64
 	// Splits holds the in-sample and out-of-sample segments of this same run
 	// when the config sets [portfolio.Validation], and is empty otherwise.
 	// Two entries, in-sample first. The out-of-sample one is the figure that
@@ -347,6 +365,10 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					BenchmarkCurve: p.BenchmarkCurve,
 					BenchmarkStats: p.BenchmarkStats,
 					Splits:         p.Splits,
+					Trials:         p.Trials,
+					TrialGroup:     p.TrialGroup,
+					returnSkew:     stat.Skew(returns, nil),
+					returnKurtosis: stat.ExKurtosis(returns, nil) + 3.0,
 				}
 			}
 		}()
@@ -385,7 +407,51 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 	close(results)
 	<-writerDone
 
+	applyOverfittingStats(collected)
 	return collected, nil
+}
+
+// applyOverfittingStats discounts each result by the size of the search that
+// produced it. It runs after collection rather than inside a worker because
+// the correction needs the SPREAD of Sharpe ratios across the whole trial
+// group, which no single worker can see.
+//
+// Results are grouped by TrialGroup — the config block they expanded from —
+// so two unrelated sweeps in one config do not deflate each other.
+func applyOverfittingStats(results []Result) {
+	byGroup := make(map[string][]int, len(results))
+	for i, r := range results {
+		byGroup[r.TrialGroup] = append(byGroup[r.TrialGroup], i)
+	}
+	for _, idxs := range byGroup {
+		sharpes := make([]float64, len(idxs))
+		for j, i := range idxs {
+			sharpes[j] = results[i].Metrics.SharpeRatio
+		}
+		// stat.StdDev is NaN below two samples, which ExpectedMaxSharpe
+		// treats as "no spread" and so as no bar to clear.
+		spread := stat.StdDev(sharpes, nil)
+		for _, i := range idxs {
+			bar := ExpectedMaxSharpe(results[i].Trials, spread)
+			results[i].ExpectedMaxSharpe = bar
+			results[i].DeflatedSharpe = deflatedFromResult(&results[i], bar)
+		}
+	}
+}
+
+// deflatedFromResult applies the deflated-Sharpe correction using the
+// skewness and kurtosis the worker captured from the raw daily returns.
+// Reconstructing those from EquityCurve would be wrong once costs are on:
+// the first day's return is measured from the post-trade value, not from
+// InitialCapital.
+func deflatedFromResult(r *Result, bar float64) float64 {
+	n := len(r.EquityCurve)
+	if n < 2 {
+		return 0
+	}
+	return deflatedSharpeFromMoments(
+		r.Metrics.SharpeRatio, bar, n, r.returnSkew, r.returnKurtosis,
+	)
 }
 
 // RunFromConfigText decodes a TOML config from cfgText, initializes the DB

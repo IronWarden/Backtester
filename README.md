@@ -300,6 +300,45 @@ other two describe the tickers rather than the run.
 > in the window, so the in-sample figure for that winner is the number that
 > was optimised, not evidence. The out-of-sample column is the one to read.
 
+### Overfitting statistics
+
+Every result carries `Trials` — how many parameter sets the config block it
+came from expanded to — plus two figures derived from it. They are computed
+after the whole run, because the correction needs the spread of Sharpe ratios
+across the trial group, and results are grouped by config block so two
+unrelated sweeps never deflate each other.
+
+| Field | Scale | Reading |
+| --- | --- | --- |
+| `Trials` | count | How many candidates the winner was chosen from. |
+| `ExpectedMaxSharpe` | Sharpe | The Sharpe the *best* of those trials would be expected to show with no edge at all — the bar to clear. |
+| `DeflatedSharpe` | probability, 0–1 | The chance the result's true Sharpe beats that bar. |
+
+`DeflatedSharpe` is a **confidence, not a Sharpe**: 0.95 means the result
+survives the correction, 0.10 means the same headline number is most likely
+selection bias. Read it next to `ExpectedMaxSharpe`, which is on the familiar
+Sharpe scale.
+
+Why it matters, from the test suite: two hundred pure random walks with zero
+expected return produce a best-of-N Sharpe of **1.69** — a number most people
+would call a real strategy. Its `ExpectedMaxSharpe` is 1.98, so the winner
+does not even clear the bar luck alone sets, and its `DeflatedSharpe` is 0.34.
+Nothing in the raw Sharpe tells you that; the trial count is the missing
+input.
+
+An unswept portfolio is one trial in a group of one. Its bar is 0 and its
+`DeflatedSharpe` is the plain probabilistic Sharpe — the chance its true
+Sharpe is above zero given how many days and how fat-tailed the returns are.
+No existing config's numbers change.
+
+All three are available in `[Output] fields`, `filter` and `sort_by`. Sorting
+a sweep by `SharpeRatio` and reading the top row is precisely the mistake
+these exist to catch; sort by `DeflatedSharpe` instead.
+
+Source: Bailey & López de Prado, *The Deflated Sharpe Ratio* (Journal of
+Portfolio Management, 2014). The implementation lives in `metrics.go` as new
+functions — no existing metric formula was touched.
+
 ### `[Output]`
 
 An optional block that writes results to a file. Omit it and results are returned in memory only (the UI's path).

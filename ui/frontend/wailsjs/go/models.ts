@@ -247,6 +247,9 @@ export namespace main {
 	    benchmarkCurve: number[];
 	    benchmarkStats: backtest.BenchmarkStats;
 	    splits: backtest.SegmentStats[];
+	    trials: number;
+	    expectedMaxSharpe: number;
+	    deflatedSharpe: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new RunResult(source);
@@ -281,6 +284,9 @@ export namespace main {
 	        this.benchmarkCurve = source["benchmarkCurve"];
 	        this.benchmarkStats = this.convertValues(source["benchmarkStats"], backtest.BenchmarkStats);
 	        this.splits = this.convertValues(source["splits"], backtest.SegmentStats);
+	        this.trials = source["trials"];
+	        this.expectedMaxSharpe = source["expectedMaxSharpe"];
+	        this.deflatedSharpe = source["deflatedSharpe"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

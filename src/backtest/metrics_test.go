@@ -2,7 +2,10 @@ package backtest
 
 import (
 	"math"
+	"math/rand"
 	"testing"
+
+	"gonum.org/v1/gonum/stat"
 )
 
 // These four functions produce every number in the results table, so they
@@ -179,5 +182,131 @@ func TestMetricsNeverNaN(t *testing.T) {
 				t.Errorf("%s(%v) = %v — must be finite", name, in, got)
 			}
 		}
+	}
+}
+
+// --- overfitting statistics -------------------------------------------------
+
+// The bar a swept winner must clear rises with the size of the search: the
+// best of 1000 coin-flippers looks better than the best of 10.
+func TestExpectedMaxSharpeRisesWithTheSearch(t *testing.T) {
+	const spread = 0.5
+	prev := ExpectedMaxSharpe(2, spread)
+	for _, trials := range []int{5, 10, 50, 200, 1000} {
+		got := ExpectedMaxSharpe(trials, spread)
+		if got <= prev {
+			t.Errorf("bar at %d trials (%.4f) did not exceed the previous (%.4f)",
+				trials, got, prev)
+		}
+		prev = got
+	}
+	// A search of one has nothing to correct for, and neither does a set of
+	// candidates that all behaved identically.
+	if got := ExpectedMaxSharpe(1, spread); got != 0 {
+		t.Errorf("one trial gave a bar of %v, want 0", got)
+	}
+	if got := ExpectedMaxSharpe(100, 0); got != 0 {
+		t.Errorf("zero spread gave a bar of %v, want 0", got)
+	}
+}
+
+// The correction is a probability, so it must stay in [0,1] whatever it is
+// handed, and must fall as the bar rises.
+func TestDeflatedSharpeIsAProbabilityThatFallsWithTheBar(t *testing.T) {
+	returns := make([]float64, 500)
+	rng := rand.New(rand.NewSource(7))
+	for i := range returns {
+		returns[i] = 0.0006 + rng.NormFloat64()*0.01
+	}
+	observed := GetSharpeRatio(returns)
+
+	prev := GetDeflatedSharpe(observed, 0, returns)
+	if prev < 0 || prev > 1 {
+		t.Fatalf("deflated Sharpe %v is not a probability", prev)
+	}
+	for _, bar := range []float64{0.25, 0.5, 1.0, 2.0, 5.0} {
+		got := GetDeflatedSharpe(observed, bar, returns)
+		if got < 0 || got > 1 {
+			t.Errorf("bar %v gave %v, which is not a probability", bar, got)
+		}
+		if got > prev {
+			t.Errorf("bar %v gave %.6f, higher than the lower bar's %.6f",
+				bar, got, prev)
+		}
+		prev = got
+	}
+}
+
+// Degenerate inputs must return 0 rather than NaN, like every other metric.
+func TestOverfittingStatsNeverNaN(t *testing.T) {
+	cases := map[string][]float64{
+		"empty":     {},
+		"one value": {0.01},
+		"all zero":  {0, 0, 0, 0, 0},
+		"identical": {0.01, 0.01, 0.01, 0.01},
+	}
+	for name, returns := range cases {
+		got := GetDeflatedSharpe(1.0, 0.5, returns)
+		if math.IsNaN(got) || math.IsInf(got, 0) {
+			t.Errorf("%s: deflated Sharpe = %v", name, got)
+		}
+		if got < 0 || got > 1 {
+			t.Errorf("%s: deflated Sharpe = %v, outside [0,1]", name, got)
+		}
+	}
+	if got := ExpectedMaxSharpe(10, math.NaN()); math.IsNaN(got) {
+		t.Error("ExpectedMaxSharpe propagated a NaN spread")
+	}
+}
+
+// The test that decides whether the feature does its job: search a pile of
+// genuinely edgeless strategies and the winner still looks good on raw
+// Sharpe, but must not survive the correction.
+func TestNoEdgeSearchDoesNotSurviveDeflation(t *testing.T) {
+	const (
+		trials = 200
+		days   = 504 // two trading years
+	)
+	rng := rand.New(rand.NewSource(11))
+
+	// Every candidate is a pure random walk with zero expected return, so by
+	// construction not one of them has any edge whatsoever.
+	sharpes := make([]float64, trials)
+	best, bestIdx := math.Inf(-1), 0
+	series := make([][]float64, trials)
+	for i := range sharpes {
+		r := make([]float64, days)
+		for d := range r {
+			r[d] = rng.NormFloat64() * 0.01
+		}
+		series[i] = r
+		sharpes[i] = GetSharpeRatio(r)
+		if sharpes[i] > best {
+			best, bestIdx = sharpes[i], i
+		}
+	}
+
+	// The winner looks like a real strategy on the headline number.
+	if best < 0.5 {
+		t.Fatalf("best-of-%d Sharpe was only %.2f; the fixture is not "+
+			"exercising selection bias", trials, best)
+	}
+
+	bar := ExpectedMaxSharpe(trials, stat.StdDev(sharpes, nil))
+	deflated := GetDeflatedSharpe(best, bar, series[bestIdx])
+
+	t.Logf("best raw Sharpe %.3f, bar %.3f, deflated %.4f", best, bar, deflated)
+	if deflated > 0.5 {
+		t.Errorf("a search over %d edgeless strategies produced a deflated "+
+			"Sharpe of %.4f; the correction is not discounting selection bias",
+			trials, deflated)
+	}
+
+	// And the same series, had it been the only thing tried, would not be
+	// discounted nearly as hard.
+	alone := GetDeflatedSharpe(best, 0, series[bestIdx])
+	if alone <= deflated {
+		t.Errorf("an untried strategy (%.4f) scored no better than the same "+
+			"one found by searching (%.4f)", alone, deflated)
 	}
 }

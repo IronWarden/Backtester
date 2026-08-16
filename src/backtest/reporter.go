@@ -97,6 +97,12 @@ func resultValue(r Result, name string) (any, bool) {
 		return r.FinalValue, true
 	case "Profit":
 		return r.FinalValue - r.InitialCapital, true
+	case "Trials":
+		return r.Trials, true
+	case "ExpectedMaxSharpe":
+		return r.ExpectedMaxSharpe, true
+	case "DeflatedSharpe":
+		return r.DeflatedSharpe, true
 	}
 	return nil, false
 }
