@@ -504,11 +504,10 @@ func RunFromConfigText(cfgText, dbPath, defaultLuaPath string) ([]Result, error)
 
 	var results []Result
 	if len(portfolios) > 0 {
-		results, err := Run(portfolios, cfg.Output)
-		if err != nil {
+		var err error
+		if results, err = Run(portfolios, cfg.Output); err != nil {
 			return nil, err
 		}
-		return appendWalkForward(results, wfConfigs)
 	}
 	return appendWalkForward(results, wfConfigs)
 }
