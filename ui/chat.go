@@ -231,6 +231,11 @@ Benchmark   = "$SP500"            # optional; scored against, NOT traded
   buy_thresh = [20, 30]
 [portfolio.Validation]            # optional; in-sample / out-of-sample split
   in_sample_end = "2021-01-01"    # strictly inside StartDate..EndDate
+[portfolio.WalkForward]           # optional; rolling selection, NEEDS a Sweep
+  train_days = 252                # selection window, in TRADING days
+  test_days  = 63                 # scored window that follows
+  step_days  = 63                 # defaults to test_days
+  objective  = "SharpeRatio"      # or SortinoRatio, AnnualReturn
 
 Benchmark supplies a return series for the benchmark-relative metrics and is
 deliberately kept out of Tickers, so it does not receive capital and does not
@@ -268,6 +273,26 @@ leave at least 30 trading days either side.
 When you read results back to a user, the OUT-OF-SAMPLE segment is the honest
 one: the in-sample figure for a swept winner is the number that was optimised.
 Say so plainly rather than quoting the flattering half.
+
+## Walk-forward
+[portfolio.WalkForward] rolls the split across the whole history rather than
+splitting once. On each window the sweep's candidates run over train_days, the
+best by objective is selected, and that winner is scored over the test_days
+that follow. The scored segments concatenate into one equity curve, and that
+curve is the reported result — no day in it was used to choose anything.
+
+It REQUIRES a [portfolio.Sweep] with at least two combinations: selection is
+the fitting step here, so with one candidate there is nothing to select. The
+block reports each window's train range, test range, selected parameters,
+training score, out-of-sample return and opening capital. Point users at the
+gap between training score and test return — that gap is what overfitting
+looks like.
+
+Capital carries between windows but positions do not (each window starts
+flat), and each test window's first bar is the entry and scores no return.
+Say so if a user asks why turnover is high or why a 63-day window scores 62
+days. It is expensive — candidates times windows simulations — so suggest it
+for a serious evaluation rather than a first look.
 
 ## Overfitting statistics
 Every result also carries three fields that discount it by the size of the

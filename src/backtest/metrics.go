@@ -617,6 +617,20 @@ func (p *Portfolio) applySplitMetrics(riskFreeRates map[int64]float64) {
 	}
 }
 
+// stddev is the annualized standard deviation of a daily return series, the
+// same figure GetBacktestingData reports, factored out so the walk-forward
+// assembler can score a concatenated series the identical way.
+func stddev(returns []float64) float64 {
+	if len(returns) < 2 {
+		return 0
+	}
+	sd := stat.StdDev(returns, nil) * math.Sqrt(252.0)
+	if math.IsNaN(sd) || math.IsInf(sd, 0) {
+		return 0
+	}
+	return sd
+}
+
 // --- overfitting statistics -------------------------------------------------
 //
 // Bailey & López de Prado, "The Deflated Sharpe Ratio: Correcting for

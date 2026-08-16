@@ -1,5 +1,65 @@
 export namespace backtest {
 	
+	export class WalkForwardWindow {
+	    trainStart: string;
+	    trainEnd: string;
+	    testStart: string;
+	    testEnd: string;
+	    selected: string;
+	    trainScore: number;
+	    testReturn: number;
+	    candidates: number;
+	    capital: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WalkForwardWindow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.trainStart = source["trainStart"];
+	        this.trainEnd = source["trainEnd"];
+	        this.testStart = source["testStart"];
+	        this.testEnd = source["testEnd"];
+	        this.selected = source["selected"];
+	        this.trainScore = source["trainScore"];
+	        this.testReturn = source["testReturn"];
+	        this.candidates = source["candidates"];
+	        this.capital = source["capital"];
+	    }
+	}
+	export class WalkForwardResult {
+	    objective: string;
+	    windows: WalkForwardWindow[];
+	
+	    static createFrom(source: any = {}) {
+	        return new WalkForwardResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.objective = source["objective"];
+	        this.windows = this.convertValues(source["windows"], WalkForwardWindow);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SegmentStats {
 	    label: string;
 	    start: string;
@@ -247,6 +307,7 @@ export namespace main {
 	    benchmarkCurve: number[];
 	    benchmarkStats: backtest.BenchmarkStats;
 	    splits: backtest.SegmentStats[];
+	    walkForward?: backtest.WalkForwardResult;
 	    trials: number;
 	    expectedMaxSharpe: number;
 	    deflatedSharpe: number;
@@ -284,6 +345,7 @@ export namespace main {
 	        this.benchmarkCurve = source["benchmarkCurve"];
 	        this.benchmarkStats = this.convertValues(source["benchmarkStats"], backtest.BenchmarkStats);
 	        this.splits = this.convertValues(source["splits"], backtest.SegmentStats);
+	        this.walkForward = this.convertValues(source["walkForward"], backtest.WalkForwardResult);
 	        this.trials = source["trials"];
 	        this.expectedMaxSharpe = source["expectedMaxSharpe"];
 	        this.deflatedSharpe = source["deflatedSharpe"];

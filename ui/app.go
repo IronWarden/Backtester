@@ -74,9 +74,12 @@ type RunResult struct {
 	// result expanded to. ExpectedMaxSharpe is the Sharpe the best of them
 	// would be expected to show with no edge at all, and DeflatedSharpe is
 	// the probability in [0,1] that this result beats that bar.
-	Trials            int     `json:"trials"`
-	ExpectedMaxSharpe float64 `json:"expectedMaxSharpe"`
-	DeflatedSharpe    float64 `json:"deflatedSharpe"`
+	// WalkForward describes the rolling schedule that produced this result,
+	// and is nil for every ordinary run.
+	WalkForward       *backtest.WalkForwardResult `json:"walkForward"`
+	Trials            int                         `json:"trials"`
+	ExpectedMaxSharpe float64                     `json:"expectedMaxSharpe"`
+	DeflatedSharpe    float64                     `json:"deflatedSharpe"`
 }
 
 // RunBacktest executes the in-editor TOML config against the chosen DB.
@@ -126,6 +129,7 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			BenchmarkCurve:    r.BenchmarkCurve,
 			BenchmarkStats:    r.BenchmarkStats,
 			Splits:            r.Splits,
+			WalkForward:       r.WalkForward,
 			Trials:            r.Trials,
 			ExpectedMaxSharpe: r.ExpectedMaxSharpe,
 			DeflatedSharpe:    r.DeflatedSharpe,

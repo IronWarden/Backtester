@@ -119,6 +119,87 @@ type PortfolioConfig struct {
 	// and a segment they were not. Absent, nothing is split and nothing about
 	// the run changes.
 	Validation ValidationConfig `toml:"Validation"`
+	// WalkForward rolls the in-sample/out-of-sample split across the whole
+	// history instead of splitting it once. Requires a Sweep: it works by
+	// re-selecting the best candidate on each training window, and with no
+	// candidates there is nothing to select.
+	WalkForward WalkForwardConfig `toml:"WalkForward"`
+}
+
+// WalkForwardConfig describes a rolling train/test schedule. Windows are
+// counted in TRADING DAYS, not calendar days, so a schedule means the same
+// thing regardless of how many holidays a period happens to contain.
+//
+// A zero WalkForwardConfig means no walk-forward, which is what every config
+// written before this behaved as.
+type WalkForwardConfig struct {
+	// TrainDays is the length of each selection window and TestDays the
+	// length of the scored window that follows it.
+	TrainDays int `toml:"train_days"`
+	TestDays  int `toml:"test_days"`
+	// StepDays is how far the schedule advances between windows. Defaults to
+	// TestDays, which tiles the scored segments end to end with no overlap
+	// and no gap — anything else either double-counts days or drops them.
+	StepDays int `toml:"step_days"`
+	// Objective is the Result field the selection maximizes on each training
+	// window: SharpeRatio (default), SortinoRatio or AnnualReturn. It is
+	// recorded on the result, because a walk-forward whose objective is not
+	// stated cannot be reproduced.
+	Objective string `toml:"objective"`
+}
+
+// Zero reports whether the block asks for no walk-forward at all.
+func (w WalkForwardConfig) Zero() bool {
+	return w.TrainDays == 0 && w.TestDays == 0 && w.StepDays == 0 &&
+		strings.TrimSpace(w.Objective) == ""
+}
+
+// walkForwardObjectives maps the configurable objective names to the figure
+// each selects on. Kept as a map so an unknown name is rejected by listing
+// what is valid rather than silently defaulting.
+var walkForwardObjectives = map[string]func(Metrics) float64{
+	"SharpeRatio":  func(m Metrics) float64 { return m.SharpeRatio },
+	"SortinoRatio": func(m Metrics) float64 { return m.SortinoRatio },
+	"AnnualReturn": func(m Metrics) float64 { return m.AnnualReturn },
+}
+
+// normalized returns the config with defaults applied, or an error naming
+// what is wrong. Validation lives here rather than at the point of use so a
+// bad schedule is rejected before any simulation starts.
+func (w WalkForwardConfig) normalized() (WalkForwardConfig, error) {
+	if w.TrainDays < minSegmentDays {
+		return w, fmt.Errorf(
+			"WalkForward.train_days is %d; at least %d trading days are "+
+				"needed to score a selection window",
+			w.TrainDays, minSegmentDays)
+	}
+	if w.TestDays < minSegmentDays {
+		return w, fmt.Errorf(
+			"WalkForward.test_days is %d; at least %d trading days are "+
+				"needed to score a test window",
+			w.TestDays, minSegmentDays)
+	}
+	if w.StepDays == 0 {
+		w.StepDays = w.TestDays
+	}
+	if w.StepDays < 1 {
+		return w, fmt.Errorf("WalkForward.step_days is %d; must be positive",
+			w.StepDays)
+	}
+	if strings.TrimSpace(w.Objective) == "" {
+		w.Objective = "SharpeRatio"
+	}
+	if _, ok := walkForwardObjectives[w.Objective]; !ok {
+		valid := make([]string, 0, len(walkForwardObjectives))
+		for name := range walkForwardObjectives {
+			valid = append(valid, name)
+		}
+		sort.Strings(valid)
+		return w, fmt.Errorf(
+			"WalkForward.objective %q is not one of %s",
+			w.Objective, strings.Join(valid, ", "))
+	}
+	return w, nil
 }
 
 // ValidationConfig marks where a run stops being evidence. A sweep picks its

@@ -339,6 +339,56 @@ Source: Bailey & López de Prado, *The Deflated Sharpe Ratio* (Journal of
 Portfolio Management, 2014). The implementation lives in `metrics.go` as new
 functions — no existing metric formula was touched.
 
+### `[portfolio.WalkForward]`
+
+Rolls the in-sample/out-of-sample split across the whole history instead of
+splitting it once.
+
+```toml
+[Portfolio.Sweep]
+  period = [7, 14, 21, 28]
+[Portfolio.WalkForward]
+  train_days = 252     # selection window, in TRADING days
+  test_days  = 63      # scored window that follows it
+  step_days  = 63      # defaults to test_days
+  objective  = "SharpeRatio"   # or SortinoRatio, AnnualReturn
+```
+
+On each window the sweep's candidates are simulated over the training days and
+the best by `objective` is selected; that winner is then run over the test days
+it has never seen. The test segments are concatenated into one equity curve and
+scored, and that curve is the result — it is the honest answer to "what would
+this have done", because no day in it was ever used to choose anything.
+
+**It requires a `[portfolio.Sweep]` with at least two combinations.** Nothing
+in this engine is *fitted* — strategies take parameters rather than estimating
+them — so selection is the fitting step, and with one candidate there is
+nothing to select.
+
+Windows are counted in trading days, so a schedule means the same thing across
+periods with different holiday counts. `step_days` defaults to `test_days`,
+the only value that tiles the scored segments with neither overlap nor gap.
+
+Each window is reported: its train and test ranges, the parameter set selected,
+that set's training score, what it then returned out of sample, and the capital
+the window opened with. **The gap between training score and test return is the
+diagnostic** — a schedule that scores brilliantly in training and poorly out of
+sample is describing overfitting, and that is only visible with both.
+
+Two properties worth knowing before reading the numbers:
+
+- **Capital carries between windows; positions do not.** The curve is a real
+  running balance, but each window starts flat, because a newly selected
+  parameter set is not entitled to the previous one's holdings. That boundary
+  liquidation is inherent to walk-forward and inflates turnover.
+- **Each test window's first bar is the entry** and contributes no return, the
+  same convention every run here uses. A 63-day test window therefore scores
+  62 days.
+
+`Trials` on the result counts every simulation the schedule performed —
+candidates × windows — so the deflated Sharpe discounts it by the size of the
+whole search, not just one window's.
+
 ### `[Output]`
 
 An optional block that writes results to a file. Omit it and results are returned in memory only (the UI's path).

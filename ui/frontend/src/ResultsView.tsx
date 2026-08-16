@@ -707,6 +707,65 @@ export default function ResultsView({ results, fontSize }: Props) {
         </div>
       </div>
 
+      {results.some((r) => (r.walkForward?.windows ?? []).length > 0) && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-title">Walk-forward windows</span>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th>Train</th>
+                  <th>Test</th>
+                  <th>Selected</th>
+                  <th className="num">Train score</th>
+                  <th className="num">Test return %</th>
+                  <th className="num">Capital</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  (r.walkForward?.windows ?? []).map((w, j) => (
+                    <tr key={`${i}-wf-${j}`}>
+                      <td>
+                        <span
+                          className="swatch"
+                          style={{
+                            background: COLORS[i % COLORS.length],
+                            display: "inline-block",
+                            marginRight: "0.5em",
+                          }}
+                        />
+                        {j === 0 ? r.portfolioName : ""}
+                      </td>
+                      <td className="mono">
+                        {w.trainStart} → {w.trainEnd}
+                      </td>
+                      <td className="mono">
+                        {w.testStart} → {w.testEnd}
+                      </td>
+                      <td className="strategy" title={w.selected}>
+                        {w.selected}
+                      </td>
+                      <td className="num">{w.trainScore.toFixed(2)}</td>
+                      {/* The gap between these two columns is the whole
+                          diagnostic: strong training scores next to weak test
+                          returns is what overfitting looks like. */}
+                      <td className={`num ${w.testReturn < 0 ? "neg" : "pos"}`}>
+                        {w.testReturn.toFixed(2)}
+                      </td>
+                      <td className="num">{fmtDollars(w.capital)}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {results.some((r) => (r.splits ?? []).length > 0) && (
         <div className="panel">
           <div className="panel-head">

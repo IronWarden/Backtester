@@ -66,6 +66,11 @@ type Result struct {
 	// Unexported: they are inputs to a metric, not a metric.
 	returnSkew     float64
 	returnKurtosis float64
+	// WalkForward is set only on the synthetic result a rolling schedule
+	// produces, and describes how it was produced: the objective the
+	// selection maximized and one entry per train/test window. Nil for every
+	// ordinary run.
+	WalkForward *WalkForwardResult
 	// Splits holds the in-sample and out-of-sample segments of this same run
 	// when the config sets [portfolio.Validation], and is empty otherwise.
 	// Two entries, in-sample first. The out-of-sample one is the figure that
@@ -468,6 +473,7 @@ func RunFromConfigText(cfgText, dbPath, defaultLuaPath string) ([]Result, error)
 		return nil, fmt.Errorf("parse toml: %w", err)
 	}
 	portfolios := make([]*Portfolio, 0, len(cfg.Portfolios))
+	wfConfigs := make([]PortfolioConfig, 0, len(cfg.Portfolios))
 	for _, pc := range cfg.Portfolios {
 		if strings.TrimSpace(pc.Strategy) == "" {
 			if defaultLuaPath == "" {
@@ -478,6 +484,12 @@ func RunFromConfigText(cfgText, dbPath, defaultLuaPath string) ([]Result, error)
 			}
 			pc.Strategy = "lua:" + defaultLuaPath
 		}
+		// A walk-forward block is not a portfolio but a schedule of them, so
+		// it runs on its own path and contributes one synthetic result.
+		if !pc.WalkForward.Zero() {
+			wfConfigs = append(wfConfigs, pc)
+			continue
+		}
 		// ToPortfolios, not ToPortfolio: one block expands to many when it
 		// carries a Sweep, and to exactly one when it does not.
 		expanded, err := pc.ToPortfolios()
@@ -486,8 +498,39 @@ func RunFromConfigText(cfgText, dbPath, defaultLuaPath string) ([]Result, error)
 		}
 		portfolios = append(portfolios, expanded...)
 	}
-	if len(portfolios) == 0 {
+	if len(portfolios) == 0 && len(wfConfigs) == 0 {
 		return nil, fmt.Errorf("config defines no portfolios")
 	}
-	return Run(portfolios, cfg.Output)
+
+	var results []Result
+	if len(portfolios) > 0 {
+		results, err := Run(portfolios, cfg.Output)
+		if err != nil {
+			return nil, err
+		}
+		return appendWalkForward(results, wfConfigs)
+	}
+	return appendWalkForward(results, wfConfigs)
+}
+
+// appendWalkForward runs each walk-forward schedule and appends its single
+// synthetic result. Schedules run after the ordinary portfolios because they
+// are far more expensive — candidates times windows simulations each — and a
+// config mixing the two should still show its cheap results if a schedule
+// later fails.
+func appendWalkForward(
+	results []Result, configs []PortfolioConfig,
+) ([]Result, error) {
+	for i := range configs {
+		wf, err := RunWalkForward(&configs[i])
+		if err != nil {
+			return nil, fmt.Errorf("portfolio %q: %w", configs[i].Name, err)
+		}
+		results = append(results, wf)
+	}
+	// The schedule's own trial count feeds the same correction every other
+	// result gets; it is its own group, so it neither deflates nor is
+	// deflated by the ordinary runs alongside it.
+	applyOverfittingStats(results)
+	return results, nil
 }
