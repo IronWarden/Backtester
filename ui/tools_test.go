@@ -6,6 +6,7 @@ package main
 // new tool (or an edit to an existing one) misses one of those spots.
 
 import (
+	"my-backtester/src/backtest"
 	"reflect"
 	"strings"
 	"testing"
@@ -139,5 +140,48 @@ func TestSystemPromptRoutesAllTools(t *testing.T) {
 	}
 	if !strings.Contains(queryDBToolDescription, "no fundamentals") {
 		t.Error("query_db description no longer warns it has no fundamentals")
+	}
+}
+
+// The assistant's knowledge of the engine is a hand-written const, so it
+// drifts silently every time the engine grows a feature and nobody edits it —
+// which is exactly how it ended up telling users the engine modelled no
+// transaction costs for as long as it did. Reflecting over the metric struct
+// the engine actually fills in turns that drift into a build failure: add a
+// field to backtest.Metrics and this test fails until appReference explains
+// it. Documenting the metric to the user is part of shipping it, not a
+// follow-up.
+func TestSystemPromptDocumentsEveryMetric(t *testing.T) {
+	mt := reflect.TypeOf(backtest.Metrics{})
+	for i := range mt.NumField() {
+		name := mt.Field(i).Name
+		if !strings.Contains(appReference, name) {
+			t.Errorf("appReference never mentions the %q metric — the "+
+				"assistant cannot explain a number the results panel shows",
+				name)
+		}
+	}
+}
+
+// Config knobs have the same drift problem as metrics, and a worse failure
+// mode: the assistant writes the TOML, so a field it does not know about is a
+// field the user never gets offered. Keyed by field name rather than reflected
+// so the check covers the [Output] and [portfolio.Costs] sub-tables too.
+func TestSystemPromptDocumentsConfigSchema(t *testing.T) {
+	for _, typ := range []reflect.Type{
+		reflect.TypeOf(backtest.PortfolioConfig{}),
+		reflect.TypeOf(backtest.CostConfig{}),
+	} {
+		for i := range typ.NumField() {
+			tag := typ.Field(i).Tag.Get("toml")
+			if tag == "" {
+				continue
+			}
+			if !strings.Contains(appReference, tag) {
+				t.Errorf("appReference never mentions the %s config key %q — "+
+					"the assistant will never write it into a config",
+					typ.Name(), tag)
+			}
+		}
 	}
 }

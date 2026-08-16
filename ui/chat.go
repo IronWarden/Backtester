@@ -216,11 +216,23 @@ StartDate   = "2015-01-01"        # YYYY-MM-DD
 EndDate     = "2025-01-01"
 Tickers     = ["AAPL", "MSFT"]    # must all have data covering the window
 Strategy    = "buyAndHold:equalWeights"   # optional; see specs below
+Benchmark   = "$SP500"            # optional; scored against, NOT traded
 [portfolio.Params]                # optional, passed to Lua as 'params'
   # arbitrary keys; e.g. for buy_and_hold_weighted.lua:
   # [portfolio.Params.weights]
   # AAPL = 60
   # MSFT = 40
+[portfolio.Costs]                 # optional; every field defaults to 0
+  commission_per_trade = 1.0      # flat fee per filled order
+  commission_bps       = 5.0      # fee as basis points of order notional
+  slippage_bps         = 2.0      # fills worsen by bps: buys higher, sells lower
+
+Benchmark supplies a return series for the benchmark-relative metrics and is
+deliberately kept out of Tickers, so it does not receive capital and does not
+affect the trading calendar. Omit it and those metrics are simply absent.
+An absent [portfolio.Costs] block is identical to all-zero: trading is
+frictionless. When a user asks whether a strategy survives real-world costs,
+propose a Costs block rather than telling them the engine cannot model it.
 
 Strategy spec strings:
 - "greedy" or "equalWeights"            -> buy-and-hold with that sizing
@@ -235,8 +247,10 @@ An optional [Output] block writes results to a file:
 path, format ("txt"|"csv"|"json"), fields (list of result fields), filter
 (Go-style expression like "SharpeRatio > 0.5 && AnnualReturn > 5"),
 sort_by, order ("asc"|"desc"), limit.
-Result fields: PortfolioName, Strategy, SharpeRatio, SortinoRatio,
-MaxDrawdown, AnnualReturn, StandardDev.
+Result fields usable in fields/filter/sort_by: PortfolioName, Strategy,
+SharpeRatio, SortinoRatio, MaxDrawdown, AnnualReturn, StandardDev,
+AvgCorrelation, CointegratedPairs, Turnover, Alpha, Beta, TrackingError,
+InformationRatio, UpCapture, DownCapture, InitialCapital, FinalValue, Profit.
 
 ## Lua strategy API
 A strategy script must define a global function step(day). day is a
@@ -285,6 +299,26 @@ across asset classes (e.g. ["$SP500", "$CASH"]).
 - StandardDev: annualized stdev of daily returns.
 - AvgCorrelation / CointegratedPairs: mean pairwise return correlation and
   count of cointegrated ticker pairs in the portfolio.
+- Turnover: annualized gross traded notional as a multiple of the portfolio's
+  average value. 1.0 means it traded its own value once over a year. Always
+  reported, with or without costs — it is what costs are charged against.
+
+Benchmark-relative metrics, computed only when the portfolio sets Benchmark
+and that ticker's data covers the whole window (otherwise all zero):
+- Beta: slope of portfolio returns against the benchmark's; 1.0 moves with it.
+- Alpha: annualized %, the excess return beta does not explain.
+- TrackingError: annualized stdev of active (portfolio - benchmark) return.
+- InformationRatio: active return per unit of tracking error.
+- UpCapture / DownCapture: % of the benchmark's gain captured on its up days,
+  and % of its loss taken on its down days. Under 100 down-capture with over
+  100 up-capture is the asymmetry most strategies are actually chasing.
+
+Beyond the scalar metrics, each run also carries time-sliced views that the
+results panel renders: the ten deepest drawdowns with their recovery dates, a
+252-day rolling Sharpe series, and compounded calendar-year and month returns.
+Point users at these when a single Sharpe number hides the shape of a run —
+a strategy with a good Sharpe and one four-year underwater stretch is a
+different proposition from one with the same Sharpe and shallow drawdowns.
 
 ## Database conventions
 - Daily bars live in stock_data_optimized(Date, Ticker, Open, High, Low,
@@ -326,7 +360,9 @@ across asset classes (e.g. ["$SP500", "$CASH"]).
 - Keep SQL result sets small (aggregate, LIMIT); never SELECT * over the
   whole bar table.
 - Be honest about backtesting pitfalls when relevant: survivorship bias,
-  look-ahead, overfitting, transaction costs (this engine models none).`
+  look-ahead, and overfitting are all real here and unmodelled. Transaction
+  costs ARE modelled — see [portfolio.Costs] — so treat a frictionless result
+  as a choice the config made, not a limit of the engine.`
 
 // buildSystemPrompt assembles the static app reference plus the live,
 // per-request context: today's date, the DB overview, the user's saved
