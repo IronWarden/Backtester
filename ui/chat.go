@@ -484,6 +484,50 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   inflation shock and one hiking cycle. That is a single macro regime, so
   treat any factor result over it as hypothesis-generating, not evidence.
 
+- CRITICAL — RECYCLED TICKERS. A ticker symbol is not a company; exchanges
+  re-issue the symbols of dead companies. stock_data_optimized is keyed on
+  the symbol alone, so where a symbol was re-used it holds TWO companies
+  spliced into one unbroken series with no marker at the seam. Confirmed
+  examples: DD runs 1972-2026 although DowDuPont was delisted 2019-05-31
+  and today's DD is DuPont de Nemours; SUNE runs to 2026 although SunEdison
+  went bankrupt in 2016; COR splices CoreSite Realty onto Cencora; DRS
+  splices DRS Technologies onto Leonardo DRS. 269 tickers are affected.
+  This is not survivorship bias and it is worse — survivorship makes a
+  result optimistic, a spliced series makes it arbitrary, because the
+  strategy holds one company and is paid by another.
+  If the optional delistings table is present, check any long backtest's
+  tickers against it and warn by name:
+
+  SELECT s."Ticker", MAX(s."Date")::DATE AS last_bar,
+         d.delisting_date::DATE AS delisted
+  FROM stock_data_optimized s JOIN delistings d ON d.symbol = s."Ticker"
+  WHERE d.security_class = 'operating'
+  GROUP BY 1, 3
+  HAVING date_diff('day', d.delisting_date::DATE, MAX(s."Date")::DATE) > 730;
+
+  Engine-side this is src/data.DelistingCoverage, which returns a per-ticker
+  verdict: clean, stale_tail, suspect, recycled, or unknown. Suspect and
+  recycled series must not be traded. unknown means the registry has no
+  death date — absence of evidence, never a clean bill of health.
+
+- The delistings table is OPTIONAL and may not exist; it is loaded by
+  python3 add_delistings.py from Alpha Vantage's free LISTING_STATUS feed
+  (needs ALPHA_VANTAGE_KEY). Columns: symbol, name, exchange, asset_type,
+  security_class ('operating' | 'etf' | 'derivative'), ipo_date,
+  delisting_date. ~9,400 rows, of which ~5,600 are operating companies.
+  Its coverage effectively BEGINS IN 2013 and is only dense from 2015 —
+  eight rows predate 2009, so Enron, WorldCom, Lehman, WaMu and Bear
+  Stearns are absent. Never claim it fixes survivorship bias generally.
+
+- SURVIVORSHIP. Separately from the above, the price table contains no
+  company that stopped trading before 2025: of 1,792 tickers trading in
+  2000, all 1,792 are still present, against a real 25-year survival rate
+  nearer 40-50%. Multi-asset backtests over long windows are therefore
+  choosing among known survivors and overstate returns by roughly 1-4
+  points a year. Say this unprompted when proposing a long backtest on real
+  tickers, and prefer the $-benchmark series for long horizons — those are
+  reconstructed index series and are survivorship-free by construction.
+
 ## Working style
 - When proposing a portfolio config, emit one complete fenced toml code
   block; when proposing a strategy, emit one complete fenced lua code
@@ -555,7 +599,9 @@ const queryDBToolDescription = "Run one read-only SQL statement (DuckDB " +
 	`stock_data_optimized(Date, Ticker, Open, High, Low, Close, Volume) ` +
 	`and "3MTreasuryYields"(Date, daily_risk_free_rate_decimal). ` +
 	`plus financials(metric, date, value, ticker, frequency), ` +
-	`earnings_calendar, economic_indicators and "10YrTreasuryYields". ` +
+	`earnings_calendar, economic_indicators and "10YrTreasuryYields", ` +
+	"plus an optional delistings(symbol, security_class, delisting_date) " +
+	"registry that may not exist. " +
 	"Results are capped at 100 rows, so aggregate or LIMIT. Quarterly " +
 	"fundamentals ARE available (revenue, net income, equity, assets, shares " +
 	"outstanding, 2020+), but financials.date is the FISCAL PERIOD END, not " +

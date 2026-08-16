@@ -139,6 +139,73 @@ Two further caveats before building anything on this:
   inflation shock and one hiking cycle, which is a single macro regime. Treat
   factor results over that window as hypothesis-generating, not evidence.
 
+## Delisted companies, and recycled tickers
+
+A ticker symbol is not a company — it is a lease. When a company dies the
+exchange re-issues its symbol, and because `stock_data_optimized` is keyed on
+the symbol alone, every re-use splices **two companies into one unbroken price
+series** with no marker at the seam. 269 tickers in the database are affected:
+
+| Ticker | Series in the database | What it actually is |
+| ------ | ---------------------- | ------------------- |
+| `DD`   | 1972 → 2026, unbroken  | DowDuPont was delisted 2019-05-31; today's `DD` is DuPont de Nemours |
+| `SUNE` | 1981 → 2026, unbroken  | SunEdison went **bankrupt** in 2016 |
+| `COR`  | 1995 → 2026, unbroken  | CoreSite Realty until 2021, then Cencora |
+| `DRS`  | 1985 → 2026, unbroken  | DRS Technologies died 2009; Leonardo DRS re-listed in 2022 |
+
+This is not survivorship bias, and it is worse. Survivorship bias makes a
+result optimistic in a direction you can reason about; a spliced series makes
+it arbitrary, because the strategy holds one company and is paid by another.
+
+### The `delistings` table
+
+Load the registry that makes these findable:
+
+```bash
+python3 add_delistings.py --dry-run   # fetch, classify, report, write nothing
+python3 add_delistings.py             # replace the table
+```
+
+It needs `ALPHA_VANTAGE_KEY` in `.env` (a free key covers it — the whole
+universe arrives in one call) and the UI closed, since DuckDB is single-writer.
+Columns are `symbol, name, exchange, asset_type, security_class, ipo_date,
+delisting_date`, where `security_class` is `operating`, `etf` or `derivative`
+(SPAC units, warrants, rights and preferreds, which never were companies).
+
+**The table is optional.** With it absent every query below returns
+`unknown` and the engine behaves exactly as it did before this shipped.
+
+### Reading it from Go
+
+`src/data.DelistingCoverage` joins the registry to the price table and returns
+a verdict per ticker, based on how far the bars run past the delisting date:
+
+| Verdict | Bars run past delisting by | Tradable |
+| ------- | -------------------------- | -------- |
+| `clean` | ≤ 5 days (or stop earlier) | yes |
+| `stale_tail` | 6–89 days — vendor disagreement about the final session | yes |
+| `suspect` | 90–730 days — the death date is wrong, or a second company took the symbol | **no** |
+| `recycled` | > 730 days — two companies in one series | **no** |
+| `unknown` | no registry entry | yes |
+
+`Coverage.Trustworthy()` collapses that to a boolean, and
+`UntrustworthyTickers` names the offenders. `unknown` is the absence of
+evidence, not a clean bill of health — see the coverage limit below.
+
+### What this does *not* fix
+
+The registry's coverage effectively **begins in 2013** and is only dense from
+2015; eight rows predate 2009. Enron, WorldCom, Lehman, Washington Mutual and
+Bear Stearns are absent from it and from the price table alike.
+
+So the broader survivorship problem stands: the database contains no company
+that stopped trading before 2025, and of the 1,792 tickers trading in 2000 all
+1,792 are still present — against a real twenty-five-year survival rate nearer
+40–50%. Long multi-asset backtests on real tickers are choosing among known
+survivors and overstate returns by roughly 1–4 points a year. Closing that gap
+needs paid data. Until then, prefer the `$`-benchmark series for long horizons:
+they are reconstructed index series and are survivorship-free by construction.
+
 ## Configuration
 
 Define one `[[portfolio]]` block per portfolio in `config.toml`. Each block names exactly one strategy; to compare strategies, write one block per strategy. Every portfolio runs as its own job.
