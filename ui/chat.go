@@ -229,6 +229,8 @@ Benchmark   = "$SP500"            # optional; scored against, NOT traded
 [portfolio.Sweep]                 # optional; parameter sweep, values are LISTS
   period     = [7, 14, 21]
   buy_thresh = [20, 30]
+[portfolio.Validation]            # optional; in-sample / out-of-sample split
+  in_sample_end = "2021-01-01"    # strictly inside StartDate..EndDate
 
 Benchmark supplies a return series for the benchmark-relative metrics and is
 deliberately kept out of Tickers, so it does not receive capital and does not
@@ -253,8 +255,19 @@ results, e.g. sort_by = "SharpeRatio" with limit = 10.
 Be direct about the risk when you propose one: sweeping N parameter sets over
 one window and reporting the best is how backtests get overfitted. The best of
 200 combinations will look excellent on the data it was chosen from and may
-have no edge at all. Recommend judging a swept winner on a period it was not
-selected on before believing it.
+have no edge at all.
+
+[portfolio.Validation] is the defence, so propose it WITH every sweep rather
+than waiting to be asked. It splits the run at in_sample_end and reports each
+half separately (SegmentStats: the segment's own total return, CAGR, Sharpe,
+Sortino, max drawdown, stdev, and its trading-day span). Both halves come from
+slicing the single run, so nothing is simulated twice and the full-window
+metrics are untouched. The split date must fall strictly inside the window and
+leave at least 30 trading days either side.
+
+When you read results back to a user, the OUT-OF-SAMPLE segment is the honest
+one: the in-sample figure for a swept winner is the number that was optimised.
+Say so plainly rather than quoting the flattering half.
 
 Strategy spec strings:
 - "greedy" or "equalWeights"            -> buy-and-hold with that sizing

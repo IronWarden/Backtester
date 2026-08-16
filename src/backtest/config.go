@@ -115,7 +115,28 @@ type PortfolioConfig struct {
 	// rejected with an error naming the key, instead of failing as an opaque
 	// TOML decode error.
 	Sweep map[string]any `toml:"Sweep"`
+	// Validation splits the run into a segment the parameters were chosen on
+	// and a segment they were not. Absent, nothing is split and nothing about
+	// the run changes.
+	Validation ValidationConfig `toml:"Validation"`
 }
+
+// ValidationConfig marks where a run stops being evidence. A sweep picks its
+// winner using every day in the window, so scoring that winner on the same
+// days says nothing about whether it works — the split is the cheapest
+// honest defence, and it costs no extra simulation because both segments are
+// sliced out of the one run that already happened.
+//
+// A zero ValidationConfig means no split, which is what every config written
+// before this behaved as.
+type ValidationConfig struct {
+	// InSampleEnd is the last day of the in-sample segment, YYYY-MM-DD. It
+	// must fall strictly inside the portfolio's own [StartDate, EndDate].
+	InSampleEnd string `toml:"in_sample_end"`
+}
+
+// Zero reports whether the block asks for no split at all.
+func (v ValidationConfig) Zero() bool { return strings.TrimSpace(v.InSampleEnd) == "" }
 
 // MaxSweepRuns caps how many portfolios one config block may expand to.
 // Five keys of ten values each is 100,000 backtests and a hung UI, so an
@@ -323,5 +344,23 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 	// signature carries readably.
 	p.Costs = pc.Costs
 	p.Benchmark = pc.Benchmark
+
+	if !pc.Validation.Zero() {
+		split, err := time.Parse("2006-01-02", pc.Validation.InSampleEnd)
+		if err != nil {
+			return nil, fmt.Errorf("Validation.in_sample_end: %w", err)
+		}
+		// Strictly inside, not merely within: a split on either boundary
+		// produces one empty segment, which is a config mistake rather than a
+		// degenerate-but-valid run.
+		if !split.After(startTime) || !split.Before(endTime) {
+			return nil, fmt.Errorf(
+				"Validation.in_sample_end %s must fall strictly between "+
+					"StartDate %s and EndDate %s",
+				pc.Validation.InSampleEnd, pc.StartTime, pc.EndTime,
+			)
+		}
+		p.InSampleEnd = split
+	}
 	return p, nil
 }

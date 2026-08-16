@@ -1,5 +1,35 @@
 export namespace backtest {
 	
+	export class SegmentStats {
+	    label: string;
+	    start: string;
+	    end: string;
+	    days: number;
+	    totalReturn: number;
+	    annualReturn: number;
+	    sharpeRatio: number;
+	    sortinoRatio: number;
+	    maxDrawdown: number;
+	    standardDev: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SegmentStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.start = source["start"];
+	        this.end = source["end"];
+	        this.days = source["days"];
+	        this.totalReturn = source["totalReturn"];
+	        this.annualReturn = source["annualReturn"];
+	        this.sharpeRatio = source["sharpeRatio"];
+	        this.sortinoRatio = source["sortinoRatio"];
+	        this.maxDrawdown = source["maxDrawdown"];
+	        this.standardDev = source["standardDev"];
+	    }
+	}
 	export class BenchmarkStats {
 	    ticker: string;
 	    annualReturn: number;
@@ -216,6 +246,7 @@ export namespace main {
 	    monthlyReturns: backtest.PeriodReturn[];
 	    benchmarkCurve: number[];
 	    benchmarkStats: backtest.BenchmarkStats;
+	    splits: backtest.SegmentStats[];
 	
 	    static createFrom(source: any = {}) {
 	        return new RunResult(source);
@@ -249,6 +280,7 @@ export namespace main {
 	        this.monthlyReturns = this.convertValues(source["monthlyReturns"], backtest.PeriodReturn);
 	        this.benchmarkCurve = source["benchmarkCurve"];
 	        this.benchmarkStats = this.convertValues(source["benchmarkStats"], backtest.BenchmarkStats);
+	        this.splits = this.convertValues(source["splits"], backtest.SegmentStats);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -675,6 +675,73 @@ export default function ResultsView({ results, fontSize }: Props) {
         </div>
       </div>
 
+      {results.some((r) => (r.splits ?? []).length > 0) && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-title">In-sample vs out-of-sample</span>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th>Segment</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th className="num">Days</th>
+                  <th className="num">Return %</th>
+                  <th className="num">Annual %</th>
+                  <th className="num">Sharpe</th>
+                  <th className="num">Sortino</th>
+                  <th className="num">Max DD %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  (r.splits ?? []).map((s) => (
+                    <tr
+                      key={`${i}-${s.label}`}
+                      /* The out-of-sample row is the one that carries
+                         information about a tuned parameter set; the
+                         in-sample row is the number that was optimised and
+                         is dimmed so it cannot be mistaken for evidence. */
+                      className={
+                        s.label === "in-sample" ? "benchmark-row" : undefined
+                      }
+                    >
+                      <td>
+                        <span
+                          className="swatch"
+                          style={{
+                            background: COLORS[i % COLORS.length],
+                            display: "inline-block",
+                            marginRight: "0.5em",
+                          }}
+                        />
+                        {r.portfolioName}
+                      </td>
+                      <td className="strategy">{s.label}</td>
+                      <td className="mono">{s.start}</td>
+                      <td className="mono">{s.end}</td>
+                      <td className="num">{s.days}</td>
+                      <td
+                        className={`num ${s.totalReturn < 0 ? "neg" : "pos"}`}
+                      >
+                        {s.totalReturn.toFixed(2)}
+                      </td>
+                      <td className="num">{s.annualReturn.toFixed(2)}</td>
+                      <td className="num">{s.sharpeRatio.toFixed(2)}</td>
+                      <td className="num">{s.sortinoRatio.toFixed(2)}</td>
+                      <td className="num">{s.maxDrawdown.toFixed(2)}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {results.some((r) => (r.drawdowns ?? []).length > 0) && (
         <div className="panel">
           <div className="panel-head">

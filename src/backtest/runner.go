@@ -48,6 +48,11 @@ type Result struct {
 	// the window.
 	BenchmarkCurve []float64
 	BenchmarkStats BenchmarkStats
+	// Splits holds the in-sample and out-of-sample segments of this same run
+	// when the config sets [portfolio.Validation], and is empty otherwise.
+	// Two entries, in-sample first. The out-of-sample one is the figure that
+	// carries information about a swept or hand-tuned parameter set.
+	Splits []SegmentStats
 }
 
 // topDrawdowns is how many peak-to-trough declines a Result carries. Enough
@@ -181,6 +186,7 @@ func runOne(
 		dates[i] = bar.Date
 	}
 	p.applyBenchmarkMetrics(hist, dates, riskFreeRates)
+	p.applySplitMetrics(riskFreeRates)
 	if c, ok := p.Strategy.(interface{ Close() }); ok {
 		c.Close()
 	}
@@ -340,6 +346,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					),
 					BenchmarkCurve: p.BenchmarkCurve,
 					BenchmarkStats: p.BenchmarkStats,
+					Splits:         p.Splits,
 				}
 			}
 		}()

@@ -24,6 +24,7 @@ import (
 	"math"
 	"my-backtester/src/data"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -650,4 +651,194 @@ func TestSweepProducesGenuinelyDifferentRuns(t *testing.T) {
 		t.Errorf("swept runs did not differ: %.4f vs %.4f",
 			short.Metrics.AnnualReturn, long.Metrics.AnnualReturn)
 	}
+}
+
+// --- in-sample / out-of-sample split ---------------------------------------
+
+// runExactSplit is runExact with a validation split at the given date.
+func runExactSplit(
+	t *testing.T, closes []float64, splitAfterDays int,
+) *Portfolio {
+	t.Helper()
+	cfg := &PortfolioConfig{
+		Name:        "split",
+		BuyingPower: exactCash,
+		StartTime:   exactEpoch.Format("2006-01-02"),
+		EndTime:     exactEpoch.AddDate(0, 0, len(closes)).Format("2006-01-02"),
+		Tickers:     []string{"AAA"},
+		Strategy:    "buyAndHold:equalWeights",
+		Validation: ValidationConfig{
+			InSampleEnd: exactEpoch.AddDate(0, 0, splitAfterDays).
+				Format("2006-01-02"),
+		},
+	}
+	p, err := cfg.ToPortfolio()
+	if err != nil {
+		t.Fatalf("ToPortfolio: %v", err)
+	}
+	runOne(p, histFrom(map[string][]float64{"AAA": closes}), map[int64]float64{})
+	return p
+}
+
+// rampCloses is a price path long enough to split with room either side.
+func rampCloses(n int, step float64) []float64 {
+	closes := make([]float64, n)
+	px := 100.0
+	for i := range closes {
+		closes[i] = px
+		px += step
+	}
+	return closes
+}
+
+// The two segments must account for the whole run and nothing more: their
+// compounded returns multiply back to the full-window return. An off-by-one
+// at the cut would drop or double-count a day and break this exactly.
+func TestSplitSegmentsCompoundToTheWholeRun(t *testing.T) {
+	closes := rampCloses(120, 1.0)
+	p := runExactSplit(t, closes, 60)
+
+	if len(p.Splits) != 2 {
+		t.Fatalf("got %d segments, want 2", len(p.Splits))
+	}
+	in, out := p.Splits[0], p.Splits[1]
+	if in.Label != "in-sample" || out.Label != "out-of-sample" {
+		t.Fatalf("segments mislabelled: %q, %q", in.Label, out.Label)
+	}
+
+	// Every simulated day belongs to exactly one segment.
+	if got, want := in.Days+out.Days, len(p.DailyReturns); got != want {
+		t.Errorf("segments cover %d days, the run has %d", got, want)
+	}
+
+	combined := (1 + in.TotalReturn/100) * (1 + out.TotalReturn/100)
+	whole := finalValue(t, p) / exactCash
+	almost(t, "compounded segments", combined, whole)
+
+	// Compounding alone only proves the segments PARTITION the run — moving
+	// the cut by a day leaves the product unchanged, so it cannot locate the
+	// boundary. Pin the boundary itself: bars sit on consecutive days from
+	// exactEpoch, so a split at epoch+60 must end in-sample on that very day
+	// and start out-of-sample the next.
+	wantInEnd := exactEpoch.AddDate(0, 0, 60).Format("2006-01-02")
+	wantOutStart := exactEpoch.AddDate(0, 0, 61).Format("2006-01-02")
+	if in.End != wantInEnd {
+		t.Errorf("in-sample ends %s, want %s", in.End, wantInEnd)
+	}
+	if out.Start != wantOutStart {
+		t.Errorf("out-of-sample starts %s, want %s", out.Start, wantOutStart)
+	}
+	if in.Days != 60 {
+		t.Errorf("in-sample spans %d days, want 60", in.Days)
+	}
+}
+
+// Splitting must not disturb the run it slices: the full-window figures are
+// computed from the same simulation and must be untouched by asking for
+// segments.
+func TestSplitLeavesTheFullWindowMetricsUnchanged(t *testing.T) {
+	closes := rampCloses(120, 1.0)
+
+	plain := runExact(t, "buyAndHold:equalWeights", exactCash,
+		[]string{"AAA"}, map[string][]float64{"AAA": closes}, CostConfig{})
+	split := runExactSplit(t, closes, 60)
+
+	almost(t, "final value", finalValue(t, split), finalValue(t, plain))
+	almost(t, "AnnualReturn", split.Metrics.AnnualReturn, plain.Metrics.AnnualReturn)
+	almost(t, "SharpeRatio", split.Metrics.SharpeRatio, plain.Metrics.SharpeRatio)
+	almost(t, "MaxDrawdown", split.Metrics.MaxDrawdown, plain.Metrics.MaxDrawdown)
+	almost(t, "StandardDev", split.Metrics.StandardDev, plain.Metrics.StandardDev)
+
+	if len(plain.Splits) != 0 {
+		t.Errorf("an unsplit run carries %d segments, want none", len(plain.Splits))
+	}
+}
+
+// Each segment's drawdown is measured within itself, so a decline confined to
+// the second half must not appear in the first half's figures — and the first
+// half's peak must not anchor the second's.
+func TestSplitSegmentsAreScoredIndependently(t *testing.T) {
+	// In-sample climbs 100 -> 200 with no decline at all. Out-of-sample gaps
+	// back to 100, dips to 50, and recovers.
+	//
+	// The peaks are deliberately different: measured within itself the
+	// out-of-sample drawdown is (100-50)/100 = 50%, but measured against the
+	// whole run's peak of 200 it would be (200-50)/200 = 75%. A test where
+	// both readings agree cannot tell the two apart, which is exactly the
+	// mistake an earlier version of this test made.
+	closes := make([]float64, 0, 140)
+	for i := 0; i <= 70; i++ {
+		closes = append(closes, 100+float64(i)*100.0/70.0)
+	}
+	for i := 71; i < 140; i++ {
+		if i == 105 {
+			closes = append(closes, 50) // the trough
+			continue
+		}
+		closes = append(closes, 100)
+	}
+	p := runExactSplit(t, closes, 70)
+
+	in, out := p.Splits[0], p.Splits[1]
+	almost(t, "in-sample drawdown", in.MaxDrawdown, 0.0)
+	almost(t, "in-sample total return", in.TotalReturn, 100.0)
+	// 50%, not the 75% a whole-run peak would give.
+	almost(t, "out-of-sample drawdown", out.MaxDrawdown, 50.0)
+	almost(t, "out-of-sample total return", out.TotalReturn, -50.0)
+}
+
+// A split outside the window, or on either boundary, is a config mistake: it
+// produces one empty segment. It must be rejected by name rather than
+// silently yielding a one-sided result.
+func TestSplitDateIsValidatedAgainstTheWindow(t *testing.T) {
+	base := func(split string) *PortfolioConfig {
+		return &PortfolioConfig{
+			Name:        "split",
+			BuyingPower: exactCash,
+			StartTime:   "2020-01-01",
+			EndTime:     "2020-12-31",
+			Tickers:     []string{"AAA"},
+			Strategy:    "buyAndHold:equalWeights",
+			Validation:  ValidationConfig{InSampleEnd: split},
+		}
+	}
+	for _, tc := range []struct{ name, split, want string }{
+		{"before the window", "2019-06-01", "strictly between"},
+		{"after the window", "2021-06-01", "strictly between"},
+		{"on the start boundary", "2020-01-01", "strictly between"},
+		{"on the end boundary", "2020-12-31", "strictly between"},
+		{"unparseable", "not-a-date", "in_sample_end"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := base(tc.split).ToPortfolio()
+			if err == nil {
+				t.Fatalf("split %q was accepted", tc.split)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// A split that is legal on the calendar but leaves too few trading days to
+// score must degrade the way an uncoverable benchmark does: log, skip the
+// segments, and keep the backtest result.
+func TestSplitTooNarrowDegradesWithoutLosingTheRun(t *testing.T) {
+	closes := rampCloses(40, 1.0) // 39 simulated days; 30 is the minimum
+	var logBuf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logBuf)
+	p := runExactSplit(t, closes, 35)
+	log.SetOutput(prev)
+
+	if len(p.Splits) != 0 {
+		t.Errorf("scored %d segments from a too-narrow split", len(p.Splits))
+	}
+	if !strings.Contains(logBuf.String(), "too few to score") {
+		t.Errorf("no explanation logged; got %q", logBuf.String())
+	}
+	// The run itself survives.
+	almost(t, "final value", finalValue(t, p),
+		exactCash*closes[len(closes)-1]/closes[0])
 }

@@ -492,3 +492,126 @@ func (p *Portfolio) GetBacktestingData(
 	}
 	p.Metrics = metrics
 }
+
+// --- in-sample / out-of-sample split ----------------------------------------
+
+// SegmentStats is what one slice of a run did on its own. It carries the
+// subset of metrics that are meaningful over an arbitrary sub-period: the
+// ratio and drawdown figures describe whatever return series they are handed,
+// whereas Turnover needs per-segment traded notional (which is not tracked)
+// and AvgCorrelation/CointegratedPairs describe the tickers rather than the
+// run, so neither is split.
+//
+// Like BenchmarkStats this is deliberately not part of Metrics. Metrics
+// describes one series over one window; a run with a split has three windows,
+// and folding them together would make every consumer of Metrics report
+// several subjects in one row.
+type SegmentStats struct {
+	// Label is "in-sample" or "out-of-sample".
+	Label string `json:"label"`
+	// Start and End are the first and last trading day actually in the
+	// segment, YYYY-MM-DD — not the requested split date, which usually falls
+	// on a day the market was shut.
+	Start string `json:"start"`
+	End   string `json:"end"`
+	Days  int    `json:"days"`
+	// TotalReturn is the compounded return over the segment, in %. The two
+	// segments' TotalReturns compound to the whole run's, which is the
+	// invariant that says the split did not lose or double-count a day.
+	TotalReturn  float64 `json:"totalReturn"`
+	AnnualReturn float64 `json:"annualReturn"`
+	SharpeRatio  float64 `json:"sharpeRatio"`
+	SortinoRatio float64 `json:"sortinoRatio"`
+	MaxDrawdown  float64 `json:"maxDrawdown"`
+	StandardDev  float64 `json:"standardDev"`
+}
+
+// minSegmentDays is the fewest trading days a segment may have and still be
+// reported. Ratio metrics over a handful of days are noise quoted to two
+// decimal places, which is worse than reporting nothing.
+const minSegmentDays = 30
+
+// segmentStats computes one segment's figures from the slice of the run it
+// covers. days, values and excess are parallel and already cut to the
+// segment; values are portfolio close values, so max drawdown is measured
+// within the segment rather than against an earlier peak outside it — a
+// segment's drawdown is what someone starting at its first day would have
+// experienced.
+func segmentStats(
+	label string, days []DailyReturn, values, excess []float64,
+) SegmentStats {
+	if len(days) == 0 {
+		return SegmentStats{Label: label}
+	}
+	returns := make([]float64, len(days))
+	growth := 1.0
+	for i, dr := range days {
+		returns[i] = dr.Return
+		growth *= 1 + dr.Return
+	}
+	numYears := 0.0
+	if len(days) > 1 {
+		numYears = days[len(days)-1].Date.Sub(days[0].Date).Hours() / 24 / 365.25
+	}
+	return SegmentStats{
+		Label:        label,
+		Start:        days[0].Date.Format("2006-01-02"),
+		End:          days[len(days)-1].Date.Format("2006-01-02"),
+		Days:         len(days),
+		TotalReturn:  (growth - 1) * 100,
+		AnnualReturn: GetAnnualReturn(returns, numYears),
+		SharpeRatio:  GetSharpeRatio(excess),
+		SortinoRatio: GetSortinoRatio(excess),
+		MaxDrawdown:  GetMaxDrawdown(values),
+		StandardDev:  stat.StdDev(returns, nil) * math.Sqrt(252.0),
+	}
+}
+
+// applySplitMetrics fills p.Splits by cutting the run that already happened
+// at InSampleEnd. It is a no-op when no split is configured.
+//
+// The segments are sliced out of one simulation rather than produced by two.
+// Running the out-of-sample half separately would start it with a flat
+// balance and no positions, which is a different experiment: every strategy
+// that holds across the boundary would be measured as if it had been forced
+// to liquidate and re-enter there.
+//
+// A segment shorter than minSegmentDays is dropped with a log line rather
+// than an error — by this point the backtest has already succeeded, and a
+// sparse calendar is not a reason to throw the result away.
+func (p *Portfolio) applySplitMetrics(riskFreeRates map[int64]float64) {
+	if p.InSampleEnd.IsZero() || len(p.DailyReturns) == 0 {
+		return
+	}
+	// DailyReturns and PortfolioCloseValues are appended together each day,
+	// so they share length and ordering; cut is an index into both.
+	cut := len(p.DailyReturns)
+	for i, dr := range p.DailyReturns {
+		if dr.Date.After(p.InSampleEnd) {
+			cut = i
+			break
+		}
+	}
+	tail := len(p.DailyReturns) - cut
+	if cut < minSegmentDays || tail < minSegmentDays {
+		log.Printf(
+			"portfolio %q: split at %s leaves %d in-sample and %d "+
+				"out-of-sample trading days; fewer than %d either side is "+
+				"too few to score, skipping split metrics",
+			p.Pname, p.InSampleEnd.Format("2006-01-02"), cut, tail,
+			minSegmentDays,
+		)
+		return
+	}
+
+	excess := make([]float64, len(p.DailyReturns))
+	for i, dr := range p.DailyReturns {
+		excess[i] = dr.Return - riskFreeRates[dr.Date.Unix()]
+	}
+	p.Splits = []SegmentStats{
+		segmentStats("in-sample",
+			p.DailyReturns[:cut], p.PortfolioCloseValues[:cut], excess[:cut]),
+		segmentStats("out-of-sample",
+			p.DailyReturns[cut:], p.PortfolioCloseValues[cut:], excess[cut:]),
+	}
+}

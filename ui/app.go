@@ -67,6 +67,9 @@ type RunResult struct {
 	// portfolio against it. Both are empty when no Benchmark is configured.
 	BenchmarkCurve []float64               `json:"benchmarkCurve"`
 	BenchmarkStats backtest.BenchmarkStats `json:"benchmarkStats"`
+	// Splits holds the in-sample and out-of-sample segments of this run when
+	// [portfolio.Validation] is set, in-sample first, and is empty otherwise.
+	Splits []backtest.SegmentStats `json:"splits"`
 }
 
 // RunBacktest executes the in-editor TOML config against the chosen DB.
@@ -115,6 +118,7 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			MonthlyReturns:    r.MonthlyReturns,
 			BenchmarkCurve:    r.BenchmarkCurve,
 			BenchmarkStats:    r.BenchmarkStats,
+			Splits:            r.Splits,
 		})
 	}
 	return results, nil

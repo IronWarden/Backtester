@@ -261,6 +261,45 @@ limit   = 10
 > hypothesis, and confirm it on a period it was not selected on before
 > believing it.
 
+### `[portfolio.Validation]`
+
+Splits the run into a segment the parameters were chosen on and a segment
+they were not.
+
+```toml
+[Portfolio.Validation]
+  in_sample_end = "2021-01-01"   # strictly inside [StartDate, EndDate]
+```
+
+Each result then carries two `SegmentStats` — in-sample first — with each
+segment's own compounded return, CAGR, Sharpe, Sortino, max drawdown and
+standard deviation, plus the trading days it actually spans. The full-window
+metrics are unchanged.
+
+Both segments are **sliced out of the one simulation that already ran**, not
+produced by running the backtest twice. A second run starting at the split
+date would begin out-of-sample with a flat balance and no positions, which is
+a different experiment: every strategy that holds across the boundary would be
+measured as if forced to liquidate and re-enter there.
+
+Each segment's max drawdown is measured within itself, so the in-sample half's
+peak never anchors the out-of-sample half — a segment's drawdown is what
+someone starting on its first day would have lived through.
+
+A split date outside the window, or on either boundary, is rejected with an
+error naming the dates. A split that is legal on the calendar but leaves fewer
+than 30 trading days on either side is skipped with a log line, keeping the
+backtest result: ratio metrics over a handful of days are noise quoted to two
+decimals.
+
+Turnover, `AvgCorrelation` and `CointegratedPairs` are deliberately not split
+— the first needs per-segment traded notional, which is not tracked, and the
+other two describe the tickers rather than the run.
+
+> Use this with `[portfolio.Sweep]`. A sweep picks its winner using every day
+> in the window, so the in-sample figure for that winner is the number that
+> was optimised, not evidence. The out-of-sample column is the one to read.
+
 ### `[Output]`
 
 An optional block that writes results to a file. Omit it and results are returned in memory only (the UI's path).

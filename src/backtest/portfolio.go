@@ -56,6 +56,12 @@ type Portfolio struct {
 	// window.
 	BenchmarkCurve []float64
 	BenchmarkStats BenchmarkStats
+	// InSampleEnd is the last day of the in-sample segment when the config
+	// asks for a split, and the zero time when it does not. Like Costs and
+	// Benchmark it is configuration, so Clone must carry it across; Splits is
+	// the per-run result and Clone leaves it empty.
+	InSampleEnd time.Time
+	Splits      []SegmentStats
 }
 
 func InitializePortfolio(
@@ -112,6 +118,7 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		Strategy:             strat,
 		Costs:                p.Costs,
 		Benchmark:            p.Benchmark,
+		InSampleEnd:          p.InSampleEnd,
 	}, nil
 }
 
