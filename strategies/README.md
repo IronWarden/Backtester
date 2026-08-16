@@ -143,8 +143,13 @@ can copy a single file and edit it.
 
 - **No shorting and no leverage.** A buy larger than `cash()` is clamped;
   size against `cash()` or `equity()` rather than assuming credit.
-- **No transaction costs or slippage** are modelled anywhere in the engine.
-  High-turnover strategies will look better here than in reality.
+- **Transaction costs are off by default.** Set `[portfolio.Costs]` in the
+  config (`commission_per_trade`, `commission_bps`, `slippage_bps`) to charge
+  them; omitting the block keeps trading frictionless, so high-turnover
+  strategies will look better than in reality. Costs apply inside `buy`/`sell`
+  and are invisible to strategy code — `cash()` already reflects them, and a
+  `buy_max` sized against the whole balance is clamped down to cover its fee
+  rather than rejected. See the main README's `[portfolio.Costs]` section.
 - **`price()` returns 0, not `nil`, out of range** — guard with `> 0`
   rather than `~= nil`.
 - **Errors are logged, not raised.** If a strategy misbehaves, check the

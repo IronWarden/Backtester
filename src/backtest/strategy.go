@@ -104,13 +104,25 @@ func (s *BuyAndHold) Step(
 	if day != 0 {
 		return
 	}
+	// equalWeights sizes every leg against the balance as it stood before any
+	// of them filled. Reading the live balance instead would divide an
+	// already-drained figure by the full ticker count, shrinking each leg in
+	// turn and stranding ((N-1)/N)^N of the capital in cash forever — 25% at
+	// two tickers, converging to 1/e. greedy is the opposite by design: it
+	// pours whatever is left into each ticker in order, so it must keep
+	// reading the live balance.
+	budget := p.BuyingPower
 	for _, ticker := range p.Tickers {
 		td := hist[ticker]
 		if len(td) == 0 {
 			continue
 		}
 		price := td[0].Close
-		amount := generalBuy(p.BuyingPower, price, s.BuyType, p.Tickers)
+		available := p.BuyingPower
+		if s.BuyType == "equalWeights" {
+			available = budget
+		}
+		amount := generalBuy(available, price, s.BuyType, p.Tickers)
 		p.Buy(ticker, amount, price, td[0].Date)
 	}
 }
