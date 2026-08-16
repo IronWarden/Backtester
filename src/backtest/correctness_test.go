@@ -19,8 +19,11 @@ package backtest
 // anywhere in strategy -> portfolio -> valuation -> metrics surfaces here.
 
 import (
+	"bytes"
+	"log"
 	"math"
 	"my-backtester/src/data"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -420,4 +423,164 @@ func TestBetaOfADoubleExposurePath(t *testing.T) {
 	// Twice the move in both directions, so both capture ratios are 200%.
 	almost(t, "UpCapture", p.Metrics.UpCapture, 200.0)
 	almost(t, "DownCapture", p.Metrics.DownCapture, 200.0)
+}
+
+// --- shipped Lua strategies -------------------------------------------------
+//
+// strategies_library_test.go proves these eleven scripts run without logging
+// an error and place at least one trade. That leaves the actual decisions
+// unchecked: a strategy could enter on the wrong day, or on every day, and
+// still pass. The cases below construct price paths where the correct
+// decision is knowable in advance — a channel with exactly one break, a
+// monotonic decline, a single moving-average cross — so the assertion is on
+// what the strategy did, not merely that it did something.
+
+// runExactLua is runExact for a script in strategies/, so the tests below
+// exercise the real shipped file rather than a copy.
+func runExactLua(
+	t *testing.T, script string, params map[string]any,
+	tickers []string, closes map[string][]float64,
+) *Portfolio {
+	t.Helper()
+	hist := histFrom(closes)
+	n := len(closes[tickers[0]])
+	p, err := InitializePortfolio(
+		exactCash,
+		exactEpoch,
+		exactEpoch.AddDate(0, 0, n),
+		"exact-lua",
+		tickers,
+		"lua:"+filepath.Join(strategiesDir(t), script),
+		params,
+	)
+	if err != nil {
+		t.Fatalf("InitializePortfolio(%s): %v", script, err)
+	}
+
+	// LuaStrategy reports script failures through the log rather than by
+	// returning an error, so a silent misfire would otherwise read as "the
+	// strategy chose not to trade".
+	var logBuf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logBuf)
+	defer log.SetOutput(prev)
+
+	runOne(p, hist, map[int64]float64{})
+
+	if logBuf.Len() > 0 {
+		t.Fatalf("%s logged during the run: %s", script, logBuf.String())
+	}
+	return p
+}
+
+// shares returns the open share count for a ticker, 0 when flat.
+func shares(p *Portfolio, ticker string) float64 {
+	if pos, ok := p.Positions[ticker]; ok && pos != nil {
+		return pos.Amount
+	}
+	return 0
+}
+
+// dca deploys a fixed amount on a fixed cadence, so over a flat price the
+// whole outcome is counting: with every_days=2 across days 0..8 it buys on
+// days 0, 2, 4, 6 and 8 — five buys of 1000 at a price of 100.
+func TestDCABuysOnItsCadenceAndNoOtherDay(t *testing.T) {
+	p := runExactLua(t, "dca.lua",
+		map[string]any{"amount": 1000.0, "every_days": int64(2)},
+		[]string{"AAA"},
+		map[string][]float64{"AAA": {100, 100, 100, 100, 100, 100, 100, 100, 100}},
+	)
+
+	almost(t, "shares", shares(p, "AAA"), 50.0) // 5 buys x 1000 / 100
+	almost(t, "cash", p.BuyingPower, 5_000.0)   // 10000 - 5x1000
+	almost(t, "traded notional", p.tradedNotional, 5_000.0)
+	// Flat price and no external cash, so the account is worth its start.
+	almost(t, "final value", finalValue(t, p), exactCash)
+}
+
+// rebalance trims the winner and tops up the laggard back to the target
+// weights, so after a rebalance the legs are worth exactly the same by
+// definition — whatever the prices did in between.
+func TestRebalanceRestoresEqualWeightExactly(t *testing.T) {
+	p := runExactLua(t, "rebalance.lua",
+		map[string]any{"rebalance_days": int64(2)},
+		[]string{"AAA", "BBB"},
+		map[string][]float64{
+			"AAA": {100, 200, 200}, // doubles
+			"BBB": {100, 100, 100}, // flat
+		},
+	)
+
+	// Day 0 buys 50 shares of each at 100. By day 2 the account is worth
+	// 50*200 + 50*100 = 15000, so each leg's target is 7500: AAA is trimmed
+	// to 37.5 shares at 200, BBB topped up to 75 at 100.
+	almost(t, "AAA shares", shares(p, "AAA"), 37.5)
+	almost(t, "BBB shares", shares(p, "BBB"), 75.0)
+	almost(t, "AAA leg value", shares(p, "AAA")*200.0, 7_500.0)
+	almost(t, "BBB leg value", shares(p, "BBB")*100.0, 7_500.0)
+	almost(t, "cash", p.BuyingPower, 0.0)
+	almost(t, "final value", finalValue(t, p), 15_000.0)
+}
+
+// sma_cross must act on the cross and only on the cross. This path is flat
+// long enough for both averages to sit exactly on top of each other, then
+// steps up once: with short=2 and long=4 the short average first exceeds the
+// long on day 7, and nothing crosses back afterwards.
+func TestSMACrossEntersOnTheCrossAndOnlyThere(t *testing.T) {
+	p := runExactLua(t, "sma_cross.lua",
+		map[string]any{"short": int64(2), "long": int64(4)},
+		[]string{"AAA"},
+		map[string][]float64{
+			"AAA": {100, 100, 100, 100, 100, 100, 200, 200, 250},
+		},
+	)
+
+	// Entry fills at day 7's close of 200 with the whole balance.
+	almost(t, "shares", shares(p, "AAA"), exactCash/200.0)
+	almost(t, "average price", p.Positions["AAA"].AveragePrice, 200.0)
+	almost(t, "cash", p.BuyingPower, 0.0)
+	// Exactly one order: a second entry, or an exit, would move this.
+	almost(t, "traded notional", p.tradedNotional, exactCash)
+	almost(t, "final value", finalValue(t, p), exactCash/200.0*250.0)
+}
+
+// A monotonic decline has no up days at all, so RSI is 0 — unambiguously
+// below any oversold threshold. The strategy must therefore buy on the first
+// day it is allowed to act, and must not sell while RSI stays pinned down.
+func TestRSIBuysAnUnambiguousOversoldPath(t *testing.T) {
+	p := runExactLua(t, "rsi.lua",
+		map[string]any{"period": int64(2)},
+		[]string{"AAA"},
+		map[string][]float64{"AAA": {100, 90, 80, 70, 60}},
+	)
+
+	// step returns early while day <= period, so day 3 is the first action,
+	// filling at that day's close of 70.
+	almost(t, "shares", shares(p, "AAA"), exactCash/70.0)
+	almost(t, "average price", p.Positions["AAA"].AveragePrice, 70.0)
+	almost(t, "traded notional", p.tradedNotional, exactCash)
+	almost(t, "final value", finalValue(t, p), exactCash/70.0*60.0)
+}
+
+// donchian enters on a new channel high and exits on a new channel low, both
+// measured against the days BEFORE today. A flat channel with one clean break
+// up and one clean break down pins both the entry day and the exit day.
+func TestDonchianEntersOnTheBreakAndExitsOnTheBreakdown(t *testing.T) {
+	p := runExactLua(t, "donchian_breakout.lua",
+		map[string]any{"entry_period": int64(3), "exit_period": int64(2)},
+		[]string{"AAA"},
+		map[string][]float64{
+			// flat 100 channel, break to 120, then collapse to 80
+			"AAA": {100, 100, 100, 100, 120, 120, 80},
+		},
+	)
+
+	// Day 4 closes at 120 above the 100 channel -> enter with everything.
+	// Day 6 closes at 80 below the two-day low of 120 -> flatten.
+	if got := shares(p, "AAA"); got != 0 {
+		t.Errorf("still holding %v shares; the exit break was missed", got)
+	}
+	almost(t, "cash after the round trip", p.BuyingPower, exactCash*80.0/120.0)
+	// Both sides of the round trip count toward traded notional.
+	almost(t, "traded notional", p.tradedNotional, exactCash+exactCash*80.0/120.0)
 }
