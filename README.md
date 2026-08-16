@@ -97,6 +97,48 @@ python3 add_collections.py --dry-run  # preview coverage, no write
 python3 add_collections.py --only '$SP500' '$CASH'
 ```
 
+## Fundamentals, macro and the publication lag
+
+Beyond prices and the risk-free rate, `stock_data.db` carries several tables
+the engine does not yet read:
+
+| Table | Rows | Coverage |
+| --- | --- | --- |
+| `financials` | 8.5M | ~6,900 tickers, 2020-07 → 2026-03, quarterly |
+| `earnings_calendar` | 21k | ~1,000 tickers, 1999 → 2026, real report timestamps |
+| `economic_indicators` | 5k | CPI, FEDFUNDS, GDP, INDPRO, M2, UNRATE, 1927+ |
+| `"10YrTreasuryYields"` | 4k | 2010 → 2026 |
+| `crypto_ohlcv` | 15k | 5 tickers, 2014+, **not** on the NYSE calendar |
+| `company_info` | 0 | empty — there is no sector data |
+
+`financials` is long-format (`metric, date, value, ticker, frequency`) and
+includes Total Revenue, Net Income, Stockholders Equity, Total Assets,
+Tangible Book Value, Cash And Cash Equivalents and Ordinary Shares Number — so
+P/E, P/B, P/S, ROE, ROA and market cap are all derivable. About 6,600 of those
+tickers also have price history.
+
+> **`financials.date` is the fiscal period end, not the publication date.**
+> Its dates are overwhelmingly 12-31, 03-31, 06-30 and 09-30. Joining it to
+> prices on that date uses Q4 figures on December 31, weeks before they were
+> published — look-ahead bias that flatters any factor backtest built on it.
+
+Read it through `src/data.PointInTimeFundamentals`, which dates every figure
+with the day it became knowable: the real `earnings_calendar` report date
+where one exists (plus one day, since those land after the close), and period
+end + `FixedReportLagDays` (90) otherwise. Each point records which rule
+applied, so a result resting mostly on the fallback can be read accordingly.
+The helper also deduplicates — the raw table contains exact duplicate rows.
+
+Two further caveats before building anything on this:
+
+- **`economic_indicators` has the same trap.** `Date` is the period, and CPI
+  for January is published in mid-February and revised for years. Lag it
+  before using it in a decision. Regime signals computed from prices
+  (drawdown depth, realised volatility) need no lag.
+- **Fundamentals begin 2020-07** — five and a half years containing one
+  inflation shock and one hiking cycle, which is a single macro regime. Treat
+  factor results over that window as hypothesis-generating, not evidence.
+
 ## Configuration
 
 Define one `[[portfolio]]` block per portfolio in `config.toml`. Each block names exactly one strategy; to compare strategies, write one block per strategy. Every portfolio runs as its own job.

@@ -127,9 +127,19 @@ func TestSystemPromptRoutesAllTools(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		// Fundamentals live in Yahoo tools, never in the DB (the "P/E < 20
-		// from the DB" failure).
-		"NO fundamentals",
+		// Quarterly fundamentals DO exist. This assertion previously pinned
+		// the opposite — the prompt claimed the database had none, which was
+		// false for years and had the assistant denying a real capability to
+		// every user. Pinning the correction stops it regressing.
+		"financials(metric, date, value, ticker, frequency)",
+		// ...but its dates are fiscal period ends, so a naive join is
+		// look-ahead bias. An assistant that knows the table exists and not
+		// this is more dangerous than one that knows neither, which is why
+		// the two are asserted together.
+		"FISCAL PERIOD END",
+		"look-ahead",
+		// Sector data genuinely is absent: company_info is empty.
+		"company_info is EMPTY",
 		// CASH-the-ticker is a bank stock, not a cash proxy.
 		"Pathward",
 		"$CASH",
@@ -138,8 +148,12 @@ func TestSystemPromptRoutesAllTools(t *testing.T) {
 			t.Errorf("appReference lost the %q guidance", want)
 		}
 	}
-	if !strings.Contains(queryDBToolDescription, "no fundamentals") {
-		t.Error("query_db description no longer warns it has no fundamentals")
+	// The tool description is what a model sees when deciding whether to
+	// reach for query_db at all, so the same caveat has to survive there.
+	for _, want := range []string{"FISCAL PERIOD END", "look-ahead"} {
+		if !strings.Contains(queryDBToolDescription, want) {
+			t.Errorf("query_db description lost the %q warning", want)
+		}
 	}
 }
 

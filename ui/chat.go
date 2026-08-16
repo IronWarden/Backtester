@@ -425,9 +425,64 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Residual tracking error is not corrected.
 - IMPORTANT: the ticker "CASH" (no $) is Pathward Financial, a bank stock —
   NOT a cash proxy. For cash / T-bills use $CASH.
-- The database has NO fundamentals — no P/E, market cap, sector, earnings
-  or dividend data. Questions like "companies with P/E under 20" can never
-  be answered with SQL; they need the screen_stocks tool.
+- The database DOES hold quarterly fundamentals, in these tables:
+  - financials(metric, date, value, ticker, frequency) — 8.5M rows, ~6,900
+    tickers, 2020-07 to 2026-03, long format (one row per metric per period).
+    Metrics include Total Revenue, Net Income, Stockholders Equity, Total
+    Assets, Tangible Book Value, Cash And Cash Equivalents and Ordinary
+    Shares Number. So P/E, P/B, P/S, ROE, ROA and MARKET CAP (shares x price)
+    are all derivable. ~6,600 of those tickers also have price history.
+  - earnings_calendar(Ticker, Date, Value) — real report timestamps for
+    ~1,000 tickers, 1999+. The times are after the close (16:00).
+  - economic_indicators(Date, series_id, indicator_name, value) — CPIAUCSL,
+    FEDFUNDS, GDP, INDPRO, M2SL, UNRATE. Monthly/quarterly, 1927+.
+  - "10YrTreasuryYields"(Date, annual_yield_percent,
+    daily_risk_free_rate_decimal) — 2010+. Pair with 3MTreasuryYields for
+    the 10y-3m curve spread.
+  - crypto_ohlcv — 5 tickers, 2014+. NOT on the NYSE calendar, so it cannot
+    be mixed with equities in one portfolio.
+  - company_info is EMPTY. There is genuinely no sector data; sector
+    questions still need screen_stocks or lookup_quote.
+
+- CRITICAL — financials.date is the FISCAL PERIOD END, not the publication
+  date. Its dates are overwhelmingly 12-31, 03-31, 06-30, 09-30. Joining it
+  to prices on that date is LOOK-AHEAD BIAS: it uses Q4 figures on Dec 31,
+  weeks before they were published, and makes any factor backtest look far
+  better than reality. Never write that join, and say so when a user asks
+  for one.
+  Use the publication lag instead — the real report date where it exists,
+  and period end + 90 days otherwise:
+
+  WITH pit AS (
+    SELECT DISTINCT f.ticker, f.metric, f.date AS period_end, f.value,
+           COALESCE(
+             (SELECT MIN(e.Date)::DATE + INTERVAL 1 DAY
+              FROM earnings_calendar e
+              WHERE e.Ticker = f.ticker AND e.Date > f.date),
+             f.date + INTERVAL 90 DAY
+           ) AS known_from
+    FROM financials f
+  )
+  SELECT * FROM pit WHERE known_from <= DATE '2024-06-30';
+
+  Two details in that query are load-bearing. SELECT DISTINCT is required:
+  the raw table contains exact duplicate rows (AAPL/Net Income/2025-09-30
+  appears four times), so any SUM or AVG over it is silently multiplied.
+  And "+ INTERVAL 1 DAY" is because report timestamps are after the close,
+  so the first tradeable session is the next one.
+
+  Engine-side, src/data.PointInTimeFundamentals applies the same rule and is
+  the only sanctioned way for Go code to read this table.
+
+- The same trap applies to economic_indicators: Date is the PERIOD, and CPI
+  for January is published in mid-February and revised for years afterwards.
+  Lag any macro series before using it for a trading decision. Regime labels
+  computed from prices (drawdown depth, realised volatility) need no lag and
+  are the safe ones.
+
+- Fundamentals start 2020-07 — five and a half years, containing one
+  inflation shock and one hiking cycle. That is a single macro regime, so
+  treat any factor result over it as hypothesis-generating, not evidence.
 
 ## Working style
 - When proposing a portfolio config, emit one complete fenced toml code
@@ -499,9 +554,15 @@ const queryDBToolDescription = "Run one read-only SQL statement (DuckDB " +
 	"SELECT, WITH, DESCRIBE, SHOW, SUMMARIZE, EXPLAIN. Main tables: " +
 	`stock_data_optimized(Date, Ticker, Open, High, Low, Close, Volume) ` +
 	`and "3MTreasuryYields"(Date, daily_risk_free_rate_decimal). ` +
-	"Results are capped at 100 rows, so aggregate or LIMIT. The database " +
-	"holds ONLY price history and treasury yields — no fundamentals (P/E, " +
-	"market cap, sector); use screen_stocks or lookup_quote for those."
+	`plus financials(metric, date, value, ticker, frequency), ` +
+	`earnings_calendar, economic_indicators and "10YrTreasuryYields". ` +
+	"Results are capped at 100 rows, so aggregate or LIMIT. Quarterly " +
+	"fundamentals ARE available (revenue, net income, equity, assets, shares " +
+	"outstanding, 2020+), but financials.date is the FISCAL PERIOD END, not " +
+	"the publication date — joining it to prices on that date is look-ahead " +
+	"bias. Lag to the earnings_calendar report date, or period end + 90 " +
+	"days. There is no sector data (company_info is empty); use " +
+	"screen_stocks or lookup_quote for sector and live P/E."
 
 func queryDBToolSchema() map[string]any {
 	return map[string]any{
