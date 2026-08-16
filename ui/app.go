@@ -60,6 +60,13 @@ type RunResult struct {
 	RollingSharpe  []backtest.RollingPoint `json:"rollingSharpe"`
 	YearlyReturns  []backtest.PeriodReturn `json:"yearlyReturns"`
 	MonthlyReturns []backtest.PeriodReturn `json:"monthlyReturns"`
+	// BenchmarkCurve is the configured Benchmark's value over the same days,
+	// compounded from InitialCapital so it shares an axis and an origin with
+	// EquityCurve, and 1:1 with Dates. BenchmarkStats is what the benchmark
+	// did on its own terms; the alpha/beta/capture fields above describe the
+	// portfolio against it. Both are empty when no Benchmark is configured.
+	BenchmarkCurve []float64               `json:"benchmarkCurve"`
+	BenchmarkStats backtest.BenchmarkStats `json:"benchmarkStats"`
 }
 
 // RunBacktest executes the in-editor TOML config against the chosen DB.
@@ -106,6 +113,8 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			RollingSharpe:     r.RollingSharpe,
 			YearlyReturns:     r.YearlyReturns,
 			MonthlyReturns:    r.MonthlyReturns,
+			BenchmarkCurve:    r.BenchmarkCurve,
+			BenchmarkStats:    r.BenchmarkStats,
 		})
 	}
 	return results, nil

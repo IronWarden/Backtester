@@ -294,6 +294,103 @@ func TestPortfolioThatIsItsOwnBenchmark(t *testing.T) {
 	almost(t, "DownCapture", p.Metrics.DownCapture, 100.0)
 }
 
+// A portfolio holding exactly its benchmark must produce a benchmark curve
+// equal to its own equity curve, point for point. That is definitional, and
+// it pins the rebasing, the day alignment and the compounding in a single
+// assertion: get any one of the three wrong and the curves diverge.
+func TestBenchmarkCurveMatchesAPortfolioHoldingIt(t *testing.T) {
+	closes := []float64{100, 108, 96, 130, 121, 155}
+	hist := histFrom(map[string][]float64{"AAA": closes})
+
+	p, err := InitializePortfolio(
+		exactCash, exactEpoch, exactEpoch.AddDate(0, 0, len(closes)),
+		"exact", []string{"AAA"}, "buyAndHold:equalWeights", nil,
+	)
+	if err != nil {
+		t.Fatalf("InitializePortfolio: %v", err)
+	}
+	p.Benchmark = "AAA"
+	runOne(p, hist, map[int64]float64{})
+
+	if got, want := len(p.BenchmarkCurve), len(p.PortfolioCloseValues); got != want {
+		t.Fatalf("benchmark curve has %d points, equity curve has %d — an "+
+			"off-by-one here silently shifts the index line one day against "+
+			"the portfolio", got, want)
+	}
+	for i := range p.BenchmarkCurve {
+		almost(t, "benchmark curve point", p.BenchmarkCurve[i],
+			p.PortfolioCloseValues[i])
+	}
+
+	// Rebased to the portfolio's own capital, so the benchmark's first
+	// recorded point is the starting cash moved by the first day's return.
+	almost(t, "first point", p.BenchmarkCurve[0], exactCash*closes[1]/closes[0])
+
+	// The benchmark's own figures must equal the portfolio's, since they are
+	// the same series.
+	almost(t, "benchmark CAGR", p.BenchmarkStats.AnnualReturn, p.Metrics.AnnualReturn)
+	almost(t, "benchmark MaxDD", p.BenchmarkStats.MaxDrawdown, p.Metrics.MaxDrawdown)
+	almost(t, "benchmark stdev", p.BenchmarkStats.StandardDev, p.Metrics.StandardDev)
+	if p.BenchmarkStats.Ticker != "AAA" {
+		t.Errorf("BenchmarkStats.Ticker = %q, want %q", p.BenchmarkStats.Ticker, "AAA")
+	}
+}
+
+// The benchmark's own CAGR must compound its curve from start to end over the
+// elapsed window, exactly as the portfolio's does. Asserting the relationship
+// rather than re-deriving the formula keeps this honest if either is
+// reimplemented. The benchmark here is NOT what the portfolio holds, so the
+// two sets of figures are genuinely independent.
+func TestBenchmarkStatsDescribeTheBenchmarkNotThePortfolio(t *testing.T) {
+	held := []float64{100, 101, 102, 103, 104, 105}  // +5% total
+	index := []float64{200, 220, 210, 260, 280, 300} // +50% total
+	hist := histFrom(map[string][]float64{"AAA": held, "IDX": index})
+
+	p, err := InitializePortfolio(
+		exactCash, exactEpoch, exactEpoch.AddDate(0, 0, len(held)),
+		"exact", []string{"AAA"}, "buyAndHold:equalWeights", nil,
+	)
+	if err != nil {
+		t.Fatalf("InitializePortfolio: %v", err)
+	}
+	p.Benchmark = "IDX"
+	runOne(p, hist, map[int64]float64{})
+
+	// The curve tracks the index's shape off the portfolio's starting cash.
+	last := len(p.BenchmarkCurve) - 1
+	almost(t, "benchmark final value", p.BenchmarkCurve[last],
+		exactCash*index[len(index)-1]/index[0])
+
+	// And its CAGR compounds back to the index's own growth, not the
+	// portfolio's — 1.5x, nowhere near the portfolio's 1.05x.
+	first := p.DailyReturns[0].Date
+	end := p.DailyReturns[len(p.DailyReturns)-1].Date
+	years := end.Sub(first).Hours() / 24 / 365.25
+	growth := math.Pow(1+p.BenchmarkStats.AnnualReturn/100.0, years)
+	almost(t, "benchmark compounded growth", growth, 1.5)
+
+	// The portfolio's own figures are untouched by any of this.
+	almost(t, "portfolio final value", finalValue(t, p), exactCash*1.05)
+}
+
+// A portfolio with no benchmark configured must carry no benchmark data and
+// must produce exactly the numbers it produced before this feature existed.
+func TestNoBenchmarkLeavesEverythingEmpty(t *testing.T) {
+	closes := map[string][]float64{"AAA": {100, 108, 96, 130, 121, 155}}
+	p := runExact(t, "buyAndHold:equalWeights", exactCash,
+		[]string{"AAA"}, closes, CostConfig{})
+
+	if p.BenchmarkCurve != nil {
+		t.Errorf("BenchmarkCurve = %v, want nil for an unbenchmarked run",
+			p.BenchmarkCurve)
+	}
+	if p.BenchmarkStats != (BenchmarkStats{}) {
+		t.Errorf("BenchmarkStats = %+v, want the zero value", p.BenchmarkStats)
+	}
+	// Unchanged: a run without a benchmark still values the same way.
+	almost(t, "final value", finalValue(t, p), exactCash*155.0/100.0)
+}
+
 // Twice the benchmark's daily move is a beta of exactly 2. Built by
 // compounding a doubled return series into a price path, so the portfolio
 // genuinely holds a security that moves that way rather than having its

@@ -1,5 +1,25 @@
 export namespace backtest {
 	
+	export class BenchmarkStats {
+	    ticker: string;
+	    annualReturn: number;
+	    sharpeRatio: number;
+	    maxDrawdown: number;
+	    standardDev: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BenchmarkStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.annualReturn = source["annualReturn"];
+	        this.sharpeRatio = source["sharpeRatio"];
+	        this.maxDrawdown = source["maxDrawdown"];
+	        this.standardDev = source["standardDev"];
+	    }
+	}
 	export class Drawdown {
 	    // Go type: time
 	    start: any;
@@ -194,6 +214,8 @@ export namespace main {
 	    rollingSharpe: backtest.RollingPoint[];
 	    yearlyReturns: backtest.PeriodReturn[];
 	    monthlyReturns: backtest.PeriodReturn[];
+	    benchmarkCurve: number[];
+	    benchmarkStats: backtest.BenchmarkStats;
 	
 	    static createFrom(source: any = {}) {
 	        return new RunResult(source);
@@ -225,6 +247,8 @@ export namespace main {
 	        this.rollingSharpe = this.convertValues(source["rollingSharpe"], backtest.RollingPoint);
 	        this.yearlyReturns = this.convertValues(source["yearlyReturns"], backtest.PeriodReturn);
 	        this.monthlyReturns = this.convertValues(source["monthlyReturns"], backtest.PeriodReturn);
+	        this.benchmarkCurve = source["benchmarkCurve"];
+	        this.benchmarkStats = this.convertValues(source["benchmarkStats"], backtest.BenchmarkStats);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

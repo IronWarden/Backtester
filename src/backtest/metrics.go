@@ -305,6 +305,78 @@ func (p *Portfolio) applyBenchmarkMetrics(
 	p.Metrics.InformationRatio = GetInformationRatio(portfolio, benchmark)
 	p.Metrics.UpCapture = GetUpCapture(portfolio, benchmark)
 	p.Metrics.DownCapture = GetDownCapture(portfolio, benchmark)
+
+	// The same return series, kept rather than discarded, so the UI can draw
+	// the benchmark next to the portfolio and report what it did on its own.
+	p.BenchmarkCurve = rebasedCurve(benchmark, p.InitialBuyingPower)
+	p.BenchmarkStats = benchmarkStatsFrom(
+		p.Benchmark, benchmark, benchmarkExcess, p.BenchmarkCurve, p.DailyReturns,
+	)
+}
+
+// BenchmarkStats is what the benchmark did on its own terms, as opposed to
+// the benchmark-relative fields of Metrics, which describe the portfolio's
+// behaviour against it. It is deliberately a separate type rather than more
+// fields on Metrics: Metrics describes the portfolio, and every consumer of
+// it — the reporter's field switch, [Output] fields, the results table —
+// would otherwise start reporting two different subjects in one row.
+//
+// All zero for a portfolio with no Benchmark, or one whose benchmark does not
+// cover the window.
+type BenchmarkStats struct {
+	// Ticker is the benchmark symbol, so the UI can label the series.
+	Ticker string `json:"ticker"`
+	// The same four headline figures the portfolio reports, computed the same
+	// way over the benchmark's own return series.
+	AnnualReturn float64 `json:"annualReturn"`
+	SharpeRatio  float64 `json:"sharpeRatio"`
+	MaxDrawdown  float64 `json:"maxDrawdown"`
+	StandardDev  float64 `json:"standardDev"`
+}
+
+// rebasedCurve compounds a return series into a value series starting from
+// initial. Rebasing to the portfolio's own starting capital is what lets both
+// lines share one axis: the raw index level would put a 5,000-point index
+// against a $10,000 portfolio and make the chart unreadable. Returns are
+// scale-invariant, so this changes no metric.
+//
+// The result is 1:1 with the return series, and so with the portfolio's daily
+// returns and PortfolioCloseValues — index i is the same trading day in all
+// three, which is what keeps the two chart lines aligned.
+func rebasedCurve(returns []float64, initial float64) []float64 {
+	if len(returns) == 0 {
+		return nil
+	}
+	curve := make([]float64, len(returns))
+	level := initial
+	for i, r := range returns {
+		level *= 1 + r
+		curve[i] = level
+	}
+	return curve
+}
+
+// benchmarkStatsFrom computes the benchmark's own headline metrics, reusing
+// the portfolio's metric functions so the two columns are computed
+// identically and stay comparable. numYears is taken from the portfolio's own
+// day series for the same reason.
+func benchmarkStatsFrom(
+	ticker string,
+	returns, excess, curve []float64,
+	days []DailyReturn,
+) BenchmarkStats {
+	numYears := 0.0
+	if n := len(days); n > 1 {
+		span := days[n-1].Date.Sub(days[0].Date)
+		numYears = span.Hours() / 24 / 365.25
+	}
+	return BenchmarkStats{
+		Ticker:       ticker,
+		AnnualReturn: GetAnnualReturn(returns, numYears),
+		SharpeRatio:  GetSharpeRatio(excess),
+		MaxDrawdown:  GetMaxDrawdown(curve),
+		StandardDev:  stat.StdDev(returns, nil) * math.Sqrt(252.0),
+	}
 }
 
 // GetSortinoRatio annualizes mean excess return divided by the downside

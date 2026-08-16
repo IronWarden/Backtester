@@ -313,6 +313,15 @@ and that ticker's data covers the whole window (otherwise all zero):
   and % of its loss taken on its down days. Under 100 down-capture with over
   100 up-capture is the asymmetry most strategies are actually chasing.
 
+Setting Benchmark also draws the benchmark itself. The results panel plots it
+as a muted dashed line on the equity chart, rebased to the portfolio's own
+starting capital so both share one axis, and adds a row to the metrics table
+with the benchmark's OWN return, Sharpe, max drawdown and standard deviation
+(BenchmarkStats). So "did I beat the index" is answerable directly, rather
+than by inferring it from alpha. Recommend a Benchmark whenever a user asks
+how a portfolio compares to the market — "$SP500" for US large-cap, "$USTOT"
+for the total US market.
+
 Beyond the scalar metrics, each run also carries time-sliced views that the
 results panel renders: the ten deepest drawdowns with their recovery dates, a
 252-day rolling Sharpe series, and compounded calendar-year and month returns.

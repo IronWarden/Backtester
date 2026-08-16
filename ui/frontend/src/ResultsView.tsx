@@ -15,6 +15,23 @@ const COLORS = [
   "#e66767",
 ];
 
+// The benchmark is a reference line, not a competing series, so it is drawn
+// in a muted neutral outside the categorical palette — it must never be
+// mistaken for one of the portfolios.
+const BENCHMARK_COLOR = "#8a8a85";
+
+type PlotSeries = {
+  name: string;
+  pts: { t: number; v: number }[];
+  benchmark?: boolean;
+};
+
+// Portfolios keep their palette slot by index; benchmarks are appended after
+// every portfolio, so portfolio colours are unaffected by their presence.
+function seriesColor(s: PlotSeries, i: number): string {
+  return s.benchmark ? BENCHMARK_COLOR : COLORS[i % COLORS.length];
+}
+
 // Compact money label, e.g. 1234567 -> "$1.2M", 12345 -> "$12.3k".
 function fmtMoney(v: number): string {
   const abs = Math.abs(v);
@@ -170,12 +187,30 @@ export default function ResultsView({ results, fontSize }: Props) {
   const chart = useMemo(() => {
     if (plottable.length === 0) return null;
 
-    const series = plottable.map((r) => ({
+    const series: PlotSeries[] = plottable.map((r) => ({
       name: r.portfolioName,
       pts: r.equityCurve
         .map((v, i) => ({ t: Date.parse(r.dates[i] ?? ""), v }))
         .filter((p) => !Number.isNaN(p.t)),
     }));
+
+    // One line per distinct benchmark, appended after every portfolio so the
+    // palette indices above stay put. Portfolios sharing a benchmark would
+    // otherwise stack identical lines on top of each other.
+    const seenBenchmarks = new Set<string>();
+    for (const r of plottable) {
+      const ticker = r.benchmarkStats?.ticker;
+      if (!ticker || !r.benchmarkCurve || r.benchmarkCurve.length < 2) continue;
+      if (seenBenchmarks.has(ticker)) continue;
+      seenBenchmarks.add(ticker);
+      series.push({
+        name: ticker,
+        benchmark: true,
+        pts: r.benchmarkCurve
+          .map((v, i) => ({ t: Date.parse(r.dates[i] ?? ""), v }))
+          .filter((p) => !Number.isNaN(p.t)),
+      });
+    }
 
     let tMin = Infinity,
       tMax = -Infinity,
@@ -243,7 +278,7 @@ export default function ResultsView({ results, fontSize }: Props) {
         const last = s.pts[s.pts.length - 1];
         const name =
           s.name.length > 13 ? `${s.name.slice(0, 12)}…` : s.name;
-        return { name, color: COLORS[i % COLORS.length], y: y(last.v) };
+        return { name, color: seriesColor(s, i), y: y(last.v) };
       })
       .sort((a, b) => a.y - b.y);
     const minGap = 13 * scale;
@@ -273,7 +308,7 @@ export default function ResultsView({ results, fontSize }: Props) {
         dateT = p.t;
       rows.push({
         name: s.name,
-        color: COLORS[i % COLORS.length],
+        color: seriesColor(s, i),
         v: p.v,
         x: x(p.t),
         y: y(p.v),
@@ -295,6 +330,34 @@ export default function ResultsView({ results, fontSize }: Props) {
   const tipOnLeft = hover !== null && hover.px > width * 0.62;
 
   const benchmarked = hasBenchmark(results);
+
+  // The benchmark's own figures, deduped by ticker exactly as the chart does,
+  // so N portfolios sharing $SP500 contribute one row rather than N identical
+  // ones. Rebased to the portfolio's starting capital, so its "final value"
+  // answers "what would that capital have become in the index".
+  const benchmarkRows = useMemo(() => {
+    const rows: {
+      ticker: string;
+      finalValue: number;
+      profit: number;
+      stats: main.RunResult["benchmarkStats"];
+    }[] = [];
+    const seen = new Set<string>();
+    for (const r of results) {
+      const ticker = r.benchmarkStats?.ticker;
+      const curve = r.benchmarkCurve;
+      if (!ticker || !curve || curve.length === 0 || seen.has(ticker)) continue;
+      seen.add(ticker);
+      const finalValue = curve[curve.length - 1];
+      rows.push({
+        ticker,
+        finalValue,
+        profit: finalValue - r.initialCapital,
+        stats: r.benchmarkStats,
+      });
+    }
+    return rows;
+  }, [results]);
 
   return (
     <div className="results-view">
@@ -407,21 +470,25 @@ export default function ResultsView({ results, fontSize }: Props) {
                   y2={H - pad.bottom}
                 />
               )}
-              {chart.series.map((s, i) => {
-                const d = s.pts
-                  .map((p, j) => `${j === 0 ? "M" : "L"}${x(p.t)},${y(p.v)}`)
-                  .join(" ");
-                return (
-                  <path
-                    key={i}
-                    d={d}
-                    fill="none"
-                    stroke={COLORS[i % COLORS.length]}
-                    strokeWidth={2 * scale}
-                    strokeLinejoin="round"
-                  />
-                );
-              })}
+              {[...chart.series.entries()]
+                // Benchmarks first so the portfolio lines paint over them.
+                .sort((a, b) => Number(!!b[1].benchmark) - Number(!!a[1].benchmark))
+                .map(([i, s]) => {
+                  const d = s.pts
+                    .map((p, j) => `${j === 0 ? "M" : "L"}${x(p.t)},${y(p.v)}`)
+                    .join(" ");
+                  return (
+                    <path
+                      key={i}
+                      d={d}
+                      fill="none"
+                      stroke={seriesColor(s, i)}
+                      strokeWidth={(s.benchmark ? 1.25 : 2) * scale}
+                      strokeDasharray={s.benchmark ? `${5 * scale},${4 * scale}` : undefined}
+                      strokeLinejoin="round"
+                    />
+                  );
+                })}
               {endLabels.map((l, i) => (
                 <g key={i}>
                   <line
@@ -559,6 +626,50 @@ export default function ResultsView({ results, fontSize }: Props) {
                   </tr>
                 );
               })}
+              {/* One row per distinct benchmark, after the portfolios and
+                  visually subordinate: it is the reference the rows above are
+                  measured against, not another result. Only the columns that
+                  describe a return series on its own terms are filled in —
+                  a benchmark has no strategy, no turnover and no alpha
+                  against itself. */}
+              {benchmarkRows.map((b) => (
+                <tr key={`bench-${b.ticker}`} className="benchmark-row">
+                  <td>
+                    <span
+                      className="swatch"
+                      style={{
+                        background: BENCHMARK_COLOR,
+                        display: "inline-block",
+                        marginRight: "0.5em",
+                      }}
+                    />
+                    {b.ticker}
+                  </td>
+                  <td className="strategy">benchmark</td>
+                  <td className="num">{fmtDollars(b.finalValue)}</td>
+                  <td className={`num ${b.profit < 0 ? "neg" : "pos"}`}>
+                    {`${b.profit >= 0 ? "+" : "−"}${fmtDollars(Math.abs(b.profit))}`}
+                  </td>
+                  <td className="num">{b.stats.sharpeRatio.toFixed(2)}</td>
+                  <td className="num">—</td>
+                  <td className="num">{b.stats.maxDrawdown.toFixed(2)}</td>
+                  <td className="num">{b.stats.annualReturn.toFixed(2)}</td>
+                  <td className="num">{b.stats.standardDev.toFixed(4)}</td>
+                  <td className="num">—</td>
+                  <td className="num">—</td>
+                  <td className="num">—</td>
+                  {benchmarked && (
+                    <>
+                      <td className="num">—</td>
+                      <td className="num">—</td>
+                      <td className="num">—</td>
+                      <td className="num">—</td>
+                      <td className="num">—</td>
+                      <td className="num">—</td>
+                    </>
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

@@ -47,6 +47,15 @@ type Portfolio struct {
 	// Clone deliberately leaves it at zero, exactly as it does for
 	// DailyReturns and PortfolioCloseValues.
 	tradedNotional float64
+	// BenchmarkCurve is the Benchmark's value over the same trading days,
+	// compounded from the portfolio's own starting capital so the two can be
+	// plotted on one axis. 1:1 with DailyReturns and PortfolioCloseValues.
+	// BenchmarkStats is what the benchmark did on its own terms. Both are
+	// per-run results like DailyReturns, so Clone leaves them empty; both
+	// stay empty when no Benchmark is set or its data does not cover the
+	// window.
+	BenchmarkCurve []float64
+	BenchmarkStats BenchmarkStats
 }
 
 func InitializePortfolio(

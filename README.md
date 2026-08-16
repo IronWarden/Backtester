@@ -190,10 +190,25 @@ With it set, six extra metrics are reported: `Alpha`, `Beta`,
 alpha are computed on returns excess of the risk-free rate; the rest on raw
 returns.
 
+The benchmark is also reported **on its own terms**, so "did I beat it" does
+not have to be inferred from alpha. Each result carries a `BenchmarkCurve` —
+the benchmark's value over the same trading days, compounded from the
+portfolio's own starting capital so the two share one axis and one origin —
+and `BenchmarkStats`, its own `AnnualReturn`, `SharpeRatio`, `MaxDrawdown` and
+`StandardDev`, computed with the same functions the portfolio uses. The
+desktop UI draws the curve as a muted dashed line on the equity chart and adds
+one row per distinct benchmark to the metrics table.
+
+These are nested values rather than scalars, so — like `Drawdowns` and the
+calendar returns — they are not available as `[Output] fields`, which is a
+flat table. They deliberately live outside `Metrics`: that struct describes
+the portfolio, and mixing the benchmark's own figures into it would make every
+consumer report two different subjects in one row.
+
 If the benchmark's data does not cover every trading day of the window, the
-six metrics are left at zero and a line is logged. The backtest itself still
-runs — a benchmark is a measurement, and a missing one is not a reason to
-lose the result.
+six metrics are left at zero, the curve and stats are left empty, and a line
+is logged. The backtest itself still runs — a benchmark is a measurement, and
+a missing one is not a reason to lose the result.
 
 ### `[Output]`
 

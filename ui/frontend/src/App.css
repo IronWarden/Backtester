@@ -944,6 +944,20 @@ button.primary:hover:not(:disabled),
   text-overflow: ellipsis;
 }
 
+/* The benchmark is the reference the portfolio rows are measured against, so
+   it reads as a footer to the table rather than as another result: separated
+   by a rule, dimmed, and with the profit colouring muted so a green benchmark
+   is never mistaken for a portfolio that did well. */
+.results tr.benchmark-row {
+  border-top: 1px solid var(--line, #2a2a28);
+  color: var(--text-3);
+}
+
+.results tr.benchmark-row td.num.pos,
+.results tr.benchmark-row td.num.neg {
+  color: var(--text-3);
+}
+
 /* SQL console (Data view) ------------------------------------------------- */
 
 .query-console {

@@ -39,6 +39,15 @@ type Result struct {
 	RollingSharpe  []RollingPoint
 	YearlyReturns  []PeriodReturn
 	MonthlyReturns []PeriodReturn
+	// BenchmarkCurve is the configured Benchmark's value over the same days,
+	// compounded from InitialCapital so it shares an axis and an origin with
+	// EquityCurve, and 1:1 with Dates. BenchmarkStats is what the benchmark
+	// returned on its own terms, as opposed to the benchmark-relative fields
+	// of Metrics, which describe the portfolio against it. Both are empty for
+	// a portfolio with no Benchmark, or one whose benchmark does not cover
+	// the window.
+	BenchmarkCurve []float64
+	BenchmarkStats BenchmarkStats
 }
 
 // topDrawdowns is how many peak-to-trough declines a Result carries. Enough
@@ -329,6 +338,8 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					MonthlyReturns: GetCalendarReturns(
 						p.PortfolioCloseValues, dayTimes, true,
 					),
+					BenchmarkCurve: p.BenchmarkCurve,
+					BenchmarkStats: p.BenchmarkStats,
 				}
 			}
 		}()
