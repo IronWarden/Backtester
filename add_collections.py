@@ -72,60 +72,76 @@ DEFAULT_SHILLER = ROOT / "scratch_collections" / "ie_data.xls"
 #   kind="ref":  reuse another already-built collection's daily returns.
 # Legs are listed oldest-first; where two legs overlap in time, the LATER leg
 # wins (so a real ETF's total return supersedes the estimated-dividend index).
+#
+# "er" is the fund's annual expense ratio as a decimal, and applies to etf legs
+# only. yfinance's auto-adjusted close is a FUND total return, i.e. already net
+# of the fund's fee, so without this an etf leg quietly turns the series from
+# "the index" into "the index minus fees" from its splice date onward. The fee
+# compounds, so it is invisible over a year and material over thirty — and it
+# lands on the recent half of history, where most backtests live. gross_up_fee
+# adds it back. Non-etf legs are not fund returns and carry no "er".
+#
+# These are single constants, which is an approximation in two ways: several of
+# these funds have cut their fee over time (the figure below is the current
+# one, applied to the whole leg), and this does not correct tracking error.
+# Both are far smaller than the error of ignoring the fee entirely.
+#
+# Figures are the issuers' published current expense ratios. Re-check them when
+# rebuilding: fee cuts are common and nothing here detects a stale value.
 COLLECTIONS = {
     "$SP500": {
         "name": "S&P 500",
         "legs": [
             {"kind": "local", "src": "SP500"},
-            {"kind": "etf", "src": "SPY"},
+            {"kind": "etf", "src": "SPY", "er": 0.000945},
         ],
     },
     "$USTOT": {
         "name": "Total U.S. Market",
         "legs": [
             {"kind": "ref", "src": "$SP500"},
-            {"kind": "etf", "src": "VTI"},
+            {"kind": "etf", "src": "VTI", "er": 0.0003},
         ],
     },
     "$SP100": {
         "name": "S&P 100",
         "legs": [
             {"kind": "index", "src": "^OEX"},
-            {"kind": "etf", "src": "OEF"},
+            {"kind": "etf", "src": "OEF", "er": 0.0020},
         ],
     },
     "$SP400": {
         "name": "S&P 400 MidCap",
         "legs": [
             {"kind": "index", "src": "^SP400"},
-            {"kind": "etf", "src": "MDY"},
+            {"kind": "etf", "src": "MDY", "er": 0.0024},
         ],
     },
     "$SP600": {
         "name": "S&P 600 SmallCap",
         "legs": [
             {"kind": "index", "src": "^SP600"},
-            {"kind": "etf", "src": "IJR"},
+            {"kind": "etf", "src": "IJR", "er": 0.0006},
         ],
     },
     "$RUS2K": {
         "name": "Russell 2000",
         "legs": [
             {"kind": "index", "src": "^RUT"},
-            {"kind": "etf", "src": "IWM"},
+            {"kind": "etf", "src": "IWM", "er": 0.0019},
         ],
     },
     "$EXUS": {
         "name": "Total ex-US Market",
-        "legs": [{"kind": "etf", "src": "VEU"}],
+        "legs": [{"kind": "etf", "src": "VEU", "er": 0.0007}],
     },
     "$EM": {
         "name": "Emerging Markets",
-        "legs": [{"kind": "etf", "src": "VWO"}],
+        "legs": [{"kind": "etf", "src": "VWO", "er": 0.0007}],
     },
     "$WORLD": {
         "name": "Total World Market",
-        "legs": [{"kind": "etf", "src": "VT"}],
+        "legs": [{"kind": "etf", "src": "VT", "er": 0.0006}],
     },
     "$CASH": {
         "name": "Cash (T-bill)",
@@ -308,6 +324,23 @@ def add_dividend_proxy(price_ret: pd.Series, yield_annual: pd.Series) -> pd.Seri
     return price_ret + ann / TRADING_DAYS
 
 
+def gross_up_fee(returns: pd.Series, expense_ratio: float) -> pd.Series:
+    """Undo a fund's expense ratio, turning a fund return into an index return.
+
+    A fund accrues its fee daily, so a net daily return r_net corresponds to a
+    gross return of (1 + r_net) * (1 + er)^(1/252) - 1. Over a year the added
+    factor compounds back to exactly (1 + er), which is what makes this the
+    inverse of the drag rather than an approximation of it.
+
+    An expense_ratio of 0 returns the series unchanged bit for bit, so a leg
+    without an "er" -- and every non-etf leg -- is untouched.
+    """
+    if expense_ratio == 0.0:
+        return returns
+    daily_factor = (1.0 + expense_ratio) ** (1.0 / TRADING_DAYS)
+    return (1.0 + returns) * daily_factor - 1.0
+
+
 def leg_returns(
     leg: dict,
     con: duckdb.DuckDBPyConnection,
@@ -317,7 +350,19 @@ def leg_returns(
     """Daily total-return series for one leg."""
     kind, src = leg["kind"], leg["src"]
     if kind == "etf":
-        return price_returns(yf_prices(src, adjusted=True))
+        # Grossed back up by the fund's fee: yfinance's adjusted close is a
+        # fund return, and the series is meant to represent the index.
+        r = gross_up_fee(
+            price_returns(yf_prices(src, adjusted=True)),
+            leg.get("er", 0.0),
+        )
+        # price_returns anchors its first day at 0 (there is no prior bar to
+        # measure from). Grossing up turns that 0 into one day of fee, so put
+        # the anchor back -- a leg's first bar is a starting point, not a
+        # period the fund charged for.
+        if len(r):
+            r.iloc[0] = 0.0
+        return r
     if kind == "index":
         return add_dividend_proxy(price_returns(yf_prices(src, adjusted=False)), shiller)
     if kind == "local":

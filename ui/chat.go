@@ -328,7 +328,11 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   risk-free rate (note: the table name needs double quotes in SQL).
 - $-prefixed pseudo-tickers are long-history total-return benchmark series
   ($SP500, $USTOT, $SP400, $SP100, $RUS2K, $SP600, $EM, $EXUS, $WORLD,
-  $CASH). They mix freely with real stocks in a portfolio.
+  $CASH). They mix freely with real stocks in a portfolio. Their modern
+  history comes from a real ETF, grossed back up by that fund's expense
+  ratio, so they represent the index rather than a fund tracking it —
+  treat them as index returns, not as something a user could have bought.
+  Residual tracking error is not corrected.
 - IMPORTANT: the ticker "CASH" (no $) is Pathward Financial, a bank stock —
   NOT a cash proxy. For cash / T-bills use $CASH.
 - The database has NO fundamentals — no P/E, market cap, sector, earnings

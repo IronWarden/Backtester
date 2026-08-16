@@ -71,7 +71,21 @@ so they can be mixed with each other and with real stocks in one portfolio.
 Modern history uses a real ETF's dividend-adjusted close (true total return);
 pre-ETF history uses the real index price level plus an estimated dividend from
 Shiller's monthly S&P 500 yield (so only the early *dividend* is approximated,
-never the price). `$CASH` compounds the FRED 3-month T-bill rate (daily, 1954+)
+never the price).
+
+**ETF legs are grossed back up by the fund's expense ratio**, because a fund's
+adjusted close is a *fund* return — already net of its fee — and these series
+are meant to represent the index. Without that correction every series would
+silently become "the index minus fees" from its ETF splice date onward (1993
+for `$SP500`, and 1995–2008 for the others), which compounds to roughly 3% of
+cumulative return over thirty years of SPY. The ratio is stored per leg in
+`COLLECTIONS` in `add_collections.py`; re-check the figures when you rebuild,
+since fee cuts are common and nothing detects a stale value. Two limits remain
+by design: the ratio is a single constant applied to the whole leg even though
+several of these funds have cut fees over time, and tracking error is not
+corrected. Both are far smaller than ignoring the fee.
+
+`$CASH` compounds the FRED 3-month T-bill rate (daily, 1954+)
 spliced onto Ken French's 1-month T-bill return (monthly, 1926–1953, since a
 daily 3-month series doesn't exist that far back). Rebuild or
 refresh anytime (idempotent per symbol; close the UI first — DuckDB is
