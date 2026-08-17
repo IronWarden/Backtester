@@ -109,7 +109,8 @@ the engine does not yet read:
 | `economic_indicators` | 5k | CPI, FEDFUNDS, GDP, INDPRO, M2, UNRATE, 1927+ |
 | `"10YrTreasuryYields"` | 4k | 2010 → 2026 |
 | `crypto_ohlcv` | 15k | 5 tickers, 2014+, **not** on the NYSE calendar |
-| `company_info` | 0 | empty — there is no sector data |
+| `company_info` | 0 | empty, and its `(Ticker, Date, Value)` shape was never company metadata — ignore it |
+| `company_profile` | optional | ticker, CIK, SIC code, **sector**, former names — loaded from SEC EDGAR, see below |
 
 `financials` is long-format (`metric, date, value, ticker, frequency`) and
 includes Total Revenue, Net Income, Stockholders Equity, Total Assets,
@@ -138,6 +139,50 @@ Two further caveats before building anything on this:
 - **Fundamentals begin 2020-07** — five and a half years containing one
   inflation shock and one hiking cycle, which is a single macro regime. Treat
   factor results over that window as hypothesis-generating, not evidence.
+
+### Sector data, from SEC EDGAR
+
+There *is* sector data available, and it is free. SEC EDGAR publishes the
+industry classification of every company that files with it — no key, no
+signup — and `add_company_info.py` loads it into the optional
+`company_profile` table:
+
+```bash
+python3 add_company_info.py --dry-run --limit 20   # probe, writes nothing
+python3 add_company_info.py --dry-run              # full fetch, no write
+python3 add_company_info.py                        # fetch and replace the table
+```
+
+Columns: `ticker`, `cik`, `name`, `sic`, `sic_description`, `sector`,
+`exchange`, `former_names` (a JSON array), `state_of_incorporation`,
+`fetched_at`. A full run is about 5,600 requests — one per company, paced at
+~8/s to stay inside SEC's fair-use limit — and it checkpoints to
+`company_info_cache.json`, so an interrupted run resumes rather than starting
+over. Read it from Go with `src/data.LoadCompanyProfiles` or the narrower
+`SectorsForTickers`; both return nil when the table is absent, so nothing
+changes until you load it.
+
+`CIK` is worth knowing about: it is the SEC's permanent filer identifier and,
+unlike a ticker symbol, it is never reassigned. It is the only stable way to
+say "the same company" across a rename or a symbol change — which is exactly
+the evidence the recycled-ticker problem below needs. `former_names` is the
+rename trail for the same reason.
+
+Three limits, stated up front:
+
+- **SIC is not GICS.** It is the SEC's own scheme, coarser and older: code 3571
+  is "Electronic Computers", which puts Apple in Manufacturing. `sector` is the
+  SIC *division* the code falls in (`src/data.SectorForSIC`, mirrored in the
+  loader), and the divisions have genuine gaps — 1800–1999 and 6800–6999 belong
+  to nothing, so those companies come back `Unclassified`.
+- **Coverage is about 5,600 of the 10,434 tickers with prices.** The rest are
+  `$`-prefixed benchmark series (not companies at all), ADRs that file little,
+  and delisted symbols.
+- **Delisted companies are missing, for a fixable reason.**
+  `company_tickers.json` lists only companies with a *current* ticker. EDGAR
+  keeps a dead company's filing history indefinitely, so the data exists — it
+  just cannot be found by symbol. Pass `--cik-list FILE` to fetch those
+  directly once you have their CIKs.
 
 ## Delisted companies, and recycled tickers
 

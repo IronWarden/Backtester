@@ -18,6 +18,7 @@ ui/frontend/dist/
 # --- Run output / logs -------------------------------------------------
 *.log
 backfill_checkpoint.json
+company_info_cache.json
 full_refetch_done.txt
 full_refetch_failed.txt
 processed_tickers.txt

@@ -441,8 +441,27 @@ different proposition from one with the same Sharpe and shallow drawdowns.
     the 10y-3m curve spread.
   - crypto_ohlcv — 5 tickers, 2014+. NOT on the NYSE calendar, so it cannot
     be mixed with equities in one portfolio.
-  - company_info is EMPTY. There is genuinely no sector data; sector
-    questions still need screen_stocks or lookup_quote.
+  - company_info is EMPTY, and its (Ticker, Date, Value) columns were never
+    company metadata anyway. Ignore it; it is not where sector data lives.
+  - company_profile(ticker, cik, name, sic, sic_description, sector,
+    exchange, former_names, state_of_incorporation, fetched_at) — OPTIONAL,
+    may not exist. This IS the sector data, loaded from SEC EDGAR (free, no
+    key) by python3 add_company_info.py. sector is the SIC division, e.g.
+    Manufacturing, Services, Finance, Insurance & Real Estate. Check the
+    table exists before querying it, and if it does not, say it can be
+    loaded rather than saying sector data does not exist.
+    Caveats to pass on when you use it: SIC is the SEC's own scheme, not
+    GICS, and it is coarse — 3571 "Electronic Computers" puts Apple in
+    Manufacturing. Codes in the scheme's gaps come back Unclassified.
+    Coverage is ~5,600 of the 10,434 priced tickers; the rest are
+    $-benchmarks, ADRs that file little, and delisted symbols, which are
+    absent because company_tickers.json lists only current tickers.
+    cik is the permanent SEC filer id and is never reassigned, so it — not
+    the symbol — is what identifies "the same company" across a rename;
+    former_names is the rename trail. Both are evidence for the recycled-
+    ticker problem below.
+    Engine-side: src/data.LoadCompanyProfiles and SectorsForTickers, plus
+    the pure SectorForSIC.
 
 - CRITICAL — financials.date is the FISCAL PERIOD END, not the publication
   date. Its dates are overwhelmingly 12-31, 03-31, 06-30, 09-30. Joining it
@@ -615,15 +634,15 @@ const queryDBToolDescription = "Run one read-only SQL statement (DuckDB " +
 	`and "3MTreasuryYields"(Date, daily_risk_free_rate_decimal). ` +
 	`plus financials(metric, date, value, ticker, frequency), ` +
 	`earnings_calendar, economic_indicators and "10YrTreasuryYields", ` +
-	"plus an optional delistings(symbol, security_class, delisting_date) " +
-	"registry that may not exist. " +
+	"plus optional delistings(symbol, delisting_date) and " +
+	"company_profile(ticker, sic, sector), which may be absent. " +
 	"Results are capped at 100 rows, so aggregate or LIMIT. Quarterly " +
-	"fundamentals ARE available (revenue, net income, equity, assets, shares " +
-	"outstanding, 2020+), but financials.date is the FISCAL PERIOD END, not " +
+	"fundamentals ARE available (revenue, net income, equity, assets, " +
+	"shares, 2020+), but financials.date is the FISCAL PERIOD END, not " +
 	"the publication date — joining it to prices on that date is look-ahead " +
 	"bias. Lag to the earnings_calendar report date, or period end + 90 " +
-	"days. There is no sector data (company_info is empty); use " +
-	"screen_stocks or lookup_quote for sector and live P/E."
+	"days. Sector = company_profile.sector when loaded, NOT the empty " +
+	"company_info; otherwise screen_stocks or lookup_quote."
 
 func queryDBToolSchema() map[string]any {
 	return map[string]any{
