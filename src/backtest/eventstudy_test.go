@@ -142,7 +142,7 @@ func TestTooFewOccurrencesReportsNothing(t *testing.T) {
 	hist := histFrom(closes)
 
 	rare := EventDef{
-		Name: "rare",
+		Name:   "rare",
 		Detect: func(_ []data.AssetData, i int) bool { return i == 5 },
 	}
 	if got := StudyEvents(hist, []string{"AAA"}, []EventDef{rare}, []int{5}); len(got) != 0 {
@@ -210,9 +210,9 @@ func TestMedian(t *testing.T) {
 		want float64
 	}{
 		{[]float64{1, 2, 3}, 2},
-		{[]float64{3, 1, 2}, 2},          // unsorted input
-		{[]float64{1, 2, 3, 4}, 2.5},     // even count
-		{[]float64{1, 1, 1, 100}, 1},     // the outlier does not move it
+		{[]float64{3, 1, 2}, 2},      // unsorted input
+		{[]float64{1, 2, 3, 4}, 2.5}, // even count
+		{[]float64{1, 1, 1, 100}, 1}, // the outlier does not move it
 		{nil, 0},
 	}
 	for _, tc := range cases {

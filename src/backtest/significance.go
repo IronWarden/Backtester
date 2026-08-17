@@ -61,7 +61,7 @@ const (
 type Significance struct {
 	// Draws is how many random-timing strategies were compared, and Seed the
 	// value that makes them reproducible.
-	Draws int `json:"draws"`
+	Draws int   `json:"draws"`
 	Seed  int64 `json:"seed"`
 	// Sharpe is the strategy's own, repeated here so the comparison is legible
 	// on its own.

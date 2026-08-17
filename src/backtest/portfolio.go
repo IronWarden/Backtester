@@ -18,28 +18,28 @@ type DailyReturn struct {
 }
 
 type Portfolio struct {
-	Pname                string // Portfolio name for tracking purposes
-	BuyingPower          float64
-	InitialBuyingPower   float64
-	Positions            map[string]*Position
+	Pname              string // Portfolio name for tracking purposes
+	BuyingPower        float64
+	InitialBuyingPower float64
+	Positions          map[string]*Position
 	// Baseline is filled in after the run: what an equal-weight buy-and-hold of
 	// the same tickers would have done. See baseline.go.
-	Baseline             BaselineStats
+	Baseline BaselineStats
 	// Trades is the blotter: every fill, in order. openLots tracks the same
 	// shares as FIFO parcels, for holding periods only — see blotter.go on why
 	// money is average-cost and time is FIFO.
-	Trades               []Trade
-	openLots             map[string][]lot
+	Trades   []Trade
+	openLots map[string][]lot
 	// TradeStats is the blotter's summary, filled in after the run.
-	TradeStats           TradeStats
+	TradeStats TradeStats
 	// Exposure is the invested fraction of the book per day, 1:1 with
 	// DailyReturns.
-	Exposure             []float64
+	Exposure []float64
 	// Regimes slices the run by the market environment its universe was in.
-	Regimes              RegimeBreakdown
+	Regimes RegimeBreakdown
 	// Robustness is what survived re-running under more friction and from
 	// shifted start dates. Empty unless RobustnessChecks is on.
-	Robustness           Robustness
+	Robustness Robustness
 	// Significance is the answer to "is this better than chance", filled in
 	// after the run. See significance.go.
 	Significance         Significance
