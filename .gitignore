@@ -28,6 +28,8 @@ full_refetch_failed.txt
 processed_tickers.txt
 worthy_tickers.txt
 *_output.txt
+# The default [Output] file, written into src/ by any CLI run.
+output.txt
 
 # --- Python ------------------------------------------------------------
 __pycache__/
