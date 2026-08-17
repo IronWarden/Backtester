@@ -11,6 +11,13 @@
 --   period   lookback for the average and the deviation  (default 20)
 --   k        band width in standard deviations           (default 2.0)
 --   buyType  "equalWeights" (default) | "greedy"
+--
+-- @works: the market oscillates around a stable average, so a band touch is
+--   a stretch rather than a new trend
+-- @fails: a sustained downtrend, where it buys each new low as the band
+--   keeps moving down with the price
+-- @sweep: period = [10, 20, 50], k = [1.5, 2.0, 2.5]
+-- @baseline: buy_and_hold.lua, and rsi.lua as the other mean-reversion rule
 
 local period  = params.period or 20
 local k       = params.k or 2.0

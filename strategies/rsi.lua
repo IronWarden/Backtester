@@ -8,6 +8,15 @@
 --   buy_thresh   oversold threshold       (default 30)
 --   sell_thresh  overbought threshold     (default 70)
 --   buyType      "equalWeights" (default) | "greedy"
+--
+-- @works: the market is range-bound and oversold readings mean stretched
+--   rather than falling
+-- @fails: a sustained downtrend: oversold gets more oversold, and this buys
+--   the whole way down
+-- @sweep: period = [7, 14, 21], buy_thresh = [20, 30, 40], sell_thresh =
+--   [60, 70, 80]
+-- @baseline: buy_and_hold.lua, and bollinger_reversion.lua as the other
+--   mean-reversion rule
 
 local period      = params.period      or 14
 local buy_thresh  = params.buy_thresh  or 30

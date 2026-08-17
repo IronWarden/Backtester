@@ -675,6 +675,19 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- THE STRATEGY GALLERY. Every shipped script carries four tagged header
+  lines — @works (the market condition it needs), @fails (how it is known to
+  lose money), @sweep (parameter ranges ready to paste into
+  [portfolio.Sweep]), @baseline (what to compare it against) — and a test
+  requires all four, so none can go undocumented. The CLI prints them:
+      cd src && go run main.go -list-strategies
+  When proposing a strategy, quote its @fails alongside its idea. A user
+  choosing rsi.lua for a trending market, or donchian_breakout.lua for a
+  range-bound one, has picked the wrong tool and the header says so. And when
+  a user asks what to sweep, use the @sweep ranges rather than inventing
+  numbers.
+  Engine-side: backtest.LoadGallery, ParseStrategyCard, GalleryReport.
+
 - FINDING A STRATEGY: THE SIGNAL SCREEN. The CLI has -scan-signals, which
   screens a built-in library of twelve signals over the config's tickers and
   window and prints their information coefficients, strongest first, INSTEAD of

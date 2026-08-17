@@ -14,6 +14,15 @@
 -- Built on two primitives: rank(day, fn) scores every ticker and returns them
 -- strongest first, and target_weights(day, targets) moves the book to those
 -- fractions of equity, selling before buying. Both used to be hand-written here.
+--
+-- @works: leadership persists for months at a time, which is the
+--   historically documented effect
+-- @fails: a sharp reversal: momentum crashes are its signature failure, and
+--   it is fully invested in last quarter's winners when one arrives
+-- @sweep: lookback = [63, 126, 252], top_n = [1, 2, 3], rebalance_days =
+--   [21, 63]
+-- @baseline: buy_and_hold.lua on the same tickers — rotation must beat
+--   simply owning them all
 
 local lookback = params.lookback or 126
 local skip     = params.skip_days or 0

@@ -28,6 +28,40 @@ Every parameter has a default, so `Params` is optional. There are also two
 built-ins that need no script: `buyAndHold:equalWeights` (split capital
 evenly on day 0) and `buyAndHold:greedy` (spend it all on the first ticker).
 
+## The gallery: what each one needs, and how it fails
+
+Every script carries four tagged lines in its header — `@works`, `@fails`,
+`@sweep` and `@baseline` — and a test requires all four, so a strategy cannot
+join the library undocumented. List them from the CLI, which needs no database
+and no config:
+
+```bash
+cd src && go run main.go -list-strategies
+```
+
+**`@fails` is the one that earns its place.** Every strategy here works
+somewhere; the useful question is where it does not, and that is what a library
+of examples usually omits.
+
+| Strategy | Works when | Fails when | Sweep |
+|---|---|---|---|
+| `bollinger_reversion.lua` | the market oscillates around a stable average, so a band touch is a stretch rather than a new trend | a sustained downtrend, where it buys each new low as the band keeps moving down with the price | `period = [10, 20, 50], k = [1.5, 2.0, 2.5]` |
+| `buy_and_hold.lua` | the asset rises over your window — the default answer, and the one most strategies fail to beat | you cannot sit through the drawdown it takes on the way; it has no exit and never goes to cash | `nothing numeric to sweep; vary the UNIVERSE instead, which is what actually decides this one` |
+| `buy_and_hold_weighted.lua` | you have a real view on relative sizing and want to hold it without rebalancing | one name runs away and quietly becomes the whole book, so the weights you chose stop being the weights you hold | `weights are a table, not a number, so sweep by writing several [[portfolio]] blocks; rebalance.lua is the sweepable version` |
+| `dca.lua` | the market falls before it recovers, so the later buys land cheaper | the market rises in a straight line: every day held in cash is a day of lost return, and it will lose to lump-sum roughly two thirds of the time | `every_days = [5, 21, 63], amount = [2500.0, 5000.0, 10000.0]` |
+| `donchian_breakout.lua` | trends run far beyond the point they look extended — it takes many small losses for a few large winners | range-bound markets: every breakout fails back into the range, and the win rate is low by design even when it works | `entry_period = [20, 55, 100], exit_period = [10, 20, 40]` |
+| `momentum_rotation.lua` | leadership persists for months at a time, which is the historically documented effect | a sharp reversal: momentum crashes are its signature failure, and it is fully invested in last quarter's winners when one arrives | `lookback = [63, 126, 252], top_n = [1, 2, 3], rebalance_days = [21, 63]` |
+| `rebalance.lua` | the holdings are volatile and take turns leading, so trimming the winner funds the laggard before it recovers | one asset trends far ahead of the rest: rebalancing sells the winner all the way up, which is the classic drag against a runaway leader | `rebalance_days = [21, 63, 126, 252]` |
+| `risk_parity.lua` | volatility is a stable predictor of risk and the low-vol assets are genuinely safer | a low-volatility asset breaks — quiet things get the biggest weights, so the one that surprises you does the most damage | `lookback = [21, 63, 126], rebalance_days = [21, 63]` |
+| `rsi.lua` | the market is range-bound and oversold readings mean stretched rather than falling | a sustained downtrend: oversold gets more oversold, and this buys the whole way down | `period = [7, 14, 21], buy_thresh = [20, 30, 40], sell_thresh = [60, 70, 80]` |
+| `sma_cross.lua` | the market makes sustained multi-month trends in one direction | a choppy sideways market whipsaws it: every false crossing is a round trip paid for in costs | `short = [10, 20, 50], long = [50, 100, 200]` |
+| `trend_following.lua` | prices trend persistently above or below a long average | chop around the average, where the buffer is crossed repeatedly and each crossing is a trade | `period = [50, 100, 200], buffer_pct = [0.0, 0.01, 0.03]` |
+
+Paste a `@sweep` line into `[portfolio.Sweep]` to search it — that is what the
+ranges are for. Run `-scan-signals` first to see which signals have any
+predictive power on your universe before choosing, and remember that every
+result is already compared against equal-weight buy-and-hold automatically.
+
 ## The catalog
 
 Each file documents its own parameters at the top. Copy one and edit it —

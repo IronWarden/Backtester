@@ -18,6 +18,7 @@ func main() {
 		configPath  string
 		scanSignals bool
 		eventStudy  bool
+		listStrats  bool
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -30,6 +31,11 @@ func main() {
 		"Measure what followed each built-in event (drawdowns, breakouts, "+
 			"sigma moves) over the config's tickers, instead of running "+
 			"backtests",
+	)
+	flag.BoolVar(
+		&listStrats, "list-strategies", false,
+		"Print the strategy gallery — what each shipped script is for, how it "+
+			"fails, and the parameter ranges worth sweeping",
 	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
@@ -61,6 +67,17 @@ func main() {
 		}()
 	} else {
 		backtest.TransactionLogger = log.New(io.Discard, "", 0)
+	}
+
+	// The gallery is documentation: no database, no config, so it answers
+	// before either is opened and works on a machine with neither.
+	if listStrats {
+		cards, err := backtest.LoadGallery("../strategies")
+		if err != nil {
+			log.Fatalf("reading the strategy gallery: %v", err)
+		}
+		fmt.Print(backtest.GalleryReport(cards))
+		return
 	}
 
 	duckDBPath := "../stock_data.db"

@@ -8,6 +8,14 @@
 --   entry_period  lookback for the breakout high  (default 55)
 --   exit_period   lookback for the stop low       (default 20)
 --   buyType       "equalWeights" (default) | "greedy"
+--
+-- @works: trends run far beyond the point they look extended — it takes
+--   many small losses for a few large winners
+-- @fails: range-bound markets: every breakout fails back into the range,
+--   and the win rate is low by design even when it works
+-- @sweep: entry_period = [20, 55, 100], exit_period = [10, 20, 40]
+-- @baseline: buy_and_hold.lua — and check TradeStats.WinRate, which SHOULD
+--   be low here
 
 local entry_period = params.entry_period or 55
 local exit_period  = params.exit_period or 20

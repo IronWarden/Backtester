@@ -5,6 +5,15 @@
 --
 -- Params:
 --   weights = { TICKER = number, ... }   -- missing tickers default to 0
+--
+-- @works: you have a real view on relative sizing and want to hold it
+--   without rebalancing
+-- @fails: one name runs away and quietly becomes the whole book, so the
+--   weights you chose stop being the weights you hold
+-- @sweep: weights are a table, not a number, so sweep by writing several
+--   [[portfolio]] blocks; rebalance.lua is the sweepable version
+-- @baseline: buy_and_hold.lua on the same tickers — if equal weight wins,
+--   the view was not worth the concentration
 
 local weights = params.weights or {}
 

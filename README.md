@@ -959,6 +959,8 @@ go run main.go                          # quiet run; logs are discarded
 go run main.go -debug                   # writes backtester.log + transactions.log, and serves pprof on :6060
 go run main.go -config ../strategy_library.toml
 go run main.go -scan-signals             # screen signals instead of backtesting
+go run main.go -event-study              # what happened after drawdowns, breakouts
+go run main.go -list-strategies          # the gallery: what each script needs and how it fails
 ```
 
 To build a binary:

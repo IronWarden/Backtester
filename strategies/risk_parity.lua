@@ -19,6 +19,14 @@
 --   rebalance_days  trading days between rebalances  (default 21, ~monthly)
 --   min_vol         volatility floor, so a flat series cannot take an
 --                   unbounded weight                 (default 0.0001)
+--
+-- @works: volatility is a stable predictor of risk and the low-vol assets
+--   are genuinely safer
+-- @fails: a low-volatility asset breaks — quiet things get the biggest
+--   weights, so the one that surprises you does the most damage
+-- @sweep: lookback = [21, 63, 126], rebalance_days = [21, 63]
+-- @baseline: rebalance.lua at equal weight — the question is whether
+--   vol-scaling the weights added anything
 
 local lookback = params.lookback or 60
 local every    = params.rebalance_days or 21

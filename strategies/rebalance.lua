@@ -12,6 +12,15 @@
 -- Uses the built-in target_weights(day, targets), which sells before it buys so
 -- the proceeds fund the purchases. That used to be forty hand-written lines in
 -- this file and in momentum_rotation.lua; both now call the same primitive.
+--
+-- @works: the holdings are volatile and take turns leading, so trimming the
+--   winner funds the laggard before it recovers
+-- @fails: one asset trends far ahead of the rest: rebalancing sells the
+--   winner all the way up, which is the classic drag against a runaway
+--   leader
+-- @sweep: rebalance_days = [21, 63, 126, 252]
+-- @baseline: buy_and_hold.lua on the same tickers — rebalancing is only
+--   worth it if it beats leaving the drift alone
 
 local every   = params.rebalance_days or 63
 local weights = params.weights

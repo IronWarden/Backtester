@@ -9,6 +9,13 @@
 --   short    short-window length      (default 10)
 --   long     long-window length       (default 50)
 --   buyType  "equalWeights" (default) | "greedy"
+--
+-- @works: the market makes sustained multi-month trends in one direction
+-- @fails: a choppy sideways market whipsaws it: every false crossing is a
+--   round trip paid for in costs
+-- @sweep: short = [10, 20, 50], long = [50, 100, 200]
+-- @baseline: buy_and_hold.lua — trend rules earn their keep only by
+--   avoiding drawdowns the holder had to sit through
 
 local short   = params.short   or 10
 local long    = params.long    or 50

@@ -13,6 +13,15 @@
 -- Params:
 --   amount      dollars to deploy each cadence  (default 1000)
 --   every_days  trading days between buys       (default 21, ~monthly)
+--
+-- @works: the market falls before it recovers, so the later buys land
+--   cheaper
+-- @fails: the market rises in a straight line: every day held in cash is a
+--   day of lost return, and it will lose to lump-sum roughly two thirds of
+--   the time
+-- @sweep: every_days = [5, 21, 63], amount = [2500.0, 5000.0, 10000.0]
+-- @baseline: buy_and_hold.lua — the honest question is whether spreading
+--   entry beat investing it all on day 0
 
 local amount = params.amount or 1000
 local every  = params.every_days or 21

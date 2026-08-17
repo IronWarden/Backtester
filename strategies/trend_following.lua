@@ -10,6 +10,13 @@
 --               (default 0; ~1.0 trades less and whipsaws less around the
 --               line, at the cost of entering and exiting later)
 --   buyType     "equalWeights" (default) | "greedy"
+--
+-- @works: prices trend persistently above or below a long average
+-- @fails: chop around the average, where the buffer is crossed repeatedly
+--   and each crossing is a trade
+-- @sweep: period = [50, 100, 200], buffer_pct = [0.0, 0.01, 0.03]
+-- @baseline: buy_and_hold.lua, and sma_cross.lua for whether the second
+--   average was worth it
 
 local period  = params.period or 200
 local buffer  = (params.buffer_pct or 0) / 100.0
