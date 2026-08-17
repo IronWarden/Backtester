@@ -538,6 +538,26 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   eight rows predate 2009, so Enron, WorldCom, Lehman, WaMu and Bear
   Stearns are absent. Never claim it fixes survivorship bias generally.
 
+- DATA QUALITY. The bars themselves were audited on 2026-08-17 (all 34,988,956
+  of them; analysis/data_quality.md). 7,193 tickers good, 1,915 usable, 1,053
+  suspect, 273 UNUSABLE. Four findings to warn about by name when they come up:
+  (1) VHI, SVA, SAFE and DEC have NEGATIVE closes — 11,931 bars below zero,
+  VHI to -639.30 — from Yahoo's back-adjustment of a large special
+  distribution. Any return computed across the sign change is meaningless.
+  (2) HUBB has 1,862 consecutive identical closes (1977-1984) and synthetic
+  1972 bars (Open=High=Low=Close, zero volume); 281 tickers have a flat run of
+  60+, which a moving average cannot tell from a real quiet stock.
+  (3) 263 tickers have a single-day move over 500%, mostly warrants and units.
+  (4) MTRA has 269 bars where the calendar has 2,613, and gaps delete those
+  days for every other holding in the portfolio (see the next point).
+  The price table has NO duplicate rows, unlike financials. The $-benchmarks
+  are clean — they read 'usable' only because they have zero volume, which is
+  correct for a reconstructed index and not a defect.
+  The optional data_quality table (python3 add_data_quality.py) stores the
+  per-ticker evidence; src/data.LoadDataQuality reads it and ClassifyQuality
+  recomputes the verdict. NOTHING refuses to trade an unusable series yet, so
+  when a user names one, the warning is yours to give.
+
 - A HOLDING WHOSE DATA ENDS EARLY TRUNCATES THE WHOLE RUN. A day is
   simulated only when EVERY ticker in the portfolio has a bar for it, so a
   ticker whose series stops mid-window (a delisting, an acquisition, a stale

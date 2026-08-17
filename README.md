@@ -251,6 +251,53 @@ survivors and overstate returns by roughly 1–4 points a year. Closing that gap
 needs paid data. Until then, prefer the `$`-benchmark series for long horizons:
 they are reconstructed index series and are survivorship-free by construction.
 
+### What is wrong with the bars themselves
+
+Survivorship and symbol recycling are audited above. The bars needed auditing
+too, and `add_data_quality.py` does it — one query over all 34,988,956 of them,
+no sampling, a few seconds:
+
+```bash
+python3 add_data_quality.py --dry-run   # audit and report, write nothing
+python3 add_data_quality.py             # audit and replace the data_quality table
+```
+
+Verdicts from the 2026-08-17 pass: **7,193 `good` (68.9%), 1,915 `usable`
+(18.4%), 1,053 `suspect` (10.1%), 273 `unusable` (2.6%)**. So about one ticker in
+eight has a defect large enough to move a metric by itself. The four findings
+worth knowing before you trust a result:
+
+- **Four tickers have negative prices** — `VHI` down to −639.30, `SVA` to
+  −78.46, plus `SAFE` and `DEC`; 11,931 bars below zero. This is Yahoo's
+  back-adjustment for a large special distribution exceeding the historical
+  price. Every return computed across a sign change is meaningless and looks
+  like an ordinary extreme move.
+- **Some early history is synthetic.** `HUBB` has 1,862 *consecutive identical
+  closes* (1977–1984), and its 1972 bars have `Open = High = Low = Close` with
+  zero volume on non-consecutive dates. 281 tickers have a flat run of 60+. A
+  moving average over one of those produces confident nonsense. The check cannot
+  tell a stalled feed from a genuine trading halt, which is why the verdict is
+  `suspect` rather than `unusable`.
+- **263 tickers have a single-day move over 500%**, the largest 12,499× — mostly
+  warrants and units moving in multiples off a near-zero base.
+- **Gaps matter more than they look.** `MTRA` has 269 bars where the calendar has
+  2,613. Because a day is only simulated when every ticker has a bar for it (see
+  below), one gappy holding deletes those days for every other holding.
+
+Also worth knowing: the price table has **no duplicate rows**, unlike
+`financials`. And the `$` benchmark series are clean on every check — they report
+`usable` only because they have zero volume, which is correct for a
+reconstructed index rather than a defect.
+
+The full audit, with every query and the twenty worst tickers per category, is in
+`analysis/data_quality.md`. Read it from Go with `src/data.LoadDataQuality` or
+`UntradableTickers`; both return nil when the table is absent. The verdict is
+recomputed from the stored statistics by `src/data.ClassifyQuality`, so the
+thresholds — which are judgement calls, named and reasoned about in
+`src/data/data_quality.go` — can be changed without re-running the audit.
+**Nothing currently refuses to trade an `unusable` series**; wiring that in
+changes existing results, so it is a decision rather than a fix.
+
 ### A holding whose data ends before the window does
 
 Worth knowing before you load any delisted history, because it is the rule that
