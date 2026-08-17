@@ -674,6 +674,22 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   equity curve that means nothing.
   Engine-side: backtest.ValidateStrategy, ValidationReport.
 
+- ONE COMMAND FOR THE WHOLE READING: -research runs the config and reports it
+  in the order that kills an idea fastest — did it trade at all, did it beat
+  buy-and-hold, is it better than random timing, where did the money come from,
+  which regime did it work in, what kills it. Implies -robustness.
+  USE THIS ORDER YOURSELF when reporting any result to a user, whether or not
+  they ran the flag. Leading with a Sharpe and mentioning the baseline later is
+  how a bad idea survives a conversation.
+  Three things it says that a user will not think to ask: a strategy MATCHING
+  the baseline is doing the same thing (not beating it, not losing); a result
+  where one ticker produced most of the profit is a bet on that name rather
+  than evidence the rule works; and a strategy that never sells has no win
+  rate, which is not the same as a 0% one.
+  It passes NO verdict, deliberately — thresholds and criteria are the user's
+  research-design choice, not the tool's. Do not invent a pass/fail.
+  Engine-side: backtest.ResearchReport, ResearchSummary.
+
 - ROBUSTNESS: HOW HARD CAN YOU PUSH IT? -robustness re-runs each portfolio at
   0/5/20/50 bps round-trip slippage and from starts 5/20/60/120 days later,
   filling Result.Robustness (Costs, Starts, BreakEvenBps, StartSpread,

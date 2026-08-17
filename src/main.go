@@ -26,6 +26,7 @@ func main() {
 		validate    string
 		bundlePath  string
 		verifyPath  string
+		research    bool
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -77,6 +78,12 @@ func main() {
 	flag.StringVar(
 		&verifyPath, "verify", "",
 		"Re-run a bundle and report whether its numbers still reproduce",
+	)
+	flag.BoolVar(
+		&research, "research", false,
+		"Run the config and report it as research: baseline, chance, "+
+			"attribution, regimes and robustness, in the order that kills an "+
+			"idea fastest. Implies -robustness",
 	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
@@ -218,7 +225,7 @@ func main() {
 
 	// Set before Run: the battery runs inside each worker, over data already
 	// aligned there, so it cannot be switched on afterwards.
-	backtest.RobustnessChecks = robustness
+	backtest.RobustnessChecks = robustness || research
 	if robustness {
 		fmt.Printf("robustness battery on: %d extra simulations per portfolio "+
 			"(%d cost levels, %d start shifts)\n",
@@ -231,7 +238,9 @@ func main() {
 		log.Fatalf("Run: %v", err)
 	}
 
-	if robustness {
+	if research {
+		fmt.Print(backtest.ResearchSummary(results))
+	} else if robustness {
 		for _, res := range results {
 			fmt.Printf("\n%s\n%s", res.PortfolioName, res.Robustness.String())
 		}

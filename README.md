@@ -839,6 +839,52 @@ never valued and so silently removes the cash that bought it (T9); and
 **degenerate inputs** — flat prices, a series that only falls, one bar, two bars
 — must not panic or produce a NaN.
 
+### One command that asks the hard questions first
+
+Every habit that produces trustworthy research is now built — a baseline on every
+result, a test against chance, per-ticker attribution, regime slicing, a
+robustness battery — and every one of them is something you have to *remember* to
+look at. `-research` makes them the default reading order instead:
+
+```bash
+cd src && go run main.go -research
+```
+
+```
+== My Portfolio (lua:strategies/buy_and_hold_weighted.lua)
+  5 fills, none closed — nothing was sold, so there is no win rate to report
+  MATCHED equal-weight buy-and-hold exactly (50.41%/yr) — it is doing the same thing
+  Sharpe 1.26, p = 0.000 against random timing with the same exposure
+  90% confidence interval on that Sharpe: 0.74 to 1.76
+  Best contributor: NVDA (521353.52 of 580363.58 total)
+  One position produced most of the profit — that is a bet on that name,
+  not evidence the rule works.
+  by market regime (labels from the traded universe):
+    bull-calm       996 days (40.6%)  CAGR  88.56%  Sharpe  2.61
+    bull-volatile   805 days (32.8%)  CAGR 155.07%  Sharpe  2.59
+    bear-volatile   612 days (25.0%)  CAGR -44.90%  Sharpe -0.86
+```
+
+That is the shipped default config, and the report says three uncomfortable
+things about it in six lines: the strategy is doing exactly what buy-and-hold
+does, **90% of the profit is one ticker**, and a quarter of the days were spent
+in a regime that lost 45% annualized.
+
+The order is the point — each question can stop you before the next matters:
+
+1. **Did it trade at all?** No trades is not a 0% return, and the report stops there.
+2. **Did it beat buy-and-hold?** Most strategies do not.
+3. **Is it better than random timing?** A Sharpe is not evidence.
+4. **Where did the money come from?** One lucky name, or broadly?
+5. **Which environment did it work in?**
+6. **What kills it?** Friction, or a different start date.
+
+It invents no statistic and passes no verdict. Deciding what "good enough" means —
+a pre-registered criterion, a trial budget, survival thresholds — is a
+research-design choice with real consequences, and it belongs to the person doing
+the research. The report closes by naming what it cannot answer and which flag
+answers it.
+
 ### Robustness: how hard can you push before it breaks?
 
 A Sharpe from one window with one cost assumption is a point estimate dressed as
