@@ -123,6 +123,11 @@ func (s *LuaStrategy) init(
 	registerIndicators(L, hist)
 	registerOHLCV(L, hist)
 	registerTrading(L, p, hist)
+	// Additive only — see strategy_lua_signals.go. No global registered above
+	// is replaced, so every existing script behaves exactly as it did.
+	registerSignals(L, hist)
+	registerCrossSection(L, p)
+	registerBook(L, p, hist)
 
 	if err := L.DoFile(s.Path); err != nil {
 		L.Close()

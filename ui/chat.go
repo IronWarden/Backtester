@@ -350,6 +350,30 @@ Globals available:
 - buy_max(t, price, [buyType="equalWeights"], [day]) -- auto-sized buy
 - sell(t, amount, price, [day])
 - sell_all(t, price, [day])
+Signal primitives (these return a SECOND value saying whether the answer is
+real -- 'local r, ok = roc(t, day, 21)'; a false ok means not enough history,
+so do not treat the 0 as a signal):
+- roc(t, day, n)          -- trailing return over the n days ending at day
+- stdev(t, day, n)        -- realised vol of n daily returns; NOT annualized
+- zscore(t, day, n)       -- close vs its n-day mean, in stdevs of the close
+- atr(t, day, n)          -- average true range, in price units
+- high_n(t, day, n) / low_n(t, day, n) -- extremes over the window, inclusive
+- corr(a, b, day, n)      -- correlation of two tickers' daily returns
+Book primitives:
+- equity(day)             -- cash plus positions marked at that day's close
+- weight_of(t, day)       -- a position's current fraction of equity
+- target_weights(day, {T = fraction, ...}) -- move the whole book to those
+  fractions: sells run first so proceeds fund the buys, buys are clamped to
+  available cash, and a ticker ABSENT from the table is a target of zero, so
+  target_weights(day, {}) goes to cash
+- rank(day, fn)           -- score every ticker with fn(ticker, day), returns
+  {{ticker=,value=}, ...} sorted STRONGEST FIRST; tickers whose fn returns nil
+  are omitted rather than ranked last
+rank + target_weights is the whole shape of a cross-sectional strategy ("rank
+the universe by X, hold the best N"), and it is six lines -- prefer it over
+hand-writing a sort and a rebalancing loop. Wrap a signal call in parentheses
+inside a ranking function, e.g. (roc(t, day, 126)), so its second return value
+is discarded and fn returns exactly one number.
 Pass the current day index as the optional [day] so transactions get dated.
 Buys silently no-op if cash is insufficient; guard with cash() if needed.
 There is no shorting and no leverage. Look-ahead warning: only use data at

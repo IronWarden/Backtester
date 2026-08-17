@@ -85,10 +85,28 @@ Computed in Go, so they are cheap to call in a loop.
 |---|---|
 | `sma(t, day, period)` | Mean close over `[day-period, day)`; 0 without enough history. |
 | `rsi(t, day, period)` | Wilder-style RSI; 50 without enough history, 100 when there were no losses. |
+| `roc(t, day, n)` | Trailing return over the `n` days ending at `day`. The building block of momentum and trend. |
+| `stdev(t, day, n)` | Realised volatility: standard deviation of the `n` daily returns ending at `day`. **Not annualized** — multiply by `math.sqrt(252)`. |
+| `zscore(t, day, n)` | How far today's close sits from its `n`-day mean, in standard deviations of the close. Strongly negative is stretched to the downside. |
+| `atr(t, day, n)` | Average true range in price units, for volatility-scaled sizing and stops that widen with the instrument. |
+| `high_n(t, day, n)` / `low_n(t, day, n)` | The extreme High/Low over the `n` days ending at `day`, inclusive. Breakout channels without the loop. |
+| `corr(a, b, day, n)` | Pearson correlation of two tickers' daily returns, for pairs and for checking a "diversified" book is not one bet in five costumes. |
 
-Anything else — standard deviation, EMA, momentum, channels — is a few
-lines of Lua over `price()`. See `bollinger_reversion.lua` for a standard
-deviation and `risk_parity.lua` for return volatility.
+**The newer functions return a second value saying whether the answer is real:**
+
+```lua
+local r, ok = roc(t, day, 21)
+if not ok then return end          -- not enough history; do not treat it as 0
+```
+
+`sma` and `rsi` predate that convention and return a neutral number instead (0
+and 50), which silently turns "unknown" into a value. Ignoring the second return
+is allowed and behaves the old way, but a strategy that checks it will not open a
+position on a warm-up artifact.
+
+Everything is computed in Go, so calling these in a loop over every ticker is
+cheap, and nothing reads past `day` — a signal cannot see the future even by
+accident.
 
 ### Account and orders
 
@@ -100,6 +118,10 @@ deviation and `risk_parity.lua` for return volatility.
 | `buy_max(t, price, buyType, day)` | Size the order automatically; `buyType` is `"equalWeights"` or `"greedy"`. |
 | `sell(t, shares, price, day)` | Sell an exact share count. |
 | `sell_all(t, price, day)` | Close the whole position. |
+| `equity(day)` | Cash plus every position marked at that day's close. |
+| `weight_of(t, day)` | The fraction of equity a position currently represents, for checking drift. |
+| `target_weights(day, {T = fraction, …})` | Move the whole book to those fractions of equity: sells run first so the proceeds fund the buys, and buys are clamped to available cash. A ticker absent from the table is a target of **zero**, so `target_weights(day, {})` goes to cash. |
+| `rank(day, fn)` | Score every ticker with `fn(ticker, day)` and return `{ {ticker=…, value=…}, … }` **sorted strongest first**. Tickers whose `fn` returns `nil` are left out rather than ranked last. |
 
 Always pass `day` as the last argument — it timestamps the trade in the
 transaction log.
@@ -121,23 +143,38 @@ end
 if day % rebalance_days ~= 0 then return end
 ```
 
-**Total account value** (cash plus marked-to-market positions):
+**A cross-sectional strategy in six lines.** `rank` plus `target_weights` is
+the whole shape of "rank the universe by X, hold the best N":
 
 ```lua
-local function equity(day)
-    local total = cash()
-    for i = 1, #tickers do
-        local pos = position(tickers[i])
-        if pos then total = total + pos.amount * price(tickers[i], day) end
+function step(day)
+    if day % 21 ~= 0 then return end
+    local ranked = rank(day, function(t) return (roc(t, day, 126)) end)
+
+    local targets = {}
+    for i = 1, math.min(3, #ranked) do
+        targets[ranked[i].ticker] = 1.0 / 3
     end
-    return total
+    target_weights(day, targets)
 end
 ```
 
-**Rebalancing to target weights** — sell first so the proceeds fund the
-buys. `momentum_rotation.lua`, `risk_parity.lua`, and `rebalance.lua` each
-carry a copy of this helper; they are deliberately self-contained so you
-can copy a single file and edit it.
+Note the parentheses around `roc(...)`: they discard its second return value, so
+the ranking function returns exactly one number. Without them Lua passes both,
+and `rank` would score on the first while ignoring the rest — harmless here, but
+worth knowing when a function returns a pair.
+
+Swap the signal for `zscore` (negated, for mean reversion), `stdev` (negated, to
+tilt toward calm names), or your own expression, and you have a different
+strategy without touching the plumbing. `-scan-signals` on the CLI will tell you
+which signals are worth ranking on before you write any of it.
+
+**Total account value** is `equity(day)`, and **rebalancing to target weights**
+is `target_weights(day, targets)`. `momentum_rotation.lua` and `rebalance.lua`
+used to carry their own copy of both — around forty duplicated lines each — and
+now call the primitives; their output is unchanged, which is what proved the
+extraction correct. `risk_parity.lua` still carries its own copy, deliberately
+left alone for now so there is an example of the long-hand form to copy from.
 
 ### Gotchas
 
