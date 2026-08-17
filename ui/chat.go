@@ -560,6 +560,16 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   ticker is filled only where the CIK still has a current listing, so it is
   NULL for the delisted companies.
 
+- PROVENANCE. Optional table data_sources(table_name, source, endpoint,
+  licence, row_count, loader, loader_git_sha, fetched_at, note), written by
+  every loader as its final step via loader_provenance.py. One row per (table,
+  loader): stock_data_optimized has TWO contributors, add_ticker.py for real
+  companies and add_collections.py for the $-prefixed benchmark series, which
+  are built differently. Use it to answer "how current is this data" and "which
+  source produced this figure" instead of guessing. loader_git_sha ending in
+  -dirty means the load came from an uncommitted tree and is not reproducible.
+  Engine-side: src/data.LoadDataSources, SourcesFor, SummarizeSources.
+
 - POINT-IN-TIME INDEX MEMBERSHIP. Optional table index_membership(index_name,
   ticker, security, start_date, end_date, start_is_horizon, confidence,
   source), loaded by python3 add_index_membership.py from two free Wikipedia

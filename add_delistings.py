@@ -41,6 +41,8 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+import loader_provenance
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "delistings"
@@ -203,6 +205,13 @@ def main() -> int:
         con.unregister("incoming")
 
         written = con.execute(f'SELECT COUNT(*) FROM "{TABLE}"').fetchone()
+        loader_provenance.record(
+            con, table=TABLE, source="Alpha Vantage LISTING_STATUS (delisted)",
+            endpoint=ENDPOINT.format(key="<key>"),
+            licence="Alpha Vantage free tier, personal use",
+            rows=written[0] if written else 0,
+            note="coverage effectively begins 2013, dense from 2015; does not "
+                 "close pre-2013 survivorship")
         print(f"\n{TABLE} written: {written[0] if written else 0} rows")
         return 0
     finally:

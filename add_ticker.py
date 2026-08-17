@@ -28,6 +28,8 @@ from pathlib import Path
 
 import duckdb
 import pandas as pd
+
+import loader_provenance
 import yfinance as yf
 
 ROOT = Path(__file__).resolve().parent
@@ -182,6 +184,18 @@ def main() -> int:
 
         if args.dry_run:
             print("\n(dry run — nothing written)")
+        else:
+            total = con.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()
+            loader_provenance.record(
+                con, table=TABLE,
+                source="Yahoo Finance via yfinance (auto-adjusted OHLCV)",
+                endpoint="yfinance Ticker.history / yf.download",
+                licence="Yahoo terms of service; personal use only",
+                rows=total[0] if total else 0,
+                note="real companies; the $-prefixed benchmark series in the "
+                     "same table come from add_collections.py. Yahoo serves no "
+                     "history for delisted symbols and returns one unbroken "
+                     "series for a recycled one")
         return 1 if errors else 0
     finally:
         con.close()

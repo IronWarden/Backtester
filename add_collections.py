@@ -42,6 +42,8 @@ from pathlib import Path
 import duckdb
 import numpy as np
 import pandas as pd
+
+import loader_provenance
 import yfinance as yf
 
 ROOT = Path(__file__).resolve().parent
@@ -508,6 +510,17 @@ def main() -> int:
         if args.dry_run:
             print("\n(dry run -- nothing written)")
         else:
+            written = con.execute(
+                f"SELECT COUNT(*) FROM {TABLE} WHERE Ticker LIKE '$%'").fetchone()
+            loader_provenance.record(
+                con, table=TABLE,
+                source="index/asset-class total-return series, spliced "
+                       "(index legs + ETF legs via yfinance)",
+                endpoint="yfinance + the COLLECTIONS table in this script",
+                licence="Yahoo terms of service; personal use only",
+                rows=written[0] if written else 0,
+                note="the $-prefixed rows only; ETF legs are grossed up by "
+                     "their expense ratio, tracking error is not corrected")
             print("\nWritten to", args.db)
         return 0
     finally:

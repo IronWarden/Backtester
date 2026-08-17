@@ -70,6 +70,8 @@ from typing import Any
 import duckdb
 import pandas as pd
 
+import loader_provenance
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "sec_financials"
@@ -388,6 +390,15 @@ def main() -> int:
 
         assert con is not None
         written = con.execute(f'SELECT COUNT(*) FROM "{TABLE}"').fetchone()
+        loader_provenance.record(
+            con, table=TABLE,
+            source="SEC DERA Financial Statement Data Sets (XBRL)",
+            endpoint=ZIP_URL.format(year="YYYY", qtr="n"),
+            licence="US government work, public domain",
+            rows=written[0] if written else 0,
+            note=f"quarters {todo[0][0]}Q{todo[0][1]}..{todo[-1][0]}Q"
+                 f"{todo[-1][1]}; 10-K/10-Q only; ~60% of rows are prior-year "
+                 "comparatives")
         print(f"\n{TABLE} written: {written[0] if written else 0:,} rows")
         return 0
     finally:

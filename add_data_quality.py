@@ -45,6 +45,8 @@ from typing import Any
 import duckdb
 import pandas as pd
 
+import loader_provenance
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "data_quality"
@@ -317,6 +319,14 @@ def main() -> int:
         con.unregister("incoming")
 
         written = con.execute(f'SELECT COUNT(*) FROM "{TABLE}"').fetchone()
+        loader_provenance.record(
+            con, table=TABLE,
+            source=f"derived from {PRICES} by add_data_quality.py",
+            endpoint="(no network: one SQL pass over the price table)",
+            licence="n/a (derived)",
+            rows=written[0] if written else 0,
+            note=f"verdict thresholds mirror src/data/data_quality.go; "
+                 f"calendar taken from {CALENDAR_TICKER}")
         print(f"\n{TABLE} written: {written[0] if written else 0} rows")
         return 0
     finally:

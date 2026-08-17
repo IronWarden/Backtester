@@ -82,6 +82,8 @@ from typing import Any
 import duckdb
 import pandas as pd
 
+import loader_provenance
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "delisting_reasons"
@@ -457,6 +459,14 @@ def main() -> int:
         con.execute("COMMIT")
         con.unregister("incoming")
         written = con.execute(f'SELECT COUNT(*) FROM "{TABLE}"').fetchone()
+        loader_provenance.record(
+            con, table=TABLE,
+            source="SEC EDGAR full-index (Forms 25/25-NSE/15) + submissions "
+                   "8-K items",
+            endpoint=INDEX_URL.format(year="YYYY", qtr="n"),
+            licence="US government work, public domain; SEC fair-use headers",
+            rows=written[0] if written else 0,
+            note="keyed by CIK, not ticker; bankruptcy outranks acquisition")
         print(f"\n{TABLE} written: {written[0] if written else 0} rows")
         return 0
     finally:

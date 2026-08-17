@@ -54,6 +54,8 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+import loader_provenance
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "company_profile"
@@ -347,6 +349,13 @@ def main() -> int:
         con.unregister("incoming")
 
         written = con.execute(f'SELECT COUNT(*) FROM "{TABLE}"').fetchone()
+        loader_provenance.record(
+            con, table=TABLE, source="SEC EDGAR submissions + company_tickers",
+            endpoint=SUBMISSIONS_URL.format(cik=0),
+            licence="US government work, public domain; SEC fair-use headers",
+            rows=written[0] if written else 0,
+            note="SIC divisions, not GICS; only companies with a current "
+                 "ticker unless --cik-list was used")
         print(f"\n{TABLE} written: {written[0] if written else 0} rows")
         return 0
     finally:

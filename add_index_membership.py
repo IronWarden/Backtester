@@ -57,6 +57,8 @@ from typing import Any
 import duckdb
 import pandas as pd
 
+import loader_provenance
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "index_membership"
@@ -330,6 +332,14 @@ def main() -> int:
         con.execute("COMMIT")
         con.unregister("incoming")
         written = con.execute(f'SELECT COUNT(*) FROM "{TABLE}"').fetchone()
+        loader_provenance.record(
+            con, table=TABLE, source=SOURCE,
+            endpoint=API.format(page=CHANGES_PAGE),
+            licence="Wikipedia CC BY-SA 4.0; community-maintained, not vendor "
+                    "data",
+            rows=written[0] if written else 0,
+            note=f"reconstructed backwards from {horizon}; trustworthy from "
+                 "~2011, approximate 2007-2010")
         print(f"\n{TABLE} written: {written[0] if written else 0} rows")
         return 0
     finally:

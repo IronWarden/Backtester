@@ -299,6 +299,33 @@ survivors and overstate returns by roughly 1–4 points a year. Closing that gap
 needs paid data. Until then, prefer the `$`-benchmark series for long horizons:
 they are reconstructed index series and are survivorship-free by construction.
 
+### Provenance: which source produced which table
+
+The database is assembled from Yahoo (prices), Alpha Vantage (delistings), SEC
+(fundamentals, industry codes, delisting reasons), Wikipedia (index membership)
+and FRED (yields). Every loader records what it wrote, as its last step, into a
+`data_sources` table:
+
+| Column | |
+| --- | --- |
+| `table_name`, `source`, `endpoint`, `licence` | what it is and where it came from |
+| `row_count` | how much of it there is |
+| `loader`, `loader_git_sha` | which script, at which commit — suffixed `-dirty` when the tree had uncommitted changes |
+| `fetched_at`, `note` | when, plus the caveat that belongs with that source |
+
+One row per **(table, loader)**, because `stock_data_optimized` genuinely has two
+contributors: `add_ticker.py` for real companies and `add_collections.py` for the
+`$`-prefixed benchmark series, which are built completely differently. Read it
+with `src/data.LoadDataSources`, `SourcesFor`, or `SummarizeSources` for a
+one-line-per-source footer.
+
+Two rules in `loader_provenance.py` worth knowing. Recording provenance **never
+fails a load** — every error there is swallowed and reported, because a missing
+provenance row is a documentation gap while a failed load is lost work. And it
+**cannot be reconstructed afterwards**: once a loader has run without it, the
+fetch date and the code version that produced those rows are gone, which is why
+every loader calls it rather than only the interesting ones.
+
 ### Who was in the index on a given date
 
 The larger half of survivorship bias is **selection**, not missing prices. The

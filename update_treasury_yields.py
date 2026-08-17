@@ -14,6 +14,8 @@ from pathlib import Path
 
 import duckdb
 import pandas as pd
+
+import loader_provenance
 from dotenv import load_dotenv
 from fredapi import Fred
 
@@ -87,6 +89,14 @@ def main() -> int:
     try:
         for table, series_id in TABLES.items():
             refresh(con, fred, table, series_id)
+            total = con.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+            loader_provenance.record(
+                con, table=table, source=f"FRED series {series_id}",
+                endpoint="https://api.stlouisfed.org/fred/series/observations",
+                licence="FRED terms; most series are public domain",
+                rows=total[0] if total else 0,
+                note="daily_risk_free_rate_decimal = "
+                     "(1 + annual/100) ** (1/252) - 1")
     finally:
         con.close()
     return 0
