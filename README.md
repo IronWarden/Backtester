@@ -251,6 +251,55 @@ survivors and overstate returns by roughly 1–4 points a year. Closing that gap
 needs paid data. Until then, prefer the `$`-benchmark series for long horizons:
 they are reconstructed index series and are survivorship-free by construction.
 
+### Who was in the index on a given date
+
+The larger half of survivorship bias is **selection**, not missing prices. The
+default config backtests AAPL/MSFT/GOOGL/AMZN/NVDA over 2015–2025 — a basket
+chosen in 2026 with knowledge of who won — and no amount of walk-forward
+machinery repairs a universe picked that way. Point-in-time membership fixes that
+half, and it works *without* the dead names' prices: a run that knows `SIVB` was
+an S&P 500 member until 2023-03-15 is asking an honest question even with no bars
+for what came after.
+
+```bash
+python3 add_index_membership.py --dry-run          # reconstruct and report
+python3 add_index_membership.py                    # replace the table
+python3 add_index_membership.py --from-year 2011   # only the dense era
+```
+
+Two free Wikipedia tables — today's 503 constituents, and 408 dated add/remove
+events — reconstructed **backwards**: a ticker added on date D was not a member
+the day before, and one removed on D was. The result is `index_membership(index_name,
+ticker, security, start_date, end_date, start_is_horizon, confidence, source,
+fetched_at)`; read it with `src/data.IndexMembersOn` or the pure `MembersOn`.
+Current members carry `end_date = 9999-12-31`, so a date comparison needs no
+special case.
+
+**How far back it means anything**, which is the whole caveat. The index really
+changes 20–25 constituents a year. Measured against the source on 2026-08-17:
+
+| Era | Changes recorded per year | Verdict |
+| --- | --- | --- |
+| 2011–2026 | 16–30 | dense; consistent with reality |
+| 2007–2010 | 8–13 | partial |
+| 1976–2006 | 0–7 | effectively absent |
+
+So the reconstruction is good back to ~2011, approximate to 2007, and fiction
+before that — a ticker whose real removal in 2003 is missing from the table stays
+"a member" all the way to the horizon. Hence the per-row `confidence`, the
+`--from-year` horizon, and `start_is_horizon`, which marks "was already a member
+when reliable history begins" as distinct from "joined on this date".
+
+The loader's own check is the member count per year, which should hold near 500.
+On the verification run it held **501–510 across 2007–2026**, and the four spot
+checks came out right: `ATVI` 2015-08-28 → 2023-10-18, `SIVB` 2018-03-19 →
+2023-03-15, `TWTR` 2018-06-07 → 2022-11-01, and `BBBY` dropped on market cap in
+2017 — years before its 2023 bankruptcy, which is itself a useful reminder that
+leaving the index and dying are different events.
+
+This is a scrape of a community-maintained page, not a vendor feed. Every row
+records its `source`, and it should not be presented as authoritative index data.
+
 ### Why a company delisted — acquired, or wiped out
 
 The registry above knows the date and not the cause, and the two causes are

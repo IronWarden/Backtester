@@ -538,6 +538,24 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   eight rows predate 2009, so Enron, WorldCom, Lehman, WaMu and Bear
   Stearns are absent. Never claim it fixes survivorship bias generally.
 
+- POINT-IN-TIME INDEX MEMBERSHIP. Optional table index_membership(index_name,
+  ticker, security, start_date, end_date, start_is_horizon, confidence,
+  source), loaded by python3 add_index_membership.py from two free Wikipedia
+  tables. It answers "who was in the S&P 500 on this date", which fixes the
+  SELECTION half of survivorship bias — the half that matters most here,
+  because the default config's five megacaps were chosen knowing who won.
+  Current members carry end_date 9999-12-31. Engine-side:
+  src/data.IndexMembersOn and the pure MembersOn.
+  TRUST WINDOW, always state it: the source records 16-30 changes/year from
+  2011 (the index really changes 20-25), 8-13/year for 2007-2010, and almost
+  nothing before 2007. So membership is good back to ~2011, approximate to
+  2007, and fiction before that. Every row carries a confidence, and
+  start_is_horizon means "was already a member when reliable history begins",
+  not "joined then". It is a Wikipedia scrape, not vendor data.
+  Nothing in the TOML config can select a universe by index yet — a user has
+  to name tickers — so if they ask, say the data exists and the config plumbing
+  does not.
+
 - WHY A COMPANY DELISTED. Optional table delisting_reasons(cik, company_name,
   sic, tickers, delisting_date, reason, confidence, evidence, ...), loaded from
   SEC EDGAR by python3 add_delisting_reasons.py (free, no key). reason is
