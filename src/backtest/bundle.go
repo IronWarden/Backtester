@@ -68,12 +68,8 @@ type Bundle struct {
 	// EngineSHA is the commit the engine was built from, with "-dirty" when the
 	// tree had uncommitted changes: a bundle produced from a modified tree
 	// cannot be reproduced from its sha alone, and should say so.
-	EngineSHA string `json:"engineSha"`
-	// DataNote records what the market data looked like — the price table's
-	// last bar and the tickers' own ranges — so a verification that fails can
-	// distinguish "the engine changed" from "the data was refreshed".
-	DataNote string      `json:"dataNote,omitempty"`
-	Runs     []BundleRun `json:"runs"`
+	EngineSHA string      `json:"engineSha"`
+	Runs      []BundleRun `json:"runs"`
 }
 
 // Discrepancy is one figure that no longer reproduces.
