@@ -691,20 +691,24 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   recomputes the verdict. NOTHING refuses to trade an unusable series yet, so
   when a user names one, the warning is yours to give.
 
-- A HOLDING WHOSE DATA ENDS EARLY TRUNCATES THE WHOLE RUN. A day is
-  simulated only when EVERY ticker in the portfolio has a bar for it, so a
-  ticker whose series stops mid-window (a delisting, an acquisition, a stale
-  feed) ends the backtest for all the other holdings on its last bar, and the
-  metrics then describe that shorter window rather than the requested one. A
-  single missing day inside one ticker's history likewise drops that day for
-  every holding. The run logs this, naming the ticker and the date, e.g.
-  'simulated 1258 of the 2517 trading days its window covers ... "SIVB" ends
-  2023-03-10, so the run was truncated there'. Nothing liquidates the dead
-  holding and carries the survivors onward — that would change existing
-  results and has not been decided. Also: an explicit EndDate past a ticker's
-  last bar is REJECTED outright by validateCoverage, so a delisted name is
-  currently unusable rather than merely truncating. When a user asks about
-  backtesting a company that no longer trades, say this plainly.
+- EVERY TICKER MUST COVER THE WHOLE WINDOW. This is a DESIGN RULE, not a
+  limitation to work around: a portfolio's tickers all share one window. The
+  UI will not accept dates that conflict with a ticker's coverage, and the
+  engine enforces it twice — validateCoverage REJECTS a portfolio whose
+  StartDate/EndDate runs outside any ticker's data (naming the ticker and its
+  real range), and a day is simulated only when EVERY ticker has a bar for it.
+  Consequence to state plainly when it comes up: a company that stopped
+  trading cannot be held in a portfolio whose window extends past its death.
+  Propose a window that ENDS at the delisting instead. Never suggest that the
+  engine should liquidate the dead holding and carry the survivors onward —
+  that breaks the shared-window invariant, which is what makes two holdings'
+  numbers comparable.
+  Two cases slip past validateCoverage and shorten a run quietly: an
+  open-ended window, and a gap inside one ticker's history. Both are logged,
+  naming the ticker and the date, e.g. 'simulated 1258 of the 2517 trading
+  days its window covers ... "SIVB" ends 2023-03-10, so the run was truncated
+  there'. If a user reports a suspiciously short backtest, that log line is
+  the first thing to look for.
 
 - SURVIVORSHIP. Separately from the above, the price table contains no
   company that stopped trading before 2025: of 1,792 tickers trading in

@@ -501,18 +501,26 @@ thresholds — which are judgement calls, named and reasoned about in
 **Nothing currently refuses to trade an `unusable` series**; wiring that in
 changes existing results, so it is a decision rather than a fix.
 
-### A holding whose data ends before the window does
+### Every ticker must cover the whole window
 
-Worth knowing before you load any delisted history, because it is the rule that
-decides what such a backtest means. **A day is simulated only when every one of
-the portfolio's tickers has a bar for it.** So a holding whose series ends
-mid-window — a delisting, an acquisition, or just a stale feed — ends the run
-for *every* holding on its last bar, and the reported metrics describe that
-shorter window rather than the one the config asked for. The same rule applies
-to a single missing day inside one ticker's history: that day is dropped for all
-of them.
+**This is a design rule, not an accident.** A portfolio's tickers all share one
+window: the UI will not accept dates that conflict with a ticker's coverage, and
+the engine enforces the same thing from two directions.
 
-The run now says so, naming the ticker and the date:
+- `validateCoverage` **rejects** a portfolio outright when an explicit `EndDate`
+  runs past any ticker's last bar (or `StartDate` precedes its first), naming the
+  ticker and its real range.
+- `alignToWindow` simulates a day **only when every ticker has a bar for it**, so
+  the days that do run are directly comparable across holdings.
+
+The consequence worth stating plainly: a stock that stopped trading cannot be
+held in a portfolio whose window extends past its death. Give it a window that
+ends at the delisting instead. This is why loading delisted price history would
+not, by itself, let you mix dead and live names in one long run.
+
+Where the rule can still bite quietly is an **open-ended window** or a **gap
+inside one ticker's history** — neither is caught by `validateCoverage`, and both
+shorten the run for every holding. That is no longer silent:
 
 ```
 portfolio "Tech Giants": simulated 1,258 of the 2,517 trading days its window
@@ -520,13 +528,10 @@ covers (through 2025-03-31) — a day is only simulated when every ticker has a
 bar for it; "SIVB" ends 2023-03-10, so the run was truncated there
 ```
 
-Two things it does *not* do, both deliberate: it does not liquidate the dead
-holding and carry the survivors to the end of the window, and it does not fail
-the run. Either would change the numbers of every existing config that mixes
-histories of different lengths. Note also that `validateCoverage` rejects a
-portfolio outright when an explicit `EndDate` runs past a ticker's last bar, so
-today a delisted name is unusable rather than merely truncating — the message
-names the ticker and its real range.
+The message names the ticker and the date, and distinguishes a truncated tail
+from a gap in the middle. Nothing liquidates the short holding and carries the
+survivors onward — that would break the shared-window invariant, which is the
+property that makes two holdings' numbers comparable in the first place.
 
 ## Configuration
 
