@@ -596,6 +596,24 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   ticker is filled only where the CIK still has a current listing, so it is
   NULL for the delisted companies.
 
+- EVERY RESULT CARRIES A BASELINE. Result.Baseline is what an equal-weight
+  buy-and-hold of THE SAME TICKERS would have returned over the same days with
+  the same capital and the same costs: Name, FinalValue, AnnualReturn,
+  SharpeRatio, MaxDrawdown, StandardDev, ExcessFinalValue, ExcessAnnualReturn,
+  Beat, Computed. It needs no configuration and is always computed.
+  LEAD WITH IT when reporting a result. Most strategies do not beat
+  buy-and-hold, and "it returned 11%" means nothing until the reader knows the
+  baseline returned 13%. If Beat is false, say so plainly rather than
+  presenting the strategy's absolute numbers as a success.
+  Same UNIVERSE on purpose, not the market: beating the S&P 500 by holding five
+  megacaps is a statement about the ticker list, not the strategy. The
+  configured Benchmark answers that other question and is separate
+  (BenchmarkStats). Both are worth quoting when both exist.
+  The baseline pays the same costs — it is a real simulation, not an analytic
+  curve — so the comparison stays fair when [portfolio.Costs] is set.
+  Computed=false means no baseline could be built (no tickers, under two days),
+  which is NOT the same as the strategy having matched it.
+
 - FINDING A STRATEGY: THE SIGNAL SCREEN. The CLI has -scan-signals, which
   screens a built-in library of twelve signals over the config's tickers and
   window and prints their information coefficients, strongest first, INSTEAD of

@@ -49,6 +49,11 @@ type Result struct {
 	// the window.
 	BenchmarkCurve []float64
 	BenchmarkStats BenchmarkStats
+	// Baseline is what an equal-weight buy-and-hold of the SAME tickers would
+	// have returned over the same days with the same costs — the comparison
+	// that says whether the strategy was worth running at all. Zero-valued with
+	// Computed false when no baseline could be built.
+	Baseline BaselineStats
 	// Trials is how many parameter sets the config block that produced this
 	// result expanded to, and TrialGroup names that block. ExpectedMaxSharpe
 	// is the Sharpe the best of those trials would be expected to show with
@@ -306,6 +311,8 @@ func runOne(
 	}
 	p.applyBenchmarkMetrics(hist, dates, riskFreeRates)
 	p.applySplitMetrics(riskFreeRates)
+	// After the portfolio's own metrics, since the comparison reads them.
+	p.Baseline = equalWeightBaseline(p, windowed, dataLen, riskFreeRates)
 	if c, ok := p.Strategy.(interface{ Close() }); ok {
 		c.Close()
 	}
@@ -465,6 +472,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					),
 					BenchmarkCurve: p.BenchmarkCurve,
 					BenchmarkStats: p.BenchmarkStats,
+					Baseline:       p.Baseline,
 					Splits:         p.Splits,
 					Trials:         p.Trials,
 					TrialGroup:     p.TrialGroup,

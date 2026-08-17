@@ -22,6 +22,9 @@ type Portfolio struct {
 	BuyingPower          float64
 	InitialBuyingPower   float64
 	Positions            map[string]*Position
+	// Baseline is filled in after the run: what an equal-weight buy-and-hold of
+	// the same tickers would have done. See baseline.go.
+	Baseline             BaselineStats
 	DailyReturns         []DailyReturn
 	PortfolioCloseValues []float64
 	Metrics              Metrics

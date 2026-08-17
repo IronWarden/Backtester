@@ -646,6 +646,38 @@ six metrics are left at zero, the curve and stats are left empty, and a line
 is logged. The backtest itself still runs — a benchmark is a measurement, and
 a missing one is not a reason to lose the result.
 
+### Automatic baseline
+
+Every result now carries a **baseline**: what an equal-weight buy-and-hold of
+**the same tickers** would have returned over the same days, with the same
+starting capital and the same costs. No configuration — it is always computed.
+
+```
+Baseline (equal-weight buy & hold):  final 14,230.11  CAGR 7.3%  Sharpe 0.61
+Strategy beat it by 1,120.44 (+2.1%/yr)
+```
+
+Most strategies do not beat buy-and-hold, and until this existed nothing said
+so unless you built the comparison by hand — which tends to happen when you are
+sceptical and not when you are excited. It is the fastest way to kill a bad
+idea.
+
+Two deliberate choices:
+
+- **The same universe, not the market.** Beating the S&P 500 by holding five
+  megacaps is a statement about the universe, not about the strategy. Holding
+  the universe fixed isolates what the strategy actually contributed. The
+  configured `Benchmark` answers the other question and is reported separately.
+- **The same costs.** The baseline is a real simulation through the same order
+  path, paying the same commission and slippage. An analytic curve would compare
+  a costed strategy against a frictionless hold and flatter every result.
+
+Read it on `Result.Baseline`: `FinalValue`, `AnnualReturn`, `SharpeRatio`,
+`MaxDrawdown`, `StandardDev`, plus `ExcessFinalValue`, `ExcessAnnualReturn` and
+a `Beat` flag. `Computed` is false when there was no baseline to build (no
+tickers, or fewer than two days) — which is distinct from a strategy that
+matched the baseline exactly.
+
 ### `[portfolio.Sweep]`
 
 Turns one portfolio block into many runs. Every key maps to a **list**, and
