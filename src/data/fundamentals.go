@@ -12,15 +12,37 @@ package data
 // Everything here exists to make the unsafe join hard to write by accident.
 // Read fundamentals through PointInTimeFundamentals, never from the raw table.
 //
-// Two lag rules, in order of preference:
+// Three lag rules, in order of preference:
 //
-//   1. The real report date, from `earnings_calendar` — the first report
+//   1. The SEC filing date, from `sec_financials.filed` — the day the 10-K or
+//      10-Q carrying the period was actually published, taken as the EARLIEST
+//      filing for that period. A primary-source fact rather than an estimate,
+//      and available for every filer from 2009 on once that optional table is
+//      loaded. Usable from the following session, since EDGAR accepts filings
+//      until late in the evening and the date alone does not say when.
+//   2. The real report date, from `earnings_calendar` — the first report
 //      timestamp strictly after the period end. Those timestamps are after
 //      the close (16:00), so the first usable session is the NEXT day.
 //      Available for ~1,000 of the ~6,900 tickers that have financials.
-//   2. A fixed conservative lag otherwise. Late enough that essentially every
+//   3. A fixed conservative lag otherwise. Late enough that essentially every
 //      filer has reported, which is the right way to be wrong here: being
 //      late costs a little signal, being early invents it.
+//
+// On how wrong rule 3 is: measured against `sec_financials` (T44), the real lag
+// for the figures a filing reports is a median of 48 days, p10 31, p90 62, max
+// 90. So the 90-day fallback is the WORST case rather than a typical one and
+// delays every figure it touches by about six weeks. That is the safe direction,
+// and it is exactly why rule 1 is worth having — but the constant must not be
+// retuned to the median, because a median puts half of all figures earlier than
+// they were published, which is the bias this whole file exists to prevent.
+//
+// Where rules 1 and 2 disagree, rule 1 wins. A company usually announces
+// headline results days or weeks before it files, so for revenue and earnings
+// the announcement is the true first-knowable date — but the balance-sheet
+// metrics in this table are often not in the press release, and the file's
+// principle is to be late rather than early. A user studying earnings surprises
+// specifically should read the announcement date from `earnings_calendar`
+// directly.
 
 import (
 	"database/sql"
@@ -41,11 +63,27 @@ const FixedReportLagDays = 90
 type LagSource string
 
 const (
+	// LagFromSECFiling means the date came from the actual SEC filing date in
+	// `sec_financials` — the strongest evidence available.
+	LagFromSECFiling LagSource = "sec_filed"
 	// LagFromEarningsCalendar means the date came from a real report timestamp.
 	LagFromEarningsCalendar LagSource = "earnings_calendar"
 	// LagFromFixedWindow means FixedReportLagDays was applied instead.
 	LagFromFixedWindow LagSource = "fixed"
 )
+
+// FilingKey identifies a company's reporting period. Keyed on the period rather
+// than on (period, metric) deliberately: one filing publishes every figure it
+// contains at once, so a metric that `sec_financials` does not carry still gets
+// the right publication date from the filing that carried the period.
+type FilingKey struct {
+	Ticker    string
+	PeriodEnd time.Time
+}
+
+// FilingDates maps a reporting period to the day its filing was published —
+// the earliest filing where a period was restated in later ones.
+type FilingDates map[FilingKey]time.Time
 
 // RawFundamental is one row of `financials` exactly as stored: a value stamped
 // with the END of the fiscal period it describes, which is NOT when it became
@@ -80,6 +118,18 @@ type FundamentalPoint struct {
 func ApplyPublicationLag(
 	rows []RawFundamental, reportDates map[string][]time.Time,
 ) []FundamentalPoint {
+	return ApplyPublicationLagWithFilings(rows, reportDates, nil)
+}
+
+// ApplyPublicationLagWithFilings is ApplyPublicationLag with SEC filing dates as
+// well — the preferred rule when they are available. A nil or empty map makes it
+// identical to the two-argument form, which is what keeps every database without
+// `sec_financials` producing exactly the same numbers as before this existed.
+func ApplyPublicationLagWithFilings(
+	rows []RawFundamental,
+	reportDates map[string][]time.Time,
+	filed FilingDates,
+) []FundamentalPoint {
 	// Sort each ticker's report dates once so the lookup below can stop at the
 	// first one past the period end.
 	sorted := make(map[string][]time.Time, len(reportDates))
@@ -99,7 +149,7 @@ func ApplyPublicationLag(
 		}
 		seen[key] = struct{}{}
 
-		known, src := knownFrom(r, sorted[r.Ticker])
+		known, src := knownFrom(r, sorted[r.Ticker], filed)
 		out = append(out, FundamentalPoint{
 			RawFundamental: r,
 			KnownFrom:      known,
@@ -112,8 +162,17 @@ func ApplyPublicationLag(
 // knownFrom returns the first date a period's figures may be used, and which
 // rule produced it. reports must be sorted ascending.
 func knownFrom(
-	r RawFundamental, reports []time.Time,
+	r RawFundamental, reports []time.Time, filed FilingDates,
 ) (time.Time, LagSource) {
+	// Rule 1: the actual SEC filing date, from the following session. A filing
+	// only tells us the day, and EDGAR accepts submissions into the evening, so
+	// dating it the same day could act on a figure hours before it existed.
+	if f, ok := filed[FilingKey{Ticker: r.Ticker, PeriodEnd: r.PeriodEnd}]; ok &&
+		f.After(r.PeriodEnd) {
+		day := time.Date(f.Year(), f.Month(), f.Day(), 0, 0, 0, 0, f.Location())
+		return day.AddDate(0, 0, 1), LagFromSECFiling
+	}
+
 	for _, t := range reports {
 		if t.After(r.PeriodEnd) {
 			// Reports land after the close, so the earliest session that may
@@ -193,7 +252,15 @@ func PointInTimeFundamentals(
 			"fixed lag for every ticker", err, FixedReportLagDays)
 		reports = map[string][]time.Time{}
 	}
-	return ApplyPublicationLag(rows, reports)
+	filed, err := querySECFilingDates(tickers, endTime)
+	if err != nil {
+		// Also not fatal, and for the same reason: without it the older two
+		// rules apply exactly as they did before this table existed.
+		log.Printf("SEC filing dates unavailable: %v; falling back to the "+
+			"earnings calendar and the %d-day lag", err, FixedReportLagDays)
+		filed = nil
+	}
+	return ApplyPublicationLagWithFilings(rows, reports, filed)
 }
 
 // queryRawFundamentals reads the raw table. It is deliberately unexported:
@@ -271,6 +338,56 @@ func queryReportDates(tickers []string) (map[string][]time.Time, error) {
 			continue
 		}
 		out[ticker] = append(out[ticker], date)
+	}
+	return out, rows.Err()
+}
+
+// querySECFilingDates reads the earliest filing date per (ticker, period) from
+// the optional `sec_financials` table — the strongest publication-date evidence
+// there is.
+//
+// Returns nil without error when the table is absent, which keeps every database
+// that has not loaded it on exactly the previous two rules.
+//
+// MIN(filed) is the point: a period restated in later filings appears several
+// times, and the day it first became public is the earliest of them. Taking the
+// latest would date a figure by a restatement that did not exist yet.
+//
+// Rows whose ticker is NULL are skipped by the IN clause — those are the
+// delisted companies, whose figures cannot be joined to a symbol until the
+// name-matching task lands. They fall back to the older rules.
+func querySECFilingDates(tickers []string, endTime time.Time) (FilingDates, error) {
+	if !tableExists("sec_financials") {
+		return nil, nil
+	}
+
+	query := `SELECT ticker, period_end, MIN(filed)
+	          FROM sec_financials
+	          WHERE ticker IN (` + placeholderList(len(tickers)) + `)
+	            AND period_end <= CAST(? AS DATE)
+	          GROUP BY ticker, period_end`
+
+	args := make([]any, 0, len(tickers)+1)
+	for _, t := range tickers {
+		args = append(args, t)
+	}
+	args = append(args, endTime.Format("2006-01-02"))
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(FilingDates)
+	for rows.Next() {
+		var ticker string
+		var periodEnd, filed time.Time
+		if err := rows.Scan(&ticker, &periodEnd, &filed); err != nil {
+			log.Printf("scanning SEC filing date: %v", err)
+			continue
+		}
+		out[FilingKey{Ticker: ticker, PeriodEnd: periodEnd}] = filed
 	}
 	return out, rows.Err()
 }

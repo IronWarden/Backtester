@@ -469,12 +469,19 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   weeks before they were published, and makes any factor backtest look far
   better than reality. Never write that join, and say so when a user asks
   for one.
-  Use the publication lag instead — the real report date where it exists,
-  and period end + 90 days otherwise:
+  Use the publication lag instead. Three rules, best evidence first: the SEC
+  filing date from sec_financials (earliest filing of that period, +1 day),
+  else the earnings_calendar report date (+1 day, they land after the close),
+  else period end + 90 days. Where the first two disagree the FILING date
+  wins — announcements precede filings, but the balance-sheet metrics here are
+  often not in the press release, and being late is the safe direction.
 
   WITH pit AS (
     SELECT DISTINCT f.ticker, f.metric, f.date AS period_end, f.value,
            COALESCE(
+             (SELECT MIN(s.filed)::DATE + INTERVAL 1 DAY
+              FROM sec_financials s
+              WHERE s.ticker = f.ticker AND s.period_end = f.date::DATE),
              (SELECT MIN(e.Date)::DATE + INTERVAL 1 DAY
               FROM earnings_calendar e
               WHERE e.Ticker = f.ticker AND e.Date > f.date),
@@ -483,6 +490,11 @@ different proposition from one with the same Sharpe and shallow drawdowns.
     FROM financials f
   )
   SELECT * FROM pit WHERE known_from <= DATE '2024-06-30';
+
+  (Drop the sec_financials branch if that optional table is absent.) Do NOT
+  "fix" the 90-day constant to the measured 48-day median: a median puts half
+  of all figures earlier than they were published, which is the bias this
+  whole mechanism prevents. The fallback has to clear essentially every filer.
 
   Two details in that query are load-bearing. SELECT DISTINCT is required:
   the raw table contains exact duplicate rows (AAPL/Net Income/2025-09-30
@@ -726,8 +738,8 @@ const queryDBToolDescription = "Run one read-only SQL statement (DuckDB " +
 	"fundamentals ARE available (revenue, net income, equity, assets, " +
 	"shares, 2020+), but financials.date is the FISCAL PERIOD END, not " +
 	"the publication date — joining it to prices on that date is look-ahead " +
-	"bias. Lag to the earnings_calendar report date, or period end + 90 " +
-	"days. Sector = company_profile.sector when loaded, NOT the empty " +
+	"bias. Lag to sec_financials.filed, else earnings_calendar, else " +
+	"+90 days. Sector = company_profile.sector when loaded, NOT the empty " +
 	"company_info; otherwise screen_stocks or lookup_quote."
 
 func queryDBToolSchema() map[string]any {

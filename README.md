@@ -124,11 +124,33 @@ tickers also have price history.
 > published — look-ahead bias that flatters any factor backtest built on it.
 
 Read it through `src/data.PointInTimeFundamentals`, which dates every figure
-with the day it became knowable: the real `earnings_calendar` report date
-where one exists (plus one day, since those land after the close), and period
-end + `FixedReportLagDays` (90) otherwise. Each point records which rule
-applied, so a result resting mostly on the fallback can be read accordingly.
-The helper also deduplicates — the raw table contains exact duplicate rows.
+with the day it became knowable, by three rules in order of preference:
+
+1. **The SEC filing date** from `sec_financials.filed` (see below), taking the
+   *earliest* filing that carried the period, usable from the following session.
+   A primary-source fact rather than an estimate — and the reason for taking the
+   earliest is that a period restated in a later filing must not be dated by a
+   filing that did not exist yet.
+2. **The `earnings_calendar` report date** where one exists, plus one day, since
+   those timestamps land after the close.
+3. **Period end + `FixedReportLagDays` (90)** otherwise.
+
+Each point records which rule applied (`LagSource`), so a result resting mostly
+on the fallback can be read accordingly. The helper also deduplicates — the raw
+table contains exact duplicate rows.
+
+Rules 1 and 2 disagree often, and rule 1 wins. A company announces headline
+results days or weeks before it files, so for revenue and earnings the
+announcement really is the first knowable date — but the balance-sheet metrics
+here are frequently not in the press release, and this helper's principle is to
+be late rather than early. If you are studying earnings surprises specifically,
+read the announcement date from `earnings_calendar` directly.
+
+**The 90-day fallback is deliberately not retuned**, even though `sec_financials`
+now shows the real median is 48 days. A median puts half of all figures earlier
+than they were published, which is precisely the bias the whole mechanism exists
+to prevent; the fallback has to clear essentially every filer, so it stays at the
+worst case. The fix for the lost signal is rule 1, not a smaller constant.
 
 ### Fundamentals back to 2009, dead companies included
 
