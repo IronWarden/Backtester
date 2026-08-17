@@ -6,6 +6,9 @@ src/.env
 # stock_data.db is ~2.9 GB and is rebuilt by the Python loaders.
 stock_data.db
 stock_data.db.wal
+# The research log, written by -record. Local experiment history, not code.
+research.db
+research.db.wal
 *.duckdb
 
 # --- Build artifacts ---------------------------------------------------

@@ -19,6 +19,9 @@ func main() {
 		scanSignals bool
 		eventStudy  bool
 		listStrats  bool
+		record      bool
+		campaign    string
+		history     int
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -36,6 +39,19 @@ func main() {
 		&listStrats, "list-strategies", false,
 		"Print the strategy gallery — what each shipped script is for, how it "+
 			"fails, and the parameter ranges worth sweeping",
+	)
+	flag.BoolVar(
+		&record, "record", false,
+		"Append every result to the research log (../research.db) so you can "+
+			"tell later what you have already tried",
+	)
+	flag.StringVar(
+		&campaign, "campaign", "",
+		"Group these runs under a campaign name in the research log",
+	)
+	flag.IntVar(
+		&history, "history", 0,
+		"Print the last N runs from the research log and exit",
 	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
@@ -67,6 +83,28 @@ func main() {
 		}()
 	} else {
 		backtest.TransactionLogger = log.New(io.Discard, "", 0)
+	}
+
+	// The research log is its own database and needs neither the market data
+	// nor a config, so it answers before either is opened.
+	if history > 0 {
+		reg, err := backtest.OpenRegistry(backtest.DefaultRegistryPath)
+		if err != nil {
+			log.Fatalf("opening the research log: %v", err)
+		}
+		defer reg.Close()
+		lines, err := reg.RecentRuns(history)
+		if err != nil {
+			log.Fatalf("reading the research log: %v", err)
+		}
+		if len(lines) == 0 {
+			fmt.Println("No runs recorded yet. Add -record to a run to start " +
+				"keeping a log.")
+		}
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+		return
 	}
 
 	// The gallery is documentation: no database, no config, so it answers
@@ -118,7 +156,48 @@ func main() {
 		return
 	}
 
-	if _, err := backtest.Run(portfolios, config.Output); err != nil {
+	results, err := backtest.Run(portfolios, config.Output)
+	if err != nil {
 		log.Fatalf("Run: %v", err)
 	}
+
+	// Bookkeeping, and strictly after the fact: a failure to record must never
+	// cost a run that already succeeded.
+	if record {
+		if err := recordRun(portfolios, results, campaign); err != nil {
+			log.Printf("could not record this run: %v", err)
+		}
+	}
+}
+
+// recordRun appends the results to the research log and reports whether this
+// exact config has been run before — which is the question the log exists to
+// answer, and is worth saying at the moment it is still actionable.
+func recordRun(
+	portfolios []*backtest.Portfolio, results []backtest.Result, campaign string,
+) error {
+	reg, err := backtest.OpenRegistry(backtest.DefaultRegistryPath)
+	if err != nil {
+		return err
+	}
+	defer reg.Close()
+
+	for _, p := range portfolios {
+		hash := backtest.ConfigHash(p)
+		if prior, last, err := reg.PriorRuns(hash); err == nil && prior > 0 {
+			fmt.Printf("note: %q has been run %d time(s) before, last on %s "+
+				"[%s]\n", p.Pname, prior, last.Format("2006-01-02"), hash)
+		}
+	}
+	if err := reg.Record(campaign, portfolios, results); err != nil {
+		return err
+	}
+	if campaign != "" {
+		if trials, err := reg.CampaignTrials(campaign); err == nil {
+			fmt.Printf("campaign %q has now spent %d trials\n", campaign, trials)
+		}
+	}
+	fmt.Printf("recorded %d result(s) to %s\n",
+		len(results), backtest.DefaultRegistryPath)
+	return nil
 }

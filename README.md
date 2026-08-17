@@ -753,6 +753,47 @@ shuffling its exposure changes nothing and it scores p ≈ 1. That is correct �
 has no timing to test — and it is the calibration case the implementation is
 checked against.
 
+### The research log: what have I already tried?
+
+Nothing persisted before this: `output.txt` is truncated on every run, so the app
+had no memory. You could not compare today's idea with last week's, could not
+tell whether you had already tested a hypothesis, and — the one that matters most
+— could not count how many things you had tried. That count is the denominator
+every overfitting correction needs.
+
+```bash
+cd src
+go run main.go -record                      # append this run to ../research.db
+go run main.go -record -campaign momentum   # group runs under a campaign
+go run main.go -history 20                  # the last 20 runs, newest first
+```
+
+Off by default, so existing usage is untouched. When it is on, a repeat is called
+out at the moment it is still actionable:
+
+```
+note: "My Portfolio" has been run 1 time(s) before, last on 2026-08-17 [9be4ecc86759]
+campaign "momentum" has now spent 2 trials
+```
+
+Three properties, each deliberate:
+
+- **A separate database file.** `stock_data.db` is 2.9 GB and single-writer, and
+  the UI holds it open. A log you cannot write while the market data is open is
+  a log nobody writes to.
+- **Append-only.** Never updated, never deleted. A re-run is a new row sharing
+  its config hash, and that repetition is the signal — it is what stops you
+  quietly retrying until something works.
+- **A failed write never fails a backtest.** Recording happens strictly after
+  the run and its errors are reported, not fatal.
+
+The config hash covers strategy, tickers, window, capital, benchmark, costs and
+every parameter, so the same experiment always hashes the same. Ticker **order**
+is part of it: `buyAndHold:greedy` spends everything on the first ticker, so
+reordering the list is a different experiment, not a repeat.
+
+`research.db` is git-ignored — it is your experiment history, not code.
+
 ### `[portfolio.Sweep]`
 
 Turns one portfolio block into many runs. Every key maps to a **list**, and

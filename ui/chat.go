@@ -675,6 +675,21 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- THE RESEARCH LOG. The CLI can remember runs: -record appends every result
+  to ../research.db, -campaign NAME groups them, -history N prints the last N.
+  Off by default. It reports when a config has been run before ("has been run
+  3 time(s) before, last on ...") and how many trials a campaign has spent.
+  Use it to answer "have I tried this already?" and, more importantly, to keep
+  the TRIAL COUNT honest: a search that reports its best result without saying
+  how many it looked at is not reporting a result. If a user is sweeping or
+  iterating on ideas, suggest -record and a campaign name.
+  Append-only by design: a re-run is a new row with the same config hash, never
+  an overwrite. The hash covers strategy, tickers, window, capital, benchmark,
+  costs and params, and ticker ORDER is part of it because greedy allocation
+  spends on the first ticker.
+  Engine-side: backtest.OpenRegistry, ConfigHash, Registry.Record/PriorRuns/
+  CampaignTrials/RecentRuns.
+
 - THE STRATEGY GALLERY. Every shipped script carries four tagged header
   lines — @works (the market condition it needs), @fails (how it is known to
   lose money), @sweep (parameter ranges ready to paste into
