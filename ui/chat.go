@@ -538,6 +538,22 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   eight rows predate 2009, so Enron, WorldCom, Lehman, WaMu and Bear
   Stearns are absent. Never claim it fixes survivorship bias generally.
 
+- WHY A COMPANY DELISTED. Optional table delisting_reasons(cik, company_name,
+  sic, tickers, delisting_date, reason, confidence, evidence, ...), loaded from
+  SEC EDGAR by python3 add_delisting_reasons.py (free, no key). reason is
+  bankruptcy | acquired | compliance | voluntary | unknown, derived from 8-K
+  item 1.03 (bankruptcy) and item 2.01 (completed acquisition) filed near the
+  Form 25/25-NSE/15. It matters because the two outcomes are opposite: an
+  acquisition usually pays a premium, a Chapter 11 pays nothing, and the
+  literature's blanket haircut (Shumway & Warther 1999 -55% Nasdaq, Shumway
+  1997 -30% NYSE/AMEX) overcorrects every acquisition. Engine-side:
+  src/data.LoadDelistingReasons and the pure ClassifyReason;
+  Reason.TerminalForHolders() is true only for bankruptcy.
+  IMPORTANT LIMIT: the table is keyed by CIK, not ticker. EDGAR lists a filer's
+  tickers only while it has a current listing, which delisted companies do not,
+  so it answers "what happened to this company" and NOT "what happened to the
+  symbol a backtest held". Do not claim otherwise.
+
 - DATA QUALITY. The bars themselves were audited on 2026-08-17 (all 34,988,956
   of them; analysis/data_quality.md). 7,193 tickers good, 1,915 usable, 1,053
   suspect, 273 UNUSABLE. Four findings to warn about by name when they come up:

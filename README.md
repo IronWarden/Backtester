@@ -251,6 +251,63 @@ survivors and overstate returns by roughly 1–4 points a year. Closing that gap
 needs paid data. Until then, prefer the `$`-benchmark series for long horizons:
 they are reconstructed index series and are survivorship-free by construction.
 
+### Why a company delisted — acquired, or wiped out
+
+The registry above knows the date and not the cause, and the two causes are
+opposite: an acquisition usually pays a premium, a Chapter 11 usually pays
+nothing. That single missing field is what makes a delisting return a guess, and
+it is why the literature falls back to a blanket haircut (Shumway & Warther 1999:
+−55% for Nasdaq; Shumway 1997: nearer −30% for NYSE/AMEX) that overcorrects every
+acquisition.
+
+SEC EDGAR answers it, free and without a key. `add_delisting_reasons.py` works in
+two stages:
+
+```bash
+# probe: one year of filings, four known companies, writes nothing
+python3 add_delisting_reasons.py --dry-run --from-year 2023 --cik 718877
+python3 add_delisting_reasons.py --dry-run          # full harvest, no write
+python3 add_delisting_reasons.py                    # replace the table
+python3 add_delisting_reasons.py --emit-cik-list ciks.txt --no-classify
+```
+
+1. **Who delisted, and when** — the quarterly filing indexes
+   (`full-index/YYYY/QTRn/form.idx`) list every filing with its filer and CIK.
+   `25-NSE` is filed *by the exchange* (involuntary), `25` by the company, and
+   `15-12B`/`15-12G` are deregistrations. This stage is also the only free way to
+   learn a **dead company's CIK**, which is the gap `add_company_info.py`
+   documents — hence `--emit-cik-list`, which feeds its `--cik-list`.
+2. **Why** — each filer's submissions document carries every filing's 8-K item
+   numbers, and two settle it: **item 1.03** (Bankruptcy or Receivership) and
+   **item 2.01** (Completion of Acquisition or Disposition of Assets).
+
+Reasons are `bankruptcy`, `acquired`, `compliance` (the exchange removed the
+listing and nothing explains it — a price, float or filing-delinquency failure,
+after which the stock usually keeps trading over the counter), `voluntary` (left
+quietly, usually a merger or going-private, but the filings do not say), and
+`unknown`. `src/data.ClassifyReason` is pure and recomputes the reason from the
+stored evidence, and `Reason.TerminalForHolders()` is true only for bankruptcy.
+
+Verified 2026-08-17 against cases whose answers are public:
+
+| Company | Evidence found | Reason |
+| --- | --- | --- |
+| SunEdison (CIK 945436) | 8-K item 1.03 on 2016-04-27; 25-NSE nine days later | `bankruptcy` |
+| CoreSite Realty (1490892) | 8-K item 2.01 on 2021-12-28, same day as 25-NSE | `acquired` |
+| Activision Blizzard (718877) | 8-K item 2.01 on 2023-10-13; 25-NSE; Form 15 | `acquired` |
+| SVB Financial (719739) | item 2.01 on 2023-03-14 **and** item 1.03 on 2023-03-17 | `bankruptcy` |
+
+SVB is why bankruptcy outranks acquisition: a company sold out of Chapter 11
+files both, and its shareholders were still wiped out.
+
+Two costs and one gap, all real. Stage 1 downloads ~31 MB per quarter (~2 GB for
+2010→now, cached afterwards, and `--from-year` bounds it). Stage 2 is one request
+per company at ~8/s. And the table is keyed by **CIK, not ticker** — EDGAR lists
+a filer's tickers only while it has a current listing, which these by definition
+do not, so this answers "what happened to this company" and not yet "what
+happened to the symbol my backtest held". Closing that needs name-matching
+against `delistings.name`, and is deliberately not guessed at.
+
 ### What is wrong with the bars themselves
 
 Survivorship and symbol recycling are audited above. The bars needed auditing
