@@ -260,3 +260,140 @@ func TestRecentRunsDoesNotRescaleTheAnnualReturn(t *testing.T) {
 		t.Errorf("line %q shows a rescaled figure", lines[0])
 	}
 }
+
+// resultWithSharpe is a run whose Sharpe and return moments are set, so the
+// deflation has something real to work on.
+func resultWithSharpe(name string, sharpe float64) Result {
+	return Result{
+		PortfolioName:  name,
+		Strategy:       "buyAndHold:equalWeights",
+		Metrics:        Metrics{SharpeRatio: sharpe},
+		Trials:         1,
+		TrialGroup:     name,
+		EquityCurve:    make([]float64, 500),
+		returnSkew:     0,
+		returnKurtosis: 3,
+	}
+}
+
+// The point of the whole task: twenty sequential single-strategy runs in one
+// campaign have spent twenty trials, and the winner must be judged against
+// twenty — not against the one trial its own sweep counted. Per-sweep deflation
+// calls each of them untested.
+func TestCampaignDeflationCountsEveryRun(t *testing.T) {
+	reg := openTestRegistry(t)
+
+	// Twenty runs with a real spread of outcomes, recorded one at a time the
+	// way a user actually iterates.
+	for i := 0; i < 20; i++ {
+		sharpe := 0.2 + float64(i)*0.08
+		res := resultWithSharpe("try", sharpe)
+		if err := reg.Record("hunt", nil, []Result{res}); err != nil {
+			t.Fatalf("Record %d: %v", i, err)
+		}
+	}
+
+	trials, bar, err := reg.CampaignDeflation("hunt")
+	if err != nil {
+		t.Fatalf("CampaignDeflation: %v", err)
+	}
+	if trials != 20 {
+		t.Errorf("campaign trials = %d, want 20", trials)
+	}
+	if bar <= 0 {
+		t.Errorf("campaign bar = %v after 20 varied trials, want a positive "+
+			"threshold — twenty tries deserve a higher bar than one", bar)
+	}
+
+	// A single-trial sweep sets no bar at all, which is exactly the
+	// understatement the campaign figure exists to correct.
+	perSweep := ExpectedMaxSharpe(1, 0.5)
+	if perSweep >= bar {
+		t.Errorf("per-sweep bar %v is not below the campaign bar %v; counting "+
+			"only one sweep's trials is the overstatement this fixes",
+			perSweep, bar)
+	}
+}
+
+// The bar rises with the number of trials at a fixed spread: more tries, more
+// luck available, more to clear. Without this the correction would be decorative.
+func TestCampaignBarRisesWithTrials(t *testing.T) {
+	const spread = 0.4
+	prev := ExpectedMaxSharpe(2, spread)
+	for _, trials := range []int{5, 10, 50, 200, 2000} {
+		bar := ExpectedMaxSharpe(trials, spread)
+		if bar <= prev {
+			t.Errorf("bar at %d trials (%v) is not above the previous (%v)",
+				trials, bar, prev)
+		}
+		prev = bar
+	}
+}
+
+// A campaign nobody has run has no history, and the first run of a new one must
+// not be corrected against a spread that does not exist.
+func TestCampaignDeflationOnAFreshCampaign(t *testing.T) {
+	reg := openTestRegistry(t)
+	trials, bar, err := reg.CampaignDeflation("brand-new")
+	if err != nil {
+		t.Fatalf("CampaignDeflation: %v", err)
+	}
+	if trials != 0 || bar != 0 {
+		t.Errorf("fresh campaign reports %d trials and a bar of %v, want 0/0",
+			trials, bar)
+	}
+}
+
+// Campaigns are separate books: one campaign's trials must not raise another's
+// bar, or every result would be corrected for work done on an unrelated question.
+func TestCampaignsAreIndependent(t *testing.T) {
+	reg := openTestRegistry(t)
+	for i := 0; i < 30; i++ {
+		if err := reg.Record("busy", nil,
+			[]Result{resultWithSharpe("x", float64(i)*0.05)}); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+	if err := reg.Record("quiet", nil,
+		[]Result{resultWithSharpe("y", 1.0)}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	busy, _, _ := reg.CampaignDeflation("busy")
+	quiet, _, _ := reg.CampaignDeflation("quiet")
+	if busy != 30 {
+		t.Errorf("busy campaign trials = %d, want 30", busy)
+	}
+	if quiet != 1 {
+		t.Errorf("quiet campaign trials = %d, want 1 — another campaign's "+
+			"trials leaked in", quiet)
+	}
+}
+
+// Each row stores the campaign trial count as it stood when the row was
+// written. The log is append-only, so a row is a record of what was known then
+// — and a row that stores only its own sweep's count would make the history
+// unreadable later, which is the whole reason the column exists.
+func TestRowStoresTheCampaignTrialCountAtWriteTime(t *testing.T) {
+	reg := openTestRegistry(t)
+
+	for i := 1; i <= 3; i++ {
+		res := resultWithSharpe("try", 0.3+float64(i)*0.2)
+		if err := reg.Record("growing", nil, []Result{res}); err != nil {
+			t.Fatalf("Record %d: %v", i, err)
+		}
+
+		var stored int
+		err := reg.db.QueryRow(`SELECT campaign_trials FROM runs
+		    WHERE campaign = 'growing' ORDER BY recorded_at DESC, run_id DESC
+		    LIMIT 1`).Scan(&stored)
+		if err != nil {
+			t.Fatalf("reading campaign_trials: %v", err)
+		}
+		if stored != i {
+			t.Errorf("run %d stored campaign_trials = %d, want %d — the row "+
+				"must count the campaign's history, not just this batch",
+				i, stored, i)
+		}
+	}
+}

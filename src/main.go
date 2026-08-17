@@ -193,8 +193,16 @@ func recordRun(
 		return err
 	}
 	if campaign != "" {
-		if trials, err := reg.CampaignTrials(campaign); err == nil {
-			fmt.Printf("campaign %q has now spent %d trials\n", campaign, trials)
+		// The campaign figure is the honest one: a search that has tried 200
+		// things must clear a higher bar than one that tried 6, and the
+		// per-sweep number does not know about the other 194.
+		if trials, bar, err := reg.CampaignDeflation(campaign); err == nil {
+			fmt.Printf("campaign %q has now spent %d trials", campaign, trials)
+			if bar > 0 {
+				fmt.Printf("; luck alone would produce a Sharpe of %.2f across "+
+					"that many, so treat anything below it as noise", bar)
+			}
+			fmt.Println()
 		}
 	}
 	fmt.Printf("recorded %d result(s) to %s\n",

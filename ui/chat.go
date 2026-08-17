@@ -687,8 +687,17 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   an overwrite. The hash covers strategy, tickers, window, capital, benchmark,
   costs and params, and ticker ORDER is part of it because greedy allocation
   spends on the first ticker.
+  CAMPAIGN-LEVEL DEFLATION is the reason campaigns matter. DeflatedSharpe on a
+  Result corrects the best of ONE SWEEP's trials; a campaign of 40 hypotheses
+  at 50 parameter sets each has spent 2,000, and correcting for 50 overstates
+  the winner enormously. Registry.CampaignDeflation returns the campaign's
+  cumulative trial count and the Sharpe luck alone would produce across that
+  many — quote it beside any headline figure from a long search.
+  The bar responds to the VARIETY of what was tried, not the raw count: the
+  identical config run four times has no spread of outcomes and so no bar,
+  which is correct (one experiment repeated, not four tries at a search).
   Engine-side: backtest.OpenRegistry, ConfigHash, Registry.Record/PriorRuns/
-  CampaignTrials/RecentRuns.
+  CampaignTrials/CampaignSharpes/CampaignDeflation/RecentRuns.
 
 - THE STRATEGY GALLERY. Every shipped script carries four tagged header
   lines — @works (the market condition it needs), @fails (how it is known to

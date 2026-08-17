@@ -792,6 +792,34 @@ every parameter, so the same experiment always hashes the same. Ticker **order**
 is part of it: `buyAndHold:greedy` spends everything on the first ticker, so
 reordering the list is a different experiment, not a repeat.
 
+### Campaign-level deflation
+
+The deflated Sharpe below corrects the best of N trials for the size of **one
+sweep**. That is the right correction for one config block and the wrong one for
+a research programme: 40 hypotheses at 50 parameter sets each is 2,000 trials,
+and deflating the winner by 50 overstates it enormously.
+
+With `-campaign`, the registry knows the real count and reports it:
+
+```
+campaign "momentum" has now spent 214 trials; luck alone would produce a
+Sharpe of 0.63 across that many, so treat anything below it as noise
+```
+
+Each recorded row also stores `campaign_trials` and
+`campaign_deflated_sharpe` — the figures as they stood when the row was written,
+since the log is append-only and a row records what was known then.
+
+One property worth understanding: the bar responds to the **variety** of what
+you tried, not the raw count. Running the identical config four times produces
+no spread of outcomes and so no bar, which is right — that is one experiment
+repeated, not four tries at a search. A sweep across genuinely different
+parameters produces a spread, and the bar rises with it.
+
+This is the difference between a research tool and a slot machine. Every
+strategy-search product that has produced garbage produced it by deflating
+against the wrong denominator.
+
 `research.db` is git-ignored — it is your experiment history, not code.
 
 ### `[portfolio.Sweep]`

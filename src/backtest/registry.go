@@ -34,6 +34,7 @@ import (
 	"time"
 
 	_ "github.com/marcboeker/go-duckdb"
+	"gonum.org/v1/gonum/stat"
 )
 
 // DefaultRegistryPath is where the research log lives, beside the market data
@@ -124,7 +125,12 @@ CREATE TABLE IF NOT EXISTS runs (
     costs           VARCHAR,
     benchmark       VARCHAR,
     splits          VARCHAR,
-    walk_forward    VARCHAR
+    walk_forward    VARCHAR,
+    -- The campaign's cumulative trial count at the moment this row was
+    -- written, and the Sharpe deflated against it. Stored rather than derived
+    -- because the log is append-only: a row records what was known then.
+    campaign_trials INTEGER,
+    campaign_deflated_sharpe DOUBLE
 )`
 
 // Record appends one row per result. Never updates and never deletes: a re-run
@@ -144,6 +150,20 @@ func (r *Registry) Record(
 	for _, p := range portfolios {
 		byName[p.Pname] = p
 	}
+
+	// The campaign's history BEFORE this batch. Deflating against the whole
+	// campaign rather than one sweep is the difference between a research tool
+	// and a slot machine: an agent that tries 40 hypotheses of 50 parameter
+	// sets each has run 2,000 trials, and correcting the winner for 50 of them
+	// overstates it enormously.
+	priorSharpes, _ := r.CampaignSharpes(campaign)
+	batch := make([]float64, 0, len(results))
+	for _, res := range results {
+		batch = append(batch, res.Metrics.SharpeRatio)
+	}
+	campaignTrials := len(priorSharpes) + len(results)
+	campaignBar := ExpectedMaxSharpe(campaignTrials,
+		stat.StdDev(append(append([]float64{}, priorSharpes...), batch...), nil))
 
 	now := time.Now().UTC()
 	tx, err := r.db.Begin()
@@ -169,7 +189,7 @@ func (r *Registry) Record(
 		runID := fmt.Sprintf("%s-%d-%d", now.Format("20060102T150405"), now.UnixNano()%1e6, i)
 		_, err := tx.Exec(`INSERT INTO runs VALUES (
 		    ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATE), CAST(? AS DATE), ?, ?,
-		    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			runID, now, campaign, hash, res.PortfolioName, res.Strategy,
 			tickers, start, end, res.InitialCapital, res.FinalValue,
 			res.Metrics.AnnualReturn, res.Metrics.SharpeRatio,
@@ -180,6 +200,7 @@ func (r *Registry) Record(
 			res.Significance.PValue, res.TradeStats.Trades,
 			res.TradeStats.WinRate, params, costs, benchmark,
 			asJSON(res.Splits), asJSON(res.WalkForward),
+			campaignTrials, deflatedFromResult(&results[i], campaignBar),
 		)
 		if err != nil {
 			return fmt.Errorf("recording %q: %w", res.PortfolioName, err)
@@ -217,6 +238,45 @@ func (r *Registry) CampaignTrials(campaign string) (int, error) {
 	err := r.db.QueryRow(
 		`SELECT COUNT(*) FROM runs WHERE campaign = ?`, campaign).Scan(&n)
 	return n, err
+}
+
+// CampaignSharpes returns every Sharpe already recorded under a campaign — the
+// spread a campaign-level correction needs. An unknown campaign yields nothing,
+// which is the right answer for the first run of a new one.
+func (r *Registry) CampaignSharpes(campaign string) ([]float64, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("registry is not open")
+	}
+	rows, err := r.db.Query(
+		`SELECT sharpe FROM runs WHERE campaign = ? AND sharpe IS NOT NULL`,
+		campaign)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []float64
+	for rows.Next() {
+		var s sql.NullFloat64
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		if s.Valid {
+			out = append(out, s.Float64)
+		}
+	}
+	return out, rows.Err()
+}
+
+// CampaignDeflation reports the campaign's cumulative trial count and the
+// resulting bar a result must clear — the number to quote beside a headline
+// Sharpe once a campaign has been running for a while.
+func (r *Registry) CampaignDeflation(campaign string) (trials int, bar float64, err error) {
+	sharpes, err := r.CampaignSharpes(campaign)
+	if err != nil {
+		return 0, 0, err
+	}
+	return len(sharpes), ExpectedMaxSharpe(len(sharpes), stat.StdDev(sharpes, nil)), nil
 }
 
 // RecentRuns returns the last n runs as printable lines, newest first — the
