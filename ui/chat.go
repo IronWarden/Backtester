@@ -572,6 +572,37 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   ticker is filled only where the CIK still has a current listing, so it is
   NULL for the delisted companies.
 
+- FINDING A STRATEGY: THE SIGNAL SCREEN. The CLI has -scan-signals, which
+  screens a built-in library of twelve signals over the config's tickers and
+  window and prints their information coefficients, strongest first, INSTEAD of
+  running backtests:
+      cd src && go run main.go -scan-signals
+  Use it when a user asks "what should I try on these tickers" or "does momentum
+  work here" — it answers in seconds where a backtest takes an afternoon.
+  The library: mom_21/63/126/252 (trailing return), mom_12_1 (12-month skipping
+  the last month), rev_5 (negated 1-week return), lowvol_21/63 (negated realised
+  volatility), dist_52w_high, sma_50_200, vol_trend_21, vol_scaled_mom.
+  How to read the output, and users WILL misread it without being told:
+   * IC is the cross-sectional Spearman rank correlation between signal and
+     forward return. REAL ICs ARE SMALL: 0.02-0.05 with |t| > 2 is a genuinely
+     usable signal. Do not describe an IC of 0.03 as weak.
+   * hit is the share of days with positive IC. A good mean IC with a hit rate
+     near 50% is a few lucky days, not an edge.
+   * Q5-Q1 is the top-fifth minus bottom-fifth forward return, withheld below
+     10 tickers because a quintile of 8 names is one stock.
+   * n is the count of NON-OVERLAPPING samples: the scan steps by the horizon,
+     because scoring every day against a 21-day forward return reuses each
+     return 21 times and inflates the t-statistic by ~sqrt(21).
+   * Signs are set so a POSITIVE IC always means "high signal predicted high
+     return" — that is why volatility and 1-week return are negated.
+  It refuses rather than guesses: fewer than 5 usable tickers on a day skips the
+  day, fewer than 12 samples prints no summary, and a constant or undefined
+  signal produces no row.
+  A SCREEN IS NOT A BACKTEST. It ignores costs, sizing and when a trade could
+  actually happen. Always say that a surviving signal still needs a real run
+  with [portfolio.Costs], an out-of-sample split and walk-forward.
+  Engine-side: backtest.ScanSignals, BuiltinSignals, ScanConfigPortfolios.
+
 - PROVENANCE. Optional table data_sources(table_name, source, endpoint,
   licence, row_count, loader, loader_git_sha, fetched_at, note), written by
   every loader as its final step via loader_provenance.py. One row per (table,

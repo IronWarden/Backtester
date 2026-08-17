@@ -846,6 +846,7 @@ cd src
 go run main.go                          # quiet run; logs are discarded
 go run main.go -debug                   # writes backtester.log + transactions.log, and serves pprof on :6060
 go run main.go -config ../strategy_library.toml
+go run main.go -scan-signals             # screen signals instead of backtesting
 ```
 
 To build a binary:
@@ -855,6 +856,67 @@ cd src
 go build -o backtester
 ./backtester -debug
 ```
+
+### Finding a strategy: screen signals first
+
+A backtest is an expensive way to learn that a signal contains no information.
+`-scan-signals` asks the cheap question first — does this signal rank tomorrow's
+winners above tomorrow's losers, across the universe? — and only the ones that do
+are worth writing a strategy around.
+
+```bash
+cd src && go run main.go -scan-signals
+```
+
+It reads the tickers and window from your config, screens a built-in library of
+twelve signals at 5-, 21- and 63-day horizons, and prints them strongest first:
+
+```
+Signal scan: 30 tickers, 2637 trading days
+
+mom_252               5d  IC +0.0338  t  +2.34  hit  55.3%  Q5-Q1   0.253%  n=476
+mom_126               5d  IC +0.0276  t  +2.02  hit  53.3%  Q5-Q1   0.173%  n=501
+sma_50_200           21d  IC +0.0502  t  +1.77  hit  57.4%  Q5-Q1   1.065%  n=115
+lowvol_21            21d  IC -0.0374  t  -1.45  hit  42.7%  Q5-Q1  -1.062%  n=124
+```
+
+- **IC** is the cross-sectional Spearman rank correlation between the signal and
+  the forward return, averaged over sampled days. **Real ICs are small** — 0.02
+  to 0.05 with |t| > 2 is a genuinely usable signal, and anyone expecting a
+  correlation will misread that as nothing.
+- **hit** is the share of days with a positive IC. A good mean IC with a hit rate
+  near 50% is a few lucky days, not an edge, and the two columns together catch
+  that where either alone would not.
+- **Q5-Q1** is the top-fifth minus bottom-fifth forward return: the IC in money.
+  Withheld below 10 tickers, because a "quintile" of eight names is one stock
+  wearing a portfolio's clothes.
+- **n** is the number of **non-overlapping** samples. This is the honesty knob:
+  scoring every day against a 21-day forward return reuses each return 21 times
+  and inflates the t-statistic by roughly √21, so the scan steps by the horizon
+  instead. It is why `n` is 115 rather than 2,600 at the 21-day horizon.
+
+Signs are chosen so a **positive IC always means "high signal predicted high
+return"** — hence `lowvol_21` is *negated* volatility and `rev_5` is *negated*
+one-week return. The example above reads as: 12-month momentum and the 50/200
+trend ratio had modest predictive power on those 30 large caps, and low
+volatility did not — high-volatility names outperformed over that window.
+
+Three refusals, all deliberate: fewer than 5 usable tickers on a day is not a
+cross-section and the day is skipped; fewer than 12 non-overlapping samples is an
+anecdote and no summary is printed at all; and a signal that is constant or
+undefined produces no row rather than a `NaN`.
+
+The signal library covers trailing return over 21/63/126/252 days, 12-1 momentum,
+one-week reversal, realised volatility at 21 and 63 days, distance from the
+52-week high, the 50/200 SMA ratio, a volume trend, and volatility-scaled
+momentum. Each is a pure function of one ticker's bars **up to and including the
+scored day** — a signal is handed an index and can never see the forward window
+it is being judged against, which is asserted by a test rather than by
+convention.
+
+**A screen is not a backtest.** It ignores costs, position sizing and when you
+could actually trade. A signal that survives here still has to survive a real run
+with `[portfolio.Costs]`, an out-of-sample split and walk-forward.
 
 ### Desktop UI
 

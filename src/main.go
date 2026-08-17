@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"my-backtester/src/backtest"
@@ -13,10 +14,16 @@ import (
 
 func main() {
 	var (
-		debug      bool
-		configPath string
+		debug       bool
+		configPath  string
+		scanSignals bool
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
+	flag.BoolVar(
+		&scanSignals, "scan-signals", false,
+		"Screen the built-in signal library over the config's tickers and "+
+			"print the information coefficients, instead of running backtests",
+	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
 		"Path to portfolio TOML config",
@@ -72,6 +79,13 @@ func main() {
 			)
 		}
 		portfolios = append(portfolios, expanded...)
+	}
+
+	// A screen, not a run: ask whether any signal ranks forward returns on this
+	// universe before spending an afternoon writing a strategy around one.
+	if scanSignals {
+		fmt.Print(backtest.ScanConfigPortfolios(portfolios, nil))
+		return
 	}
 
 	if _, err := backtest.Run(portfolios, config.Output); err != nil {
