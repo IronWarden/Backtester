@@ -885,6 +885,49 @@ is plausible; a spike between two bad neighbours is overfit) and universe
 subsampling. Both need to know about the sweep that produced a result, which is
 different machinery from re-running one portfolio.
 
+### Run bundles: hand a result to someone else
+
+A result lives in a table and cannot be checked by anyone who was not at this
+machine on the day it ran. Sharing a Sharpe is an assertion; sharing a bundle is
+evidence.
+
+```bash
+cd src
+go run main.go -bundle ../momentum-2026-08.json   # capture this run
+go run main.go -verify ../momentum-2026-08.json   # re-run it and compare
+```
+
+```
+verifying ../momentum-2026-08.json
+  recorded on engine 4fd0b47, re-run on 9c1e02a
+  DRIFT    My Portfolio: sharpe was 1.268690805, now 1.208276957 (-4.762%)
+  NOT reproduced — either the engine changed, the strategy changed, or the data did
+```
+
+A bundle carries the fully expanded config, the **strategy's source**, the
+engine's commit, and every figure a verification checks. `-verify` exits non-zero
+when the numbers no longer reproduce.
+
+Three details that make it worth having:
+
+- **The strategy source is embedded, not referenced.** A path is not a strategy:
+  `lua:strategies/rsi.lua` names a file anyone can edit. A changed script is
+  reported as its own finding, first — every number below it is then expected to
+  differ, and listing them individually would bury the reason.
+- **The tolerance is float noise, not a modelling allowance.** The engine is
+  deterministic over identical data, so anything past the last few bits is a real
+  change. A relative difference of 1e-6 is reported; 1e-12 is not.
+- **A run that could not be re-run is `MISSING`, not reproduced.** Silence must
+  never read as success.
+
+The commit is recorded with a `-dirty` suffix when the tree had uncommitted
+changes, because a bundle produced from a modified tree cannot be reproduced from
+its sha alone.
+
+Re-running an old bundle is the only real check that the engine has not drifted —
+and it catches it from a different direction than the correctness suite, which
+can only test what it was written to expect.
+
 ### The research log: what have I already tried?
 
 Nothing persisted before this: `output.txt` is truncated on every run, so the app

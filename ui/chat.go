@@ -728,6 +728,21 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- RUN BUNDLES. -bundle <path> writes a self-contained JSON of a run: the
+  expanded config, the STRATEGY SOURCE, the engine's git sha, and every metric.
+  -verify <path> re-runs it and reports whether the numbers still reproduce,
+  exiting non-zero if not.
+  Suggest a bundle whenever a user has a result they care about or wants to
+  share one — a Sharpe is an assertion, a bundle is evidence. Suggest -verify
+  when they return to an old result, since re-running it is the only real check
+  that the engine, the strategy or the data has not drifted underneath it.
+  The source is EMBEDDED rather than referenced, so a changed script is
+  reported as its own finding rather than as a mysterious drift. The comparison
+  tolerance is float noise only (1e-9 relative): the engine is deterministic
+  over identical data, so anything larger is a real change. A run that could
+  not be re-run reads as MISSING, never as reproduced.
+  Engine-side: backtest.NewBundle, LoadBundle, Bundle.Verify, CompareRun.
+
 - THE RESEARCH LOG. The CLI can remember runs: -record appends every result
   to ../research.db, -campaign NAME groups them, -history N prints the last N.
   Off by default. It reports when a config has been run before ("has been run

@@ -24,6 +24,8 @@ func main() {
 		history     int
 		robustness  bool
 		validate    string
+		bundlePath  string
+		verifyPath  string
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -66,6 +68,15 @@ func main() {
 		"Run the adversarial checks against a strategy spec (e.g. "+
 			"lua:strategies/rsi.lua) and exit: look-ahead, did-it-trade, "+
 			"cash conservation, degenerate inputs",
+	)
+	flag.StringVar(
+		&bundlePath, "bundle", "",
+		"After running, write a self-contained bundle (config, strategy "+
+			"source, engine sha, metrics) to this path",
+	)
+	flag.StringVar(
+		&verifyPath, "verify", "",
+		"Re-run a bundle and report whether its numbers still reproduce",
 	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
@@ -149,6 +160,30 @@ func main() {
 		log.Fatalf("Failed to open DuckDB: %v", err)
 	}
 
+	// A bundle carries its own config, so verification replaces the TOML path
+	// entirely: re-reading config.toml would be verifying today's config
+	// against yesterday's numbers.
+	if verifyPath != "" {
+		bundle, err := backtest.LoadBundle(verifyPath)
+		if err != nil {
+			log.Fatalf("reading the bundle: %v", err)
+		}
+		portfolios, err := bundle.BundleToPortfolios()
+		if err != nil {
+			log.Fatalf("rebuilding the bundle's portfolios: %v", err)
+		}
+		results, err := backtest.Run(portfolios, nil)
+		if err != nil {
+			log.Fatalf("re-running the bundle: %v", err)
+		}
+		report := bundle.Verify(verifyPath, results)
+		fmt.Print(report.String())
+		if !report.Reproduced {
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Load configuration from TOML file
 	config, err := backtest.LoadConfig(configPath)
 	if err != nil {
@@ -199,6 +234,16 @@ func main() {
 	if robustness {
 		for _, res := range results {
 			fmt.Printf("\n%s\n%s", res.PortfolioName, res.Robustness.String())
+		}
+	}
+
+	if bundlePath != "" {
+		bundle := backtest.NewBundle(portfolios, results)
+		if err := bundle.Save(bundlePath); err != nil {
+			log.Printf("could not write the bundle: %v", err)
+		} else {
+			fmt.Printf("bundle written to %s (engine %s, %d run(s))\n",
+				bundlePath, bundle.EngineSHA, len(bundle.Runs))
 		}
 	}
 
