@@ -7,6 +7,7 @@ package backtest
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -158,17 +159,17 @@ func TestBreakEvenIsMinusOneWhenNothingKillsIt(t *testing.T) {
 func TestRobustnessReportDistinguishesSurvivalFromDeath(t *testing.T) {
 	survived := Robustness{Computed: true, BreakEvenBps: -1,
 		Costs: []CostPoint{{SlippageBps: 0}}}
-	if got := survived.String(); !contains(got, "survives every level") {
+	if got := survived.String(); !strings.Contains(got, "survives every level") {
 		t.Errorf("survival not stated: %q", got)
 	}
 
 	died := Robustness{Computed: true, BreakEvenBps: 20,
 		Costs: []CostPoint{{SlippageBps: 0}}}
-	if got := died.String(); !contains(got, "dies at 20 bps") {
+	if got := died.String(); !strings.Contains(got, "dies at 20 bps") {
 		t.Errorf("death not stated: %q", got)
 	}
 
-	if got := (Robustness{}).String(); !contains(got, "not computed") {
+	if got := (Robustness{}).String(); !strings.Contains(got, "not computed") {
 		t.Errorf("an uncomputed battery reported something: %q", got)
 	}
 }
@@ -249,10 +250,10 @@ func TestCostsChangingBehaviourIsFlagged(t *testing.T) {
 		TradesChangedAtBps: 5,
 	}
 	got := r.String()
-	if !contains(got, "trade count CHANGES at 5 bps") {
+	if !strings.Contains(got, "trade count CHANGES at 5 bps") {
 		t.Errorf("behaviour change not reported: %q", got)
 	}
-	if !contains(got, "4 fills against 5") {
+	if !strings.Contains(got, "4 fills against 5") {
 		t.Errorf("report does not name both counts: %q", got)
 	}
 
@@ -260,7 +261,7 @@ func TestCostsChangingBehaviourIsFlagged(t *testing.T) {
 	steady := Robustness{Computed: true, BreakEvenBps: -1,
 		Costs: []CostPoint{
 			{SlippageBps: 0, Trades: 5}, {SlippageBps: 50, Trades: 5}}}
-	if contains(steady.String(), "trade count CHANGES") {
+	if strings.Contains(steady.String(), "trade count CHANGES") {
 		t.Error("an unchanged trade count was reported as a behaviour change")
 	}
 }

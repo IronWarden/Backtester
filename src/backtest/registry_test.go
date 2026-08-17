@@ -7,6 +7,7 @@ package backtest
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -201,7 +202,7 @@ func TestRecordedRunReadsBack(t *testing.T) {
 		t.Fatalf("got %d lines, want 1", len(lines))
 	}
 	for _, want := range []string{"camp", "run-test", "1.25", "beat baseline"} {
-		if !contains(lines[0], want) {
+		if !strings.Contains(lines[0], want) {
 			t.Errorf("recorded line %q is missing %q", lines[0], want)
 		}
 	}
@@ -222,21 +223,6 @@ func TestRecordWithoutAMatchingPortfolio(t *testing.T) {
 	}
 }
 
-func contains(haystack, needle string) bool {
-	return len(haystack) >= len(needle) &&
-		(haystack == needle || len(needle) == 0 ||
-			indexOf(haystack, needle) >= 0)
-}
-
-func indexOf(haystack, needle string) int {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return i
-		}
-	}
-	return -1
-}
-
 // Metrics.AnnualReturn is already a PERCENTAGE — GetAnnualReturn multiplies by
 // 100 before returning. A reader that scales it again turns a 50% year into
 // 5041%, which is what the first version of RecentRuns printed.
@@ -252,11 +238,11 @@ func TestRecentRunsDoesNotRescaleTheAnnualReturn(t *testing.T) {
 	if err != nil || len(lines) != 1 {
 		t.Fatalf("got %d lines (err %v)", len(lines), err)
 	}
-	if !contains(lines[0], "12.50%") {
+	if !strings.Contains(lines[0], "12.50%") {
 		t.Errorf("line %q does not show 12.50%% — the stored percentage was "+
 			"rescaled", lines[0])
 	}
-	if contains(lines[0], "1250") {
+	if strings.Contains(lines[0], "1250") {
 		t.Errorf("line %q shows a rescaled figure", lines[0])
 	}
 }
