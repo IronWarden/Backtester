@@ -637,6 +637,26 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Fees are charged to the trade that paid them and realised P&L is net of them,
   so a gross-profitable, net-negative strategy reads as exactly that.
 
+- IS THIS RESULT BETTER THAN CHANCE? Result.Significance: Sharpe, PValue,
+  Percentile, NullMeanSharpe, NullP95Sharpe, BootstrapLow, BootstrapHigh,
+  Draws, Seed, Computed. Always computed, no configuration.
+  The null is RANDOM TIMING: the strategy's daily exposure is shuffled in time
+  and applied to the market's real returns, 1000 times. Same total exposure,
+  same price path, same days invested -- only WHEN is destroyed. A p near 0.5
+  means the strategy is indistinguishable from being invested at random.
+  Quote it whenever a user asks whether a result is real. It answers a
+  DIFFERENT question from DeflatedSharpe: that one corrects the best of N
+  trials for the size of a search, this one asks whether a single run beat
+  chance.
+  Buy-and-hold scores p ~ 1 and that is CORRECT, not a bug: it is fully
+  invested every day, so it has no timing to test. Say that rather than
+  reporting it as a failure.
+  BootstrapLow/High is a 90% confidence interval on the strategy's own Sharpe
+  from a 20-day block bootstrap -- "how precise is this number", not "is it
+  real". A wide interval on a good-looking Sharpe is worth flagging.
+  Computed=false means too few days (under 60) or a strategy that never
+  invested.
+
 - EVERY RESULT CARRIES A BASELINE. Result.Baseline is what an equal-weight
   buy-and-hold of THE SAME TICKERS would have returned over the same days with
   the same capital and the same costs: Name, FinalValue, AnnualReturn,

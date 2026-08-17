@@ -713,6 +713,46 @@ Fees are charged to the trade that paid them and realised P&L is net of them, so
 a strategy that is gross-profitable and net-negative shows up as exactly that
 rather than as a winner.
 
+### Is this result better than chance?
+
+The deflated Sharpe below corrects the best of N trials for the size of the
+search. It says nothing about a single strategy run once — which is the question
+users ask first, because a Sharpe of 1.4 over ten years might be skill or might
+be what a coin flip looks like on this particular price path.
+
+Every result now carries `Significance`, with no configuration:
+
+```
+Sharpe 1.42 · p = 0.03 (97th percentile of random timing)
+null mean 0.71, 95th pct 1.38 · bootstrap 90% CI [0.88, 1.94]
+```
+
+The null model is **random timing**. The strategy's daily exposure — how much of
+the book was invested each day — is shuffled in time and applied to the market's
+actual returns, a thousand times. That holds everything fixed except the thing
+being tested: the same total exposure, the same price path, the same number of
+days invested, and only *when* it happened is destroyed. If the strategy's
+Sharpe sits inside that distribution, the timing added nothing.
+
+**Why not simply permute the strategy's own returns**, which is the obvious first
+idea: the Sharpe ratio is order-independent, so shuffling a return series leaves
+its Sharpe exactly unchanged and the test would report p = 1 for everything.
+
+`BootstrapLow`/`BootstrapHigh` answer a different question — not "is it real" but
+"how precise is this number" — by resampling the strategy's own returns in
+20-day blocks. Blocks rather than single days because daily resampling destroys
+the autocorrelation every real return series has, giving an interval that is far
+too narrow.
+
+Both are seeded (`SignificanceSeed`) and deterministic: an unreproducible p-value
+is worse than none, because nobody can check it. A run shorter than 60 days, or a
+strategy that never invested, reports `Computed: false` rather than a number.
+
+Note what this says about buy-and-hold: it is fully invested every day, so
+shuffling its exposure changes nothing and it scores p ≈ 1. That is correct — it
+has no timing to test — and it is the calibration case the implementation is
+checked against.
+
 ### `[portfolio.Sweep]`
 
 Turns one portfolio block into many runs. Every key maps to a **list**, and

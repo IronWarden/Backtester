@@ -58,6 +58,9 @@ type Result struct {
 	// periods, and the per-ticker P&L attribution that answers whether an edge
 	// was broad or was one lucky position.
 	TradeStats TradeStats
+	// Significance answers "is this one result better than chance", by
+	// comparing the strategy against random timing with the same exposure.
+	Significance Significance
 	// Trials is how many parameter sets the config block that produced this
 	// result expanded to, and TrialGroup names that block. ExpectedMaxSharpe
 	// is the Sharpe the best of those trials would be expected to show with
@@ -318,6 +321,7 @@ func runOne(
 	// After the portfolio's own metrics, since the comparison reads them.
 	p.Baseline = equalWeightBaseline(p, windowed, dataLen, riskFreeRates)
 	p.TradeStats = SummarizeTrades(p.Trades, p.Positions)
+	p.applySignificance(windowed, dataLen)
 	if c, ok := p.Strategy.(interface{ Close() }); ok {
 		c.Close()
 	}
@@ -479,6 +483,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					BenchmarkStats: p.BenchmarkStats,
 					Baseline:       p.Baseline,
 					TradeStats:     p.TradeStats,
+					Significance:   p.Significance,
 					Splits:         p.Splits,
 					Trials:         p.Trials,
 					TrialGroup:     p.TrialGroup,

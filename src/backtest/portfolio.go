@@ -32,6 +32,12 @@ type Portfolio struct {
 	openLots             map[string][]lot
 	// TradeStats is the blotter's summary, filled in after the run.
 	TradeStats           TradeStats
+	// Exposure is the invested fraction of the book per day, 1:1 with
+	// DailyReturns.
+	Exposure             []float64
+	// Significance is the answer to "is this better than chance", filled in
+	// after the run. See significance.go.
+	Significance         Significance
 	DailyReturns         []DailyReturn
 	PortfolioCloseValues []float64
 	Metrics              Metrics
@@ -353,6 +359,15 @@ func (p *Portfolio) AdjustPortfolioParameters(
 	p.DailyReturns = append(p.DailyReturns,
 		DailyReturn{Date: date, Return: dailyChange})
 	p.PortfolioCloseValues = append(p.PortfolioCloseValues, endingValue)
+	// The invested fraction of the book on this day, which is what a random
+	// timing null has to hold fixed while destroying WHEN the exposure
+	// happened — see significance.go. Also the honest answer to "how much of
+	// the time was this strategy actually in the market".
+	invested := 0.0
+	if endingValue > 0 {
+		invested = (endingValue - p.BuyingPower) / endingValue
+	}
+	p.Exposure = append(p.Exposure, invested)
 
 	for _, ticker := range tickers {
 		if pos, ok := p.Positions[ticker]; ok && pos.Amount > 0 {
