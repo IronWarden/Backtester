@@ -43,8 +43,7 @@ const DefaultRegistryPath = "../research.db"
 
 // Registry is an open handle on the research log.
 type Registry struct {
-	db   *sql.DB
-	path string
+	db *sql.DB
 }
 
 // ConfigHash identifies a fully-expanded portfolio configuration: the same
@@ -91,7 +90,7 @@ func OpenRegistry(path string) (*Registry, error) {
 		db.Close()
 		return nil, fmt.Errorf("creating research log schema: %w", err)
 	}
-	return &Registry{db: db, path: path}, nil
+	return &Registry{db: db}, nil
 }
 
 const registrySchema = `
