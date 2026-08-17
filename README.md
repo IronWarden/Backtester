@@ -990,6 +990,49 @@ convention.
 could actually trade. A signal that survives here still has to survive a real run
 with `[portfolio.Costs]`, an out-of-sample split and walk-forward.
 
+### What happens after X? Event studies
+
+"Buy after a 10% drawdown", "buy the breakout", "fade a three-sigma day" — a
+large class of strategy ideas, answerable in seconds without writing one:
+
+```bash
+cd src && go run main.go -event-study
+```
+
+It finds every occurrence of each built-in event across your universe and reports
+what followed, at 5, 21 and 63 days. Real output, 30 large caps over 2016–2026:
+
+```
+drawdown_20  63d  n= 214  abnormal  +0.97% (median +0.39%)  raw  +8.12%  t +0.87  hit 51.4%
+drop_3sigma  21d  n= 760  abnormal  -0.24% (median -0.59%)  raw  +1.41%  t -0.96  hit 45.9%
+high_52w      5d  n=2016  abnormal  +0.09% (median +0.06%)  raw  +0.29%  t +1.16  hit 51.2%
+```
+
+Read the first row carefully, because it is the whole point of the feature.
+"Buy the 20% dip" returned **+8.1% over the next quarter** — and **+0.97% net of
+what the rest of the universe did over the same days**, with a t of 0.87 and a
+hit rate barely over half. The strategy is almost entirely the market recovering,
+not the dip. A raw-return study would have called that an edge.
+
+- **abnormal** is the return after the event net of the equal-weight return of
+  the universe over the same window. It is the number that matters; `raw` is
+  shown beside it so the gap is visible.
+- **n** counts **non-overlapping** occurrences. A drawdown that persists fires
+  on twenty consecutive days, and counting each as independent evidence inflates
+  everything — one occurrence per ticker per horizon.
+- **median** is reported because one 400% recovery can carry a mean on its own.
+- Below 10 occurrences nothing is reported at all: a confident mean over a dozen
+  events is how a backtest lies.
+
+Built-in events: `drawdown_10`, `drawdown_20` (crossing 10%/20% below the 1-year
+high — the *crossing*, not the state), `high_52w`, `drop_3sigma`, `jump_3sigma`
+(a day beyond three times its 1-month volatility) and `volume_spike`.
+
+Earnings and macro-release events are deliberately absent for now. They need a
+database read inside the run path and, more importantly, the publication-lag
+rules — an earnings event dated at the fiscal period end rather than the report
+date would make every study of it look wonderful and mean nothing.
+
 ### Desktop UI
 
 ```bash

@@ -596,6 +596,29 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   ticker is filled only where the CIK still has a current listing, so it is
   NULL for the delisted companies.
 
+- EVENT STUDIES: WHAT HAPPENS AFTER X? The CLI has -event-study, which finds
+  every occurrence of each built-in event over the config's tickers and reports
+  what followed at 5/21/63 days, instead of running backtests:
+      cd src && go run main.go -event-study
+  Events: drawdown_10, drawdown_20 (the CROSSING of 10%/20% below the 1-year
+  high, not the state), high_52w, drop_3sigma, jump_3sigma (a day beyond three
+  times its 1-month volatility), volume_spike.
+  ABNORMAL IS THE NUMBER THAT MATTERS: the return after the event NET of the
+  equal-weight return of the universe over the same window. raw is printed
+  beside it, and a large gap means the event is mostly the market. Measured on
+  30 large caps 2016-2026, "buy the 20% drawdown" returned +8.1% raw over the
+  next quarter and only +0.97% abnormal with t 0.87 — almost entirely the
+  market recovering. Quote both numbers or the user will read a market
+  recovery as an edge.
+  n counts NON-OVERLAPPING occurrences (a persistent drawdown fires daily;
+  counting each inflates everything), median is shown because one huge recovery
+  can carry a mean, and below 10 occurrences nothing is reported at all.
+  Earnings and macro events are NOT included yet: they need a DB read in the
+  run path and the publication-lag rules, and an earnings event dated at the
+  fiscal period end would make every study of it look wonderful and mean
+  nothing. Say that rather than improvising one.
+  Engine-side: backtest.StudyEvents, BuiltinEvents, StudyConfigPortfolios.
+
 - EVERY RESULT CARRIES A TRADE BLOTTER. Result.TradeStats: Trades, Buys,
   Sells, RoundTrips, Wins, Losses, WinRate, AvgWin, AvgLoss, ProfitFactor,
   TotalRealized, TotalFees, AvgHoldingDays, and PerTicker -- an array of

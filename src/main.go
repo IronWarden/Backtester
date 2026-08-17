@@ -17,12 +17,19 @@ func main() {
 		debug       bool
 		configPath  string
 		scanSignals bool
+		eventStudy  bool
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
 		&scanSignals, "scan-signals", false,
 		"Screen the built-in signal library over the config's tickers and "+
 			"print the information coefficients, instead of running backtests",
+	)
+	flag.BoolVar(
+		&eventStudy, "event-study", false,
+		"Measure what followed each built-in event (drawdowns, breakouts, "+
+			"sigma moves) over the config's tickers, instead of running "+
+			"backtests",
 	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
@@ -85,6 +92,12 @@ func main() {
 	// universe before spending an afternoon writing a strategy around one.
 	if scanSignals {
 		fmt.Print(backtest.ScanConfigPortfolios(portfolios, nil))
+		return
+	}
+	// "What happens after X?" — the other cheap question, answered before
+	// writing a strategy around the answer.
+	if eventStudy {
+		fmt.Print(backtest.StudyConfigPortfolios(portfolios, nil))
 		return
 	}
 
