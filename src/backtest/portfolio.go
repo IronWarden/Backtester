@@ -35,6 +35,8 @@ type Portfolio struct {
 	// Exposure is the invested fraction of the book per day, 1:1 with
 	// DailyReturns.
 	Exposure             []float64
+	// Regimes slices the run by the market environment its universe was in.
+	Regimes              RegimeBreakdown
 	// Robustness is what survived re-running under more friction and from
 	// shifted start dates. Empty unless RobustnessChecks is on.
 	Robustness           Robustness

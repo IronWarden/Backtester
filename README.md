@@ -753,6 +753,44 @@ shuffling its exposure changes nothing and it scores p ≈ 1. That is correct �
 has no timing to test — and it is the calibration case the implementation is
 checked against.
 
+### Which environment did it actually work in?
+
+A single Sharpe blends every market the window contained. A strategy that made
+all its money in one calm bull stretch and gave some back whenever volatility
+arrived reports the same headline as one that worked throughout — and the
+difference is the whole question when deciding whether to trade it now.
+
+Every result carries `Regimes`, with no configuration:
+
+```
+  by market regime (labels from the traded universe):
+    bull-calm       892 days (54.1%)  CAGR    18.44%  Sharpe   1.62
+    bull-volatile   412 days (25.0%)  CAGR     6.10%  Sharpe   0.41
+    bear-volatile   243 days (14.7%)  CAGR   -21.30%  Sharpe  -0.88
+    bear-calm       102 days ( 6.2%)  CAGR    -3.90%  Sharpe  -0.22  (too few days to conclude from)
+```
+
+Two axes, both from the traded universe's own price history: how far it sits
+below its **running peak** (below −10% is a bear), and whether trailing
+volatility is above the median of every trailing window **seen so far**.
+
+Both are causal by construction — day *i*'s label uses returns up to *i* and
+nothing after — which is what makes them safe to condition a strategy on. The
+expanding volatility median matters here: comparing against the whole run's
+median would decide what "high volatility" means using the future, and truncating
+the series would then change past labels. There is a test that it does not.
+
+The first 63 days are `warmup` and are excluded rather than lumped in with
+whatever they resemble, and any regime holding under 10% of the days is marked as
+too thin to conclude from.
+
+**Macro regimes are deliberately not here** — rate direction, the 10y−3m curve,
+CPI and industrial-production terciles. Every macro series is published with a
+lag and revised afterwards (`economic_indicators.Date` is the period, not the
+release), so those labels need the same publication-lag treatment
+`PointInTimeFundamentals` applies. A regime label that peeks is the same bug as a
+fundamental that peeks and considerably harder to notice.
+
 ### Validating a candidate before believing it
 
 A strategy that peeks at future data, or never trades, or quietly loses cash to a

@@ -637,6 +637,26 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Fees are charged to the trade that paid them and realised P&L is net of them,
   so a gross-profitable, net-negative strategy reads as exactly that.
 
+- WHICH ENVIRONMENT DID IT WORK IN? Result.Regimes slices every run's returns
+  by market regime: bull-calm, bull-volatile, bear-calm, bear-volatile, with
+  days, share, CAGR and Sharpe each. Always computed, no configuration.
+  Labels come from the traded universe: drawdown below -10% from its RUNNING
+  PEAK is a bear, and trailing 21-day volatility above the median of every
+  window seen so far is volatile. Both causal by construction, so they are safe
+  to condition a strategy on.
+  Use it whenever a user asks whether a result will hold. "Sharpe 1.4" that is
+  really "1.6 in calm bulls and -0.9 in volatile bears" is a different product
+  from one that worked throughout, and the breakdown is the only place that
+  shows. A regime holding under 10% of days is marked too thin to conclude
+  from — repeat that caveat rather than quoting its number bare.
+  The first 63 days are warmup and are excluded.
+  MACRO regimes (rates, the curve, CPI, growth) are NOT implemented: every
+  macro series is published with a lag and revised, so those labels need the
+  publication-lag treatment PointInTimeFundamentals applies. Say that rather
+  than improvising a label from economic_indicators.Date, which is the PERIOD
+  and not the release.
+  Engine-side: backtest.LabelRegimes, SliceByRegime.
+
 - VALIDATE A CANDIDATE BEFORE BELIEVING IT. -validate <spec> runs adversarial
   checks against a strategy and exits non-zero on failure:
       cd src && go run main.go -validate lua:strategies/rsi.lua

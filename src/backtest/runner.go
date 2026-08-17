@@ -64,6 +64,9 @@ type Result struct {
 	// Robustness holds the cost- and start-date-sensitivity battery, empty
 	// unless it was asked for.
 	Robustness Robustness
+	// Regimes slices the run's returns by the market environment its universe
+	// was in — the answer to "did this work everywhere, or in one stretch?"
+	Regimes RegimeBreakdown
 	// Trials is how many parameter sets the config block that produced this
 	// result expanded to, and TrialGroup names that block. ExpectedMaxSharpe
 	// is the Sharpe the best of those trials would be expected to show with
@@ -325,6 +328,7 @@ func runOne(
 	p.Baseline = equalWeightBaseline(p, windowed, dataLen, riskFreeRates)
 	p.TradeStats = SummarizeTrades(p.Trades, p.Positions)
 	p.applySignificance(windowed, dataLen)
+	p.applyRegimes(windowed, dataLen)
 	p.applyRobustness(windowed, dataLen, riskFreeRates)
 	if c, ok := p.Strategy.(interface{ Close() }); ok {
 		c.Close()
@@ -489,6 +493,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					TradeStats:     p.TradeStats,
 					Significance:   p.Significance,
 					Robustness:     p.Robustness,
+					Regimes:        p.Regimes,
 					Splits:         p.Splits,
 					Trials:         p.Trials,
 					TrialGroup:     p.TrialGroup,
