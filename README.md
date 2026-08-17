@@ -206,6 +206,33 @@ survivors and overstate returns by roughly 1–4 points a year. Closing that gap
 needs paid data. Until then, prefer the `$`-benchmark series for long horizons:
 they are reconstructed index series and are survivorship-free by construction.
 
+### A holding whose data ends before the window does
+
+Worth knowing before you load any delisted history, because it is the rule that
+decides what such a backtest means. **A day is simulated only when every one of
+the portfolio's tickers has a bar for it.** So a holding whose series ends
+mid-window — a delisting, an acquisition, or just a stale feed — ends the run
+for *every* holding on its last bar, and the reported metrics describe that
+shorter window rather than the one the config asked for. The same rule applies
+to a single missing day inside one ticker's history: that day is dropped for all
+of them.
+
+The run now says so, naming the ticker and the date:
+
+```
+portfolio "Tech Giants": simulated 1,258 of the 2,517 trading days its window
+covers (through 2025-03-31) — a day is only simulated when every ticker has a
+bar for it; "SIVB" ends 2023-03-10, so the run was truncated there
+```
+
+Two things it does *not* do, both deliberate: it does not liquidate the dead
+holding and carry the survivors to the end of the window, and it does not fail
+the run. Either would change the numbers of every existing config that mixes
+histories of different lengths. Note also that `validateCoverage` rejects a
+portfolio outright when an explicit `EndDate` runs past a ticker's last bar, so
+today a delisted name is unusable rather than merely truncating — the message
+names the ticker and its real range.
+
 ## Configuration
 
 Define one `[[portfolio]]` block per portfolio in `config.toml`. Each block names exactly one strategy; to compare strategies, write one block per strategy. Every portfolio runs as its own job.

@@ -519,6 +519,21 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   eight rows predate 2009, so Enron, WorldCom, Lehman, WaMu and Bear
   Stearns are absent. Never claim it fixes survivorship bias generally.
 
+- A HOLDING WHOSE DATA ENDS EARLY TRUNCATES THE WHOLE RUN. A day is
+  simulated only when EVERY ticker in the portfolio has a bar for it, so a
+  ticker whose series stops mid-window (a delisting, an acquisition, a stale
+  feed) ends the backtest for all the other holdings on its last bar, and the
+  metrics then describe that shorter window rather than the requested one. A
+  single missing day inside one ticker's history likewise drops that day for
+  every holding. The run logs this, naming the ticker and the date, e.g.
+  'simulated 1258 of the 2517 trading days its window covers ... "SIVB" ends
+  2023-03-10, so the run was truncated there'. Nothing liquidates the dead
+  holding and carries the survivors onward — that would change existing
+  results and has not been decided. Also: an explicit EndDate past a ticker's
+  last bar is REJECTED outright by validateCoverage, so a delisted name is
+  currently unusable rather than merely truncating. When a user asks about
+  backtesting a company that no longer trades, say this plainly.
+
 - SURVIVORSHIP. Separately from the above, the price table contains no
   company that stopped trading before 2025: of 1,792 tickers trading in
   2000, all 1,792 are still present, against a real 25-year survival rate

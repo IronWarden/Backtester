@@ -174,6 +174,101 @@ func alignToWindow(
 	return aligned, n
 }
 
+// windowCoverage reports what alignToWindow had to throw away. It keeps only
+// the days every ticker has a bar for, so a holding whose series ends
+// mid-window — a delisting, or a feed that went stale — shortens the whole
+// backtest for every other holding, and a single missing interior bar drops
+// that day for everyone. Both were silent until this existed.
+//
+// Returns the number of trading days at least one ticker has in the window
+// (the union), the last such day, and for each ticker whose own final bar
+// falls short of that day, the date its data ends. It changes no numbers; the
+// caller logs it.
+//
+// Deliberately separate from alignToWindow rather than folded into it: the
+// walk-forward driver realigns once per window and must not report the same
+// shortfall dozens of times over.
+func windowCoverage(
+	hist map[string][]data.AssetData,
+	tickers []string,
+	start, end time.Time,
+) (union int, lastDay time.Time, endsEarly map[string]time.Time) {
+	inWindow := func(d time.Time) bool {
+		if !start.IsZero() && d.Before(start) {
+			return false
+		}
+		if !end.IsZero() && d.After(end) {
+			return false
+		}
+		return true
+	}
+
+	days := make(map[int64]bool)
+	last := make(map[string]time.Time, len(tickers))
+	for _, t := range tickers {
+		for _, ad := range hist[t] {
+			if !inWindow(ad.Date) {
+				continue
+			}
+			days[ad.Date.Unix()] = true
+			if ad.Date.After(last[t]) {
+				last[t] = ad.Date
+			}
+			if ad.Date.After(lastDay) {
+				lastDay = ad.Date
+			}
+		}
+	}
+
+	endsEarly = make(map[string]time.Time)
+	for _, t := range tickers {
+		if last[t].Before(lastDay) {
+			endsEarly[t] = last[t]
+		}
+	}
+	return len(days), lastDay, endsEarly
+}
+
+// logCoverageShortfall names the tickers responsible when a portfolio simulated
+// fewer days than its window holds. Silence here was the whole problem: a
+// delisted holding turned a ten-year backtest into a five-year one and reported
+// the five-year metrics as if they answered the question that was asked.
+func logCoverageShortfall(
+	pname string,
+	hist map[string][]data.AssetData,
+	tickers []string,
+	start, end time.Time,
+	simulated int,
+) {
+	const layout = "2006-01-02"
+
+	union, lastDay, endsEarly := windowCoverage(hist, tickers, start, end)
+	if union <= simulated {
+		return
+	}
+
+	early := make([]string, 0, len(endsEarly))
+	for _, t := range tickers {
+		if d, ok := endsEarly[t]; ok {
+			early = append(early,
+				fmt.Sprintf("%q ends %s", t, d.Format(layout)))
+		}
+	}
+
+	msg := fmt.Sprintf(
+		"portfolio %q: simulated %d of the %d trading days its window covers "+
+			"(through %s) — a day is only simulated when every ticker has a "+
+			"bar for it",
+		pname, simulated, union, lastDay.Format(layout))
+	if len(early) > 0 {
+		msg += fmt.Sprintf("; %s, so the run was truncated there",
+			strings.Join(early, ", "))
+	} else {
+		msg += "; the missing days are gaps inside the tickers' histories"
+	}
+	log.Print(msg)
+}
+
 // runOne executes one full simulation pass over a single-strategy portfolio.
 // The day loop lives here; the strategy decides what to do on each day. Data is
 // clipped to the portfolio's own [StartTime, EndTime] window first, so metrics
@@ -190,6 +285,7 @@ func runOne(
 	if dataLen == 0 {
 		return
 	}
+	logCoverageShortfall(p.Pname, hist, p.Tickers, p.StartTime, p.EndTime, dataLen)
 
 	p.Strategy.Step(p, windowed, 0)
 	prev := p.GetPortfolioValue(p.Tickers, windowed, 0)
