@@ -25,6 +25,13 @@ type Portfolio struct {
 	// Baseline is filled in after the run: what an equal-weight buy-and-hold of
 	// the same tickers would have done. See baseline.go.
 	Baseline             BaselineStats
+	// Trades is the blotter: every fill, in order. openLots tracks the same
+	// shares as FIFO parcels, for holding periods only — see blotter.go on why
+	// money is average-cost and time is FIFO.
+	Trades               []Trade
+	openLots             map[string][]lot
+	// TradeStats is the blotter's summary, filled in after the run.
+	TradeStats           TradeStats
 	DailyReturns         []DailyReturn
 	PortfolioCloseValues []float64
 	Metrics              Metrics
@@ -241,6 +248,15 @@ func (p *Portfolio) Buy(
 		"BUY: %s, Amount: %.6f, Price: %.2f, Fee: %.2f, Date: %s\n",
 		ticker, amount, fillPrice, cost-notional, time,
 	)
+	p.record(Trade{
+		Ticker: ticker, Date: time, Side: "buy", Shares: amount,
+		Price: fillPrice, Notional: notional, Fee: cost - notional,
+	})
+	if p.openLots == nil {
+		p.openLots = make(map[string][]lot)
+	}
+	p.openLots[ticker] = append(p.openLots[ticker],
+		lot{shares: amount, bought: time})
 	p.BuyingPower -= cost
 	p.tradedNotional += notional
 }
@@ -279,6 +295,20 @@ func (p *Portfolio) Sell(
 		"SELL: %s, Amount: %.2f, Price: %.2f, Fee: %.2f, Date: %s\n",
 		ticker, stockAmount, fillPrice, notional-proceeds, time,
 	)
+	// Realised against the average cost the engine already keeps, net of this
+	// trade's fee, and read BEFORE the position is decremented.
+	fee := notional - proceeds
+	realized := stockAmount*(fillPrice-pos.AveragePrice) - fee
+	var heldDays float64
+	if p.openLots != nil {
+		p.openLots[ticker], heldDays = fifoHoldingDays(
+			p.openLots[ticker], stockAmount, time)
+	}
+	p.record(Trade{
+		Ticker: ticker, Date: time, Side: "sell", Shares: stockAmount,
+		Price: fillPrice, Notional: notional, Fee: fee,
+		RealizedPnL: realized, HoldingDays: heldDays,
+	})
 	pos.Amount -= stockAmount
 	if pos.Amount == 0 {
 		delete(p.Positions, ticker)

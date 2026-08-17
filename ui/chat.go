@@ -596,6 +596,24 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   ticker is filled only where the CIK still has a current listing, so it is
   NULL for the delisted companies.
 
+- EVERY RESULT CARRIES A TRADE BLOTTER. Result.TradeStats: Trades, Buys,
+  Sells, RoundTrips, Wins, Losses, WinRate, AvgWin, AvgLoss, ProfitFactor,
+  TotalRealized, TotalFees, AvgHoldingDays, and PerTicker -- an array of
+  {Ticker, Realized, Unrealized, Fees, Trades, SharesHeld, AverageCost} sorted
+  by total contribution, largest first.
+  PerTicker is the most decision-changing view in the app: a Sharpe cannot say
+  whether an edge was broad or was one lucky position, and that table can. When
+  a user asks why a strategy worked, lead with it.
+  TRADES == 0 IS A FINDING, not a detail. A strategy that never traded is not a
+  strategy, and it otherwise reports a 0% return like any other result. Say so
+  explicitly whenever you see it.
+  Accounting, so you can answer questions about it: realised P&L is
+  AVERAGE-COST (matching Position.AveragePrice, which is how the engine values
+  a holding), while holding periods are FIFO (average cost has no answer to
+  "how long was this held"). Money is average-cost, time is FIFO, deliberately.
+  Fees are charged to the trade that paid them and realised P&L is net of them,
+  so a gross-profitable, net-negative strategy reads as exactly that.
+
 - EVERY RESULT CARRIES A BASELINE. Result.Baseline is what an equal-weight
   buy-and-hold of THE SAME TICKERS would have returned over the same days with
   the same capital and the same costs: Name, FinalValue, AnnualReturn,

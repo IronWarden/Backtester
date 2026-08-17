@@ -678,6 +678,41 @@ a `Beat` flag. `Computed` is false when there was no baseline to build (no
 tickers, or fewer than two days) — which is distinct from a strategy that
 matched the baseline exactly.
 
+### Trade blotter and per-ticker attribution
+
+Every fill is now recorded, and every result carries `TradeStats`: trade counts,
+win rate, average win and loss, profit factor, share-weighted average holding
+period, total fees, and — the most decision-changing view in the app —
+**per-ticker P&L attribution**.
+
+```
+Trades 34 (18 buys, 16 sells) · win rate 56% · profit factor 1.8
+avg hold 27d · fees 412.50
+
+  NVDA   realised +8,240   unrealised     0   12 trades
+  MSFT   realised +1,110   unrealised  +430    8 trades
+  INTC   realised -2,905   unrealised     0    9 trades
+```
+
+A Sharpe cannot tell you whether an edge was broad or was one lucky position;
+that table can, at a glance. `Trades == 0` is worth its own attention: a strategy
+that never traded is not a strategy, and until now it reported a 0% return like
+any other.
+
+Two accounting choices, made to agree with the engine rather than with
+convention:
+
+- **Realised P&L is average-cost**, because `Position.AveragePrice` is how the
+  engine already values a holding. FIFO lot-matching would be equally defensible
+  and would disagree with every other number in the app.
+- **Holding periods are FIFO**, because "how long was this held" has no
+  average-cost answer — shares bought on different days are indistinguishable
+  once averaged. So money is average-cost and time is FIFO, deliberately.
+
+Fees are charged to the trade that paid them and realised P&L is net of them, so
+a strategy that is gross-profitable and net-negative shows up as exactly that
+rather than as a winner.
+
 ### `[portfolio.Sweep]`
 
 Turns one portfolio block into many runs. Every key maps to a **list**, and

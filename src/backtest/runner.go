@@ -54,6 +54,10 @@ type Result struct {
 	// that says whether the strategy was worth running at all. Zero-valued with
 	// Computed false when no baseline could be built.
 	Baseline BaselineStats
+	// TradeStats is the blotter's summary: win rate, profit factor, holding
+	// periods, and the per-ticker P&L attribution that answers whether an edge
+	// was broad or was one lucky position.
+	TradeStats TradeStats
 	// Trials is how many parameter sets the config block that produced this
 	// result expanded to, and TrialGroup names that block. ExpectedMaxSharpe
 	// is the Sharpe the best of those trials would be expected to show with
@@ -313,6 +317,7 @@ func runOne(
 	p.applySplitMetrics(riskFreeRates)
 	// After the portfolio's own metrics, since the comparison reads them.
 	p.Baseline = equalWeightBaseline(p, windowed, dataLen, riskFreeRates)
+	p.TradeStats = SummarizeTrades(p.Trades, p.Positions)
 	if c, ok := p.Strategy.(interface{ Close() }); ok {
 		c.Close()
 	}
@@ -473,6 +478,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					BenchmarkCurve: p.BenchmarkCurve,
 					BenchmarkStats: p.BenchmarkStats,
 					Baseline:       p.Baseline,
+					TradeStats:     p.TradeStats,
 					Splits:         p.Splits,
 					Trials:         p.Trials,
 					TrialGroup:     p.TrialGroup,
