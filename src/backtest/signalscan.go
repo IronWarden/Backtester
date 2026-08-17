@@ -52,6 +52,13 @@ const (
 	// MinSamples is the fewest sampled days a (signal, horizon) pair needs
 	// before its summary means anything.
 	MinSamples = 12
+
+	// SkippedShare is how much of a scan may be thrown away before the row
+	// says so. A quarter is high enough that ordinary warm-up does not trip it
+	// and low enough to catch a signal that is undefined most of the time.
+	// This is context, not a refusal: MinSamples already refuses a scan with
+	// too few samples.
+	SkippedShare = 0.25
 )
 
 // Signal computes one number per ticker per day from that ticker's own bars.
@@ -87,8 +94,20 @@ type SignalScore struct {
 	// Zero and QuintileOK false when the universe was too small to split.
 	QuintileSpread float64
 	QuintileOK     bool
-	// Samples is the number of non-overlapping days scored.
-	Samples int
+	// Samples is the number of non-overlapping days scored, and Candidates the
+	// number that were eligible to be scored. The gap between them is the
+	// point: a signal scored on 40 of 500 candidate days is a thin result
+	// wearing a confident n, and nothing in the headline row shows it.
+	Samples    int
+	Candidates int
+	// The two reasons a candidate day is thrown away, kept apart because they
+	// mean different things to a user. SkippedThin is a UNIVERSE problem —
+	// fewer than MinCrossSection tickers had a value, usually a warm-up or a
+	// short history — and is fixed by adding tickers or widening the window.
+	// SkippedConstant is a property of the SIGNAL: every ticker scored the
+	// same, so there was no ordering to correlate.
+	SkippedThin     int
+	SkippedConstant int
 }
 
 // TStatDefined reports whether TStat means anything. It does not when the IC
@@ -111,6 +130,31 @@ func (s SignalScore) strength() float64 {
 	return math.Abs(s.TStat)
 }
 
+// CoverageWarning describes the days thrown away, when enough were thrown away
+// to matter. Empty otherwise: a scan that skipped a handful of warm-up days does
+// not need a line about it, and printing one every time would train a reader to
+// ignore it.
+//
+// SkippedShare is the threshold at which coverage stops being a detail.
+func (s SignalScore) CoverageWarning() string {
+	skipped := s.SkippedThin + s.SkippedConstant
+	if s.Candidates == 0 || float64(skipped) < SkippedShare*float64(s.Candidates) {
+		return ""
+	}
+	switch {
+	case s.SkippedConstant == 0:
+		return fmt.Sprintf("%d of %d days skipped: fewer than %d tickers had a "+
+			"value", skipped, s.Candidates, MinCrossSection)
+	case s.SkippedThin == 0:
+		return fmt.Sprintf("%d of %d days skipped: the signal was the same for "+
+			"every ticker", skipped, s.Candidates)
+	default:
+		return fmt.Sprintf("%d of %d days skipped (%d too few tickers, %d "+
+			"constant signal)", skipped, s.Candidates, s.SkippedThin,
+			s.SkippedConstant)
+	}
+}
+
 // String renders one row of the report.
 func (s SignalScore) String() string {
 	spread := "     n/a"
@@ -121,9 +165,13 @@ func (s SignalScore) String() string {
 	if s.TStatDefined() {
 		tstat = fmt.Sprintf("%+6.2f", s.TStat)
 	}
-	return fmt.Sprintf("%-18s %4dd  IC %+7.4f  t %s  hit %5.1f%%  "+
+	row := fmt.Sprintf("%-18s %4dd  IC %+7.4f  t %s  hit %5.1f%%  "+
 		"Q5-Q1 %s  n=%d", s.Signal, s.Horizon, s.MeanIC, tstat,
 		s.HitRate*100, spread, s.Samples)
+	if warning := s.CoverageWarning(); warning != "" {
+		row += "  (" + warning + ")"
+	}
+	return row
 }
 
 // ScanReport renders a whole scan as a printable block, including the caveats
@@ -291,6 +339,7 @@ func scanOne(
 	// Step by h, not by 1: overlapping forward windows reuse each day's return
 	// h times, which inflates the t-statistic by roughly sqrt(h).
 	for t := 0; t+h < days; t += h {
+		score.Candidates++
 		var values, forwards []float64
 		for _, ticker := range tickers {
 			bars := hist[ticker]
@@ -310,10 +359,12 @@ func scanOne(
 		}
 
 		if len(values) < MinCrossSection {
+			score.SkippedThin++
 			continue
 		}
 		ic, ok := spearman(values, forwards)
 		if !ok {
+			score.SkippedConstant++
 			continue
 		}
 		ics = append(ics, ic)

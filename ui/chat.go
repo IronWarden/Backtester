@@ -814,6 +814,12 @@ different proposition from one with the same Sharpe and shallow drawdowns.
      near 50% is a few lucky days, not an edge.
    * Q5-Q1 is the top-fifth minus bottom-fifth forward return, withheld below
      10 tickers because a quintile of 8 names is one stock.
+   * Coverage: a row may add "(N of M days skipped: ...)" when more than a
+     quarter of candidate days were thrown away — either fewer than 5 tickers
+     had a value (a universe problem: add tickers or widen the window) or the
+     signal was identical for every ticker (a property of the signal). Quote
+     it: n=13 with 200 days skipped is a much weaker result than n=13 alone
+     looks.
    * n is the count of NON-OVERLAPPING samples: the scan steps by the horizon,
      because scoring every day against a 21-day forward return reuses each
      return 21 times and inflates the t-statistic by ~sqrt(21).

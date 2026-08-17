@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"my-backtester/src/data"
+	"strings"
 	"testing"
 )
 
@@ -390,5 +391,104 @@ func TestTooFewSamplesIsRefused(t *testing.T) {
 	if got[0].Samples < MinSamples {
 		t.Errorf("reported %d samples, below the %d minimum",
 			got[0].Samples, MinSamples)
+	}
+}
+
+// A signal that is undefined for most of the window produces a confident-looking
+// n and says nothing about the days it threw away. These pin the coverage
+// reporting, which is the context that stops `n=13` reading like `n=500`.
+func TestSkippedDaysAreCountedByReason(t *testing.T) {
+	hist, tickers := spreadUniverse(t, 12, 600, 21)
+	const h = 21
+
+	// Undefined for the first 300 days, which is what a long warm-up looks
+	// like: no ticker has a value, so the cross-section is empty.
+	lateStarter := Signal{
+		Name: "late",
+		Compute: func(bars []data.AssetData, i int) (float64, bool) {
+			if i < 300 {
+				return 0, false
+			}
+			return bars[i].Close, true
+		},
+	}
+	scores := ScanSignals(hist, tickers, []Signal{lateStarter}, []int{h})
+	if len(scores) != 1 {
+		t.Fatalf("got %d scores, want 1", len(scores))
+	}
+	s := scores[0]
+
+	if s.SkippedThin == 0 {
+		t.Error("a signal undefined for the first 300 days recorded no thin days")
+	}
+	if s.SkippedConstant != 0 {
+		t.Errorf("recorded %d constant-signal skips, want 0", s.SkippedConstant)
+	}
+	// Every candidate day is either scored or skipped: the three must add up,
+	// or the coverage figure is describing a different window from the one n
+	// came from.
+	if got := s.Samples + s.SkippedThin + s.SkippedConstant; got != s.Candidates {
+		t.Errorf("samples+skipped = %d but candidates = %d", got, s.Candidates)
+	}
+	if !strings.Contains(s.String(), "days skipped") {
+		t.Errorf("row does not mention the skipped days: %q", s.String())
+	}
+	if !strings.Contains(s.CoverageWarning(), "fewer than") {
+		t.Errorf("warning does not give the reason: %q", s.CoverageWarning())
+	}
+}
+
+// A signal that scores every ticker identically has no ordering to correlate.
+// That is a property of the SIGNAL rather than of the universe, and the two
+// reasons are reported differently because the fixes differ.
+func TestConstantDaysAreReportedSeparately(t *testing.T) {
+	// Long enough that the days AFTER the constant stretch still clear
+	// MinSamples: 1200 days at a 21-day horizon is ~56 candidates, of which
+	// ~38 fall past day 400. A 600-day fixture leaves only nine and the scan
+	// is refused outright, which would test MinSamples rather than coverage.
+	hist, tickers := spreadUniverse(t, 12, 1200, 22)
+	const h = 21
+
+	halfConstant := Signal{
+		Name: "half-constant",
+		Compute: func(bars []data.AssetData, i int) (float64, bool) {
+			if i < 400 {
+				return 1.0, true // identical for every ticker
+			}
+			return bars[i].Close, true
+		},
+	}
+	scores := ScanSignals(hist, tickers, []Signal{halfConstant}, []int{h})
+	if len(scores) != 1 {
+		t.Fatalf("got %d scores, want 1", len(scores))
+	}
+	s := scores[0]
+
+	if s.SkippedConstant == 0 {
+		t.Error("a signal constant for 400 days recorded no constant skips")
+	}
+	if s.SkippedThin != 0 {
+		t.Errorf("recorded %d thin days for a fully-populated universe",
+			s.SkippedThin)
+	}
+	if !strings.Contains(s.CoverageWarning(), "same for every ticker") {
+		t.Errorf("warning does not name the constant-signal reason: %q",
+			s.CoverageWarning())
+	}
+}
+
+// A well-covered scan says nothing about coverage. A warning printed on every
+// row is one a reader learns to skip past.
+func TestWellCoveredScansAreSilent(t *testing.T) {
+	hist, tickers := spreadUniverse(t, 12, 600, 23)
+	scores := ScanSignals(hist, tickers, []Signal{perfectSignal(21)}, []int{21})
+	if len(scores) != 1 {
+		t.Fatalf("got %d scores, want 1", len(scores))
+	}
+	if got := scores[0].CoverageWarning(); got != "" {
+		t.Errorf("a fully covered scan warned about coverage: %q", got)
+	}
+	if strings.Contains(scores[0].String(), "skipped") {
+		t.Errorf("row mentions skipping on a clean scan: %q", scores[0].String())
 	}
 }

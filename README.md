@@ -1294,6 +1294,17 @@ lowvol_21            21d  IC -0.0374  t  -1.45  hit  42.7%  Q5-Q1  -1.062%  n=12
 - **Q5-Q1** is the top-fifth minus bottom-fifth forward return: the IC in money.
   Withheld below 10 tickers, because a "quintile" of eight names is one stock
   wearing a portfolio's clothes.
+- **Coverage** is reported when it matters. A day is skipped when fewer than 5
+  tickers have a value (a warm-up or a short history) or when every ticker scores
+  the same (no ordering to correlate). Past a quarter of candidate days, the row
+  says so and names the reason — the two are different problems, one fixed by
+  adding tickers and one a property of the signal:
+
+  ```
+  mom_252  5d  IC +0.0338  t +2.34  n=476  (312 of 500 days skipped: fewer than 5 tickers had a value)
+  ```
+
+  It is context, not a refusal: a scan with too few samples is already refused.
 - **n** is the number of **non-overlapping** samples. This is the honesty knob:
   scoring every day against a 21-day forward return reuses each return 21 times
   and inflates the t-statistic by roughly √21, so the scan steps by the horizon
