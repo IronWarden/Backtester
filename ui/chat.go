@@ -637,6 +637,22 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Fees are charged to the trade that paid them and realised P&L is net of them,
   so a gross-profitable, net-negative strategy reads as exactly that.
 
+- ROBUSTNESS: HOW HARD CAN YOU PUSH IT? -robustness re-runs each portfolio at
+  0/5/20/50 bps round-trip slippage and from starts 5/20/60/120 days later,
+  filling Result.Robustness (Costs, Starts, BreakEvenBps, StartSpread,
+  StoppedTradingAtBps, TradesChangedAtBps). Opt-in: it costs ~9x the simulation
+  time, so suggest it for a candidate worth taking seriously, not for every run.
+  "Dies above 7bps" is a complete review. A wide StartSpread means the result is
+  a calendar artifact rather than a strategy.
+  TWO TRAPS TO WARN ABOUT. A flat cost curve can mean the strategy STOPPED
+  TRADING rather than that its edge is cost-proof — fill counts are printed per
+  level and TradesChangedAtBps flags it. On the shipped default config one order
+  of five is rejected at 5 bps and the final value falls from 590k to 69k; that
+  is the T13 slippage bug, not friction, and it should be named as such.
+  Second: a later start SLICES the window rather than skipping into it, because
+  strategies key off the absolute day index.
+  Not built yet: parameter-neighbourhood and universe-subsampling checks.
+
 - IS THIS RESULT BETTER THAN CHANCE? Result.Significance: Sharpe, PValue,
   Percentile, NullMeanSharpe, NullP95Sharpe, BootstrapLow, BootstrapHigh,
   Draws, Seed, Computed. Always computed, no configuration.

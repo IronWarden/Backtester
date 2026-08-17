@@ -22,6 +22,7 @@ func main() {
 		record      bool
 		campaign    string
 		history     int
+		robustness  bool
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -52,6 +53,12 @@ func main() {
 	flag.IntVar(
 		&history, "history", 0,
 		"Print the last N runs from the research log and exit",
+	)
+	flag.BoolVar(
+		&robustness, "robustness", false,
+		"Re-run each portfolio under more friction and from later start dates, "+
+			"and print how much of the edge survives. Costs ~9x the "+
+			"simulation time",
 	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
@@ -156,9 +163,25 @@ func main() {
 		return
 	}
 
+	// Set before Run: the battery runs inside each worker, over data already
+	// aligned there, so it cannot be switched on afterwards.
+	backtest.RobustnessChecks = robustness
+	if robustness {
+		fmt.Printf("robustness battery on: %d extra simulations per portfolio "+
+			"(%d cost levels, %d start shifts)\n",
+			len(backtest.CostLevels)+len(backtest.StartShifts),
+			len(backtest.CostLevels), len(backtest.StartShifts))
+	}
+
 	results, err := backtest.Run(portfolios, config.Output)
 	if err != nil {
 		log.Fatalf("Run: %v", err)
+	}
+
+	if robustness {
+		for _, res := range results {
+			fmt.Printf("\n%s\n%s", res.PortfolioName, res.Robustness.String())
+		}
 	}
 
 	// Bookkeeping, and strictly after the fact: a failure to record must never

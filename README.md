@@ -753,6 +753,52 @@ shuffling its exposure changes nothing and it scores p ≈ 1. That is correct �
 has no timing to test — and it is the calibration case the implementation is
 checked against.
 
+### Robustness: how hard can you push before it breaks?
+
+A Sharpe from one window with one cost assumption is a point estimate dressed as
+a finding. `-robustness` re-runs each portfolio under more friction and from
+later start dates — same strategy, same window, no new data:
+
+```bash
+cd src && go run main.go -robustness    # ~9x the simulation time; opt-in
+```
+
+```
+My Portfolio
+  cost sensitivity (round-trip slippage):
+       0 bps  CAGR   50.41%  Sharpe 1.21  trades 5  final 590363.58
+       5 bps  CAGR   21.34%  Sharpe 0.85  trades 4  final  69006.06
+      20 bps  CAGR   21.35%  Sharpe 0.85  trades 4  final  68994.06
+      50 bps  CAGR   21.37%  Sharpe 0.85  trades 4  final  68970.06
+    trade count CHANGES at 5 bps (4 fills against 5 when free) — costs are
+    altering behaviour, not just returns, so the drop below is not a cost
+  start-date sensitivity:
+      +5d CAGR 49.76%   +20d CAGR 50.56%   +60d CAGR 50.27%   +120d CAGR 47.71%
+    spread 2.85 points (worst 47.71%, best 50.56%)
+```
+
+**"Dies above 7bps" is a complete review in three words.** A strategy whose edge
+evaporates at realistic friction is not a strategy, and a result that only exists
+for one start date is a calendar artifact.
+
+Two things the report is careful about, because both mislead by default:
+
+- **A flat cost curve can mean the strategy stopped trading**, not that its edge
+  is cost-proof. Fill counts are printed at every level, and a change in them is
+  called out: costs are supposed to change returns, not behaviour. The example
+  above is the shipped default config, where one order of five is rejected at 5
+  bps and the final value falls from 590k to 69k — that is [T13], not friction.
+- **A later start SLICES the window** rather than skipping days into it.
+  Strategies key off the absolute day index (`buy_and_hold` buys on day 0, every
+  cadence rule is `day % n == 0`), so a loop that merely began at day 5 would
+  leave buy-and-hold in cash and report 0% as though the start date had destroyed
+  it.
+
+Not included yet: the parameter-neighbourhood check (a swept winner on a plateau
+is plausible; a spike between two bad neighbours is overfit) and universe
+subsampling. Both need to know about the sweep that produced a result, which is
+different machinery from re-running one portfolio.
+
 ### The research log: what have I already tried?
 
 Nothing persisted before this: `output.txt` is truncated on every run, so the app

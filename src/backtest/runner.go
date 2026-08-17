@@ -61,6 +61,9 @@ type Result struct {
 	// Significance answers "is this one result better than chance", by
 	// comparing the strategy against random timing with the same exposure.
 	Significance Significance
+	// Robustness holds the cost- and start-date-sensitivity battery, empty
+	// unless it was asked for.
+	Robustness Robustness
 	// Trials is how many parameter sets the config block that produced this
 	// result expanded to, and TrialGroup names that block. ExpectedMaxSharpe
 	// is the Sharpe the best of those trials would be expected to show with
@@ -322,6 +325,7 @@ func runOne(
 	p.Baseline = equalWeightBaseline(p, windowed, dataLen, riskFreeRates)
 	p.TradeStats = SummarizeTrades(p.Trades, p.Positions)
 	p.applySignificance(windowed, dataLen)
+	p.applyRobustness(windowed, dataLen, riskFreeRates)
 	if c, ok := p.Strategy.(interface{ Close() }); ok {
 		c.Close()
 	}
@@ -484,6 +488,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					Baseline:       p.Baseline,
 					TradeStats:     p.TradeStats,
 					Significance:   p.Significance,
+					Robustness:     p.Robustness,
 					Splits:         p.Splits,
 					Trials:         p.Trials,
 					TrialGroup:     p.TrialGroup,
