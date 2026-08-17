@@ -753,6 +753,54 @@ shuffling its exposure changes nothing and it scores p ≈ 1. That is correct �
 has no timing to test — and it is the calibration case the implementation is
 checked against.
 
+### Validating a candidate before believing it
+
+A strategy that peeks at future data, or never trades, or quietly loses cash to a
+typo'd ticker produces a perfectly plausible-looking result. None of those
+failures announces itself — the equity curve is smooth, the metrics are finite,
+and the Sharpe is often excellent.
+
+```bash
+cd src && go run main.go -validate lua:strategies/rsi.lua
+```
+
+```
+validating lua:strategies/rsi.lua
+  ok    look-ahead             identical behaviour across 9 forked futures (108 trade comparisons)
+  ok    placed trades          36 fills over 400 days
+  ok    cash conserved         final value matches cash plus book (99671.43)
+  ok    degenerate inputs      survived 4 degenerate paths
+  passed: nothing here invalidates a result from this strategy
+```
+
+It runs on synthetic data generated in-process, so it needs neither the database
+nor a config, and exits non-zero on failure.
+
+**The look-ahead detector is the piece worth having.** Run the strategy twice on
+histories that are *identical up to day k* and different after it. A strategy
+reading only the past must behave identically up to k in both runs — the future
+it cannot see changed and it did not notice. A strategy whose trades differ
+before k has read the future, and there is no way to fake passing: it is a
+property of behaviour, not of source text.
+
+The forks are spread deliberately, and both details were learned by watching the
+detector miss things:
+
+- **One fork is not enough.** Forking at day k makes the histories differ from
+  k+1 onward, so a strategy peeking a *single* day ahead differs only on day k
+  itself — a coin flip on whether that day's decision changes. Nine forks turn
+  that into a near-certainty.
+- **The forks must start early.** A strategy that peeks twenty days ahead, buys
+  once and holds makes its only future-dependent decision in the first week;
+  every fork placed after it compares two identical trade lists and sees nothing.
+
+The other three checks: a strategy that placed **no trades** is not a strategy
+(and that is exactly what the T13 slippage bug produces); **cash conservation**
+catches a position held under a ticker outside the portfolio's list, which is
+never valued and so silently removes the cash that bought it (T9); and
+**degenerate inputs** — flat prices, a series that only falls, one bar, two bars
+— must not panic or produce a NaN.
+
 ### Robustness: how hard can you push before it breaks?
 
 A Sharpe from one window with one cost assumption is a point estimate dressed as

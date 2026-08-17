@@ -23,6 +23,7 @@ func main() {
 		campaign    string
 		history     int
 		robustness  bool
+		validate    string
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -61,6 +62,12 @@ func main() {
 			"simulation time",
 	)
 	flag.StringVar(
+		&validate, "validate", "",
+		"Run the adversarial checks against a strategy spec (e.g. "+
+			"lua:strategies/rsi.lua) and exit: look-ahead, did-it-trade, "+
+			"cash conservation, degenerate inputs",
+	)
+	flag.StringVar(
 		&configPath, "config", "../config.toml",
 		"Path to portfolio TOML config",
 	)
@@ -90,6 +97,17 @@ func main() {
 		}()
 	} else {
 		backtest.TransactionLogger = log.New(io.Discard, "", 0)
+	}
+
+	// Validation is adversarial and self-contained: synthetic data generated
+	// in-process, so it needs neither the market data nor a config.
+	if validate != "" {
+		report := backtest.ValidateStrategy(validate, nil)
+		fmt.Print(report.String())
+		if !report.Passed {
+			os.Exit(1)
+		}
+		return
 	}
 
 	// The research log is its own database and needs neither the market data

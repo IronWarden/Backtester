@@ -637,6 +637,23 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Fees are charged to the trade that paid them and realised P&L is net of them,
   so a gross-profitable, net-negative strategy reads as exactly that.
 
+- VALIDATE A CANDIDATE BEFORE BELIEVING IT. -validate <spec> runs adversarial
+  checks against a strategy and exits non-zero on failure:
+      cd src && go run main.go -validate lua:strategies/rsi.lua
+  Four checks: LOOK-AHEAD (run the strategy on histories identical up to day k
+  and different after; a strategy reading only the past cannot behave
+  differently before k — this catches future-peeking that no amount of reading
+  the source proves absent), PLACED TRADES (zero trades is not a 0% return, it
+  is the absence of a strategy, and it is what T13 produces), CASH CONSERVED
+  (a position under a ticker outside the portfolio's list is never valued, so
+  the cash that bought it vanishes — that is T9, and a typo'd symbol causes
+  it), and DEGENERATE INPUTS (flat prices, only-falling, one bar: no panics, no
+  NaN).
+  ALWAYS suggest this after writing a new Lua strategy for a user, before
+  quoting any of its numbers. A strategy that fails look-ahead has a beautiful
+  equity curve that means nothing.
+  Engine-side: backtest.ValidateStrategy, ValidationReport.
+
 - ROBUSTNESS: HOW HARD CAN YOU PUSH IT? -robustness re-runs each portfolio at
   0/5/20/50 bps round-trip slippage and from starts 5/20/60/120 days later,
   filling Result.Robustness (Costs, Starts, BreakEvenBps, StartSpread,
