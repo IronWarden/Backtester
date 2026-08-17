@@ -130,6 +130,54 @@ end + `FixedReportLagDays` (90) otherwise. Each point records which rule
 applied, so a result resting mostly on the fallback can be read accordingly.
 The helper also deduplicates — the raw table contains exact duplicate rows.
 
+### Fundamentals back to 2009, dead companies included
+
+`financials` starts 2020-07 and holds only tickers that still exist. SEC's
+Financial Statement Data Sets — free, no key — go back to 2009, include the
+companies that later died, and carry **`filed`, the real publication date**.
+
+```bash
+python3 add_sec_financials.py --dry-run --limit-quarters 1   # probe
+python3 add_sec_financials.py --from-year 2020               # smaller
+python3 add_sec_financials.py                                # 2009 -> now
+```
+
+It lands in its own `sec_financials` table rather than into `financials`, so the
+existing numbers cannot move and the overlapping window becomes a free
+correctness check on both sources. Metrics use the same vocabulary (`Total
+Revenue`, `Net Income`, `Stockholders Equity`, `Total Assets`, `Total Liabilities
+Net Minority Interest`, `Cash And Cash Equivalents`, `Operating Income`,
+`Ordinary Shares Number`, `Diluted Average Shares`). Read it with
+`src/data.LoadSECFundamentals`, and reduce it with `FirstKnown` / `KnownOn`.
+
+**The measurement that matters**, from the 2026Q1 quarter (96,713 rows, 5,109
+companies, 509 of them with no current ticker — the delisted ones):
+
+> The publication lag for the figures a filing actually reports is a **median of
+> 48 days** (p10 31, p90 62, max 90).
+
+So `PointInTimeFundamentals`' 90-day fallback is not a typical lag — it is the
+worst case, and it delays every fundamental by about six extra weeks. That is
+conservative rather than biased, but it throws away real signal, and having the
+true dates is the fix.
+
+Two shapes of row live in the table and the difference is load-bearing:
+`period_end == filing_period` is the figure the filing is reporting, and
+`period_end < filing_period` is a **comparative** — every 10-K restates prior
+years, so ~60% of rows are these. Both are kept, because a comparative's `filed`
+date is honest evidence that the figure was public by then. `FirstKnown` takes the
+*earliest* filing of each figure, which is when it became knowable; using a later
+restatement at the original filing's date would be look-ahead bias in disguise.
+
+Costs and limits, measured: ~124 MB per quarterly ZIP, ~7 s to fetch and ~8 s to
+parse, ~102,000 rows kept. A full run is ~69 quarters, ~7 GB of transfer, ~20
+minutes, ~7 M rows; quarters are streamed and inserted one at a time so the disk
+cost is the table, not the archive. Only 10-K and 10-Q are read (amendments are
+skipped); segment and subsidiary rows are skipped to avoid double-counting the
+parent; year-to-date partials are skipped rather than mislabelled. SEC publishes
+each quarter a few months in arrears — 2026Q1 was the newest available on
+2026-08-17 — and a missing quarter is reported and skipped.
+
 Two further caveats before building anything on this:
 
 - **`economic_indicators` has the same trap.** `Date` is the period, and CPI

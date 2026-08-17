@@ -538,6 +538,28 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   eight rows predate 2009, so Enron, WorldCom, Lehman, WaMu and Bear
   Stearns are absent. Never claim it fixes survivorship bias generally.
 
+- FUNDAMENTALS BACK TO 2009, WITH REAL PUBLICATION DATES. Optional table
+  sec_financials(cik, ticker, company_name, sic, metric, tag, period_end,
+  filed, filing_period, value, form, frequency, accession), loaded from SEC's
+  Financial Statement Data Sets by python3 add_sec_financials.py (free, no
+  key). It covers 2009+ and includes companies that later died, and 'filed' is
+  the ACTUAL publication date rather than an estimate. Metrics use the same
+  names as the financials table, so the two can be compared over their overlap.
+  MEASURED on 2026Q1: the real lag for the figure a filing reports is a median
+  of 48 days (p10 31, p90 62, max 90). So the 90-day fallback that
+  PointInTimeFundamentals uses when earnings_calendar has no entry is the WORST
+  case, not a typical one — it delays every fundamental by ~6 extra weeks.
+  Conservative, not biased, but say so if a user asks why a factor signal
+  arrives late.
+  Row shapes matter: period_end == filing_period is the figure being reported,
+  period_end < filing_period is a comparative from a prior year (~60% of rows,
+  since every 10-K restates prior years). Use the EARLIEST filed per (cik,
+  metric, period_end) — that is when the number became knowable, and
+  src/data.FirstKnown / KnownOn do exactly that. Never join a later
+  restatement to the original filing's date.
+  ticker is filled only where the CIK still has a current listing, so it is
+  NULL for the delisted companies.
+
 - POINT-IN-TIME INDEX MEMBERSHIP. Optional table index_membership(index_name,
   ticker, security, start_date, end_date, start_is_horizon, confidence,
   source), loaded by python3 add_index_membership.py from two free Wikipedia
