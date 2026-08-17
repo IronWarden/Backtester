@@ -87,10 +87,8 @@ type SignalScore struct {
 	// Zero and QuintileOK false when the universe was too small to split.
 	QuintileSpread float64
 	QuintileOK     bool
-	// Samples is the number of non-overlapping days scored, and Skipped the
-	// number rejected for too small a cross-section.
+	// Samples is the number of non-overlapping days scored.
 	Samples int
-	Skipped int
 }
 
 // TStatDefined reports whether TStat means anything. It does not when the IC
@@ -312,12 +310,10 @@ func scanOne(
 		}
 
 		if len(values) < MinCrossSection {
-			score.Skipped++
 			continue
 		}
 		ic, ok := spearman(values, forwards)
 		if !ok {
-			score.Skipped++
 			continue
 		}
 		ics = append(ics, ic)
