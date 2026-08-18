@@ -29,25 +29,26 @@ func (a *App) startup(ctx context.Context) {
 // RunResult is the wire shape of a single portfolio's metrics, exposed to
 // the frontend. Float fields are sent as JSON numbers.
 type RunResult struct {
-	PortfolioName     string  `json:"portfolioName"`
-	Strategy          string  `json:"strategy"`
-	SharpeRatio       float64 `json:"sharpeRatio"`
-	SortinoRatio      float64 `json:"sortinoRatio"`
-	MaxDrawdown       float64 `json:"maxDrawdown"`
-	AnnualReturn      float64 `json:"annualReturn"`
-	StandardDev       float64 `json:"standardDev"`
-	AvgCorrelation    float64 `json:"avgCorrelation"`
-	CointegratedPairs int     `json:"cointegratedPairs"`
-	Turnover          float64 `json:"turnover"`
-	AvgExposure       float64 `json:"avgExposure"`
-	CalmarRatio       float64 `json:"calmarRatio"`
-	TimeInMarket      float64 `json:"timeInMarket"`
-	Alpha             float64 `json:"alpha"`
-	Beta              float64 `json:"beta"`
-	TrackingError     float64 `json:"trackingError"`
-	InformationRatio  float64 `json:"informationRatio"`
-	UpCapture         float64 `json:"upCapture"`
-	DownCapture       float64 `json:"downCapture"`
+	PortfolioName         string  `json:"portfolioName"`
+	Strategy              string  `json:"strategy"`
+	SharpeRatio           float64 `json:"sharpeRatio"`
+	SortinoRatio          float64 `json:"sortinoRatio"`
+	MaxDrawdown           float64 `json:"maxDrawdown"`
+	AnnualReturn          float64 `json:"annualReturn"`
+	StandardDev           float64 `json:"standardDev"`
+	AvgCorrelation        float64 `json:"avgCorrelation"`
+	CointegratedPairs     int     `json:"cointegratedPairs"`
+	Turnover              float64 `json:"turnover"`
+	AvgExposure           float64 `json:"avgExposure"`
+	CalmarRatio           float64 `json:"calmarRatio"`
+	LongestUnderwaterDays int     `json:"longestUnderwaterDays"`
+	TimeInMarket          float64 `json:"timeInMarket"`
+	Alpha                 float64 `json:"alpha"`
+	Beta                  float64 `json:"beta"`
+	TrackingError         float64 `json:"trackingError"`
+	InformationRatio      float64 `json:"informationRatio"`
+	UpCapture             float64 `json:"upCapture"`
+	DownCapture           float64 `json:"downCapture"`
 	// InitialCapital is the starting cash and FinalValue the ending worth, so
 	// the frontend can show the profit in dollars alongside the percentages.
 	InitialCapital float64 `json:"initialCapital"`
@@ -171,40 +172,41 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput
 	results := make([]RunResult, 0, len(raw))
 	for _, r := range raw {
 		results = append(results, RunResult{
-			PortfolioName:     r.PortfolioName,
-			Strategy:          r.Strategy,
-			SharpeRatio:       r.Metrics.SharpeRatio,
-			SortinoRatio:      r.Metrics.SortinoRatio,
-			MaxDrawdown:       r.Metrics.MaxDrawdown,
-			AnnualReturn:      r.Metrics.AnnualReturn,
-			StandardDev:       r.Metrics.StandardDev,
-			AvgCorrelation:    r.Metrics.AvgCorrelation,
-			CointegratedPairs: r.Metrics.CointegratedPairs,
-			Turnover:          r.Metrics.Turnover,
-			AvgExposure:       r.Metrics.AvgExposure,
-			CalmarRatio:       r.Metrics.CalmarRatio,
-			TimeInMarket:      r.Metrics.TimeInMarket,
-			Alpha:             r.Metrics.Alpha,
-			Beta:              r.Metrics.Beta,
-			TrackingError:     r.Metrics.TrackingError,
-			InformationRatio:  r.Metrics.InformationRatio,
-			UpCapture:         r.Metrics.UpCapture,
-			DownCapture:       r.Metrics.DownCapture,
-			InitialCapital:    r.InitialCapital,
-			FinalValue:        r.FinalValue,
-			EquityCurve:       r.EquityCurve,
-			Dates:             r.Dates,
-			Drawdowns:         r.Drawdowns,
-			RollingSharpe:     r.RollingSharpe,
-			YearlyReturns:     r.YearlyReturns,
-			MonthlyReturns:    r.MonthlyReturns,
-			BenchmarkCurve:    r.BenchmarkCurve,
-			BenchmarkStats:    r.BenchmarkStats,
-			Splits:            r.Splits,
-			WalkForward:       r.WalkForward,
-			Trials:            r.Trials,
-			ExpectedMaxSharpe: r.ExpectedMaxSharpe,
-			DeflatedSharpe:    r.DeflatedSharpe,
+			PortfolioName:         r.PortfolioName,
+			Strategy:              r.Strategy,
+			SharpeRatio:           r.Metrics.SharpeRatio,
+			SortinoRatio:          r.Metrics.SortinoRatio,
+			MaxDrawdown:           r.Metrics.MaxDrawdown,
+			AnnualReturn:          r.Metrics.AnnualReturn,
+			StandardDev:           r.Metrics.StandardDev,
+			AvgCorrelation:        r.Metrics.AvgCorrelation,
+			CointegratedPairs:     r.Metrics.CointegratedPairs,
+			Turnover:              r.Metrics.Turnover,
+			AvgExposure:           r.Metrics.AvgExposure,
+			CalmarRatio:           r.Metrics.CalmarRatio,
+			LongestUnderwaterDays: r.Metrics.LongestUnderwaterDays,
+			TimeInMarket:          r.Metrics.TimeInMarket,
+			Alpha:                 r.Metrics.Alpha,
+			Beta:                  r.Metrics.Beta,
+			TrackingError:         r.Metrics.TrackingError,
+			InformationRatio:      r.Metrics.InformationRatio,
+			UpCapture:             r.Metrics.UpCapture,
+			DownCapture:           r.Metrics.DownCapture,
+			InitialCapital:        r.InitialCapital,
+			FinalValue:            r.FinalValue,
+			EquityCurve:           r.EquityCurve,
+			Dates:                 r.Dates,
+			Drawdowns:             r.Drawdowns,
+			RollingSharpe:         r.RollingSharpe,
+			YearlyReturns:         r.YearlyReturns,
+			MonthlyReturns:        r.MonthlyReturns,
+			BenchmarkCurve:        r.BenchmarkCurve,
+			BenchmarkStats:        r.BenchmarkStats,
+			Splits:                r.Splits,
+			WalkForward:           r.WalkForward,
+			Trials:                r.Trials,
+			ExpectedMaxSharpe:     r.ExpectedMaxSharpe,
+			DeflatedSharpe:        r.DeflatedSharpe,
 		})
 	}
 	return RunOutput{Results: results, Diagnostics: collector.records()}, nil

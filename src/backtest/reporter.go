@@ -49,6 +49,7 @@ var resultFields = []string{
 	"AnnualReturn",
 	"StandardDev",
 	"CalmarRatio",
+	"LongestUnderwaterDays",
 	"AvgCorrelation",
 	"CointegratedPairs",
 	"Turnover",
@@ -128,6 +129,8 @@ func resultValue(r Result, name string) (any, bool) {
 		return r.Metrics.StandardDev, true
 	case "CalmarRatio":
 		return r.Metrics.CalmarRatio, true
+	case "LongestUnderwaterDays":
+		return float64(r.Metrics.LongestUnderwaterDays), true
 	case "AvgCorrelation":
 		return r.Metrics.AvgCorrelation, true
 	case "CointegratedPairs":

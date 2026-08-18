@@ -573,6 +573,12 @@ export default function ResultsView({ results, fontSize }: Props) {
                   Calmar
                 </th>
                 <th className="num">Max DD %</th>
+                <th
+                  className="num"
+                  title="Longest run of calendar days below a previous peak"
+                >
+                  Underwater
+                </th>
                 <th className="num">Annual %</th>
                 <th className="num">Std Dev</th>
                 <th className="num">Turnover</th>
@@ -632,6 +638,7 @@ export default function ResultsView({ results, fontSize }: Props) {
                     <td className="num">{r.sortinoRatio.toFixed(2)}</td>
                     <td className="num">{r.calmarRatio.toFixed(2)}</td>
                     <td className="num">{r.maxDrawdown.toFixed(2)}</td>
+                    <td className="num">{r.longestUnderwaterDays}</td>
                     <td className="num">{r.annualReturn.toFixed(2)}</td>
                     <td className="num">{r.standardDev.toFixed(4)}</td>
                     <td className="num">{r.turnover.toFixed(2)}</td>

@@ -489,6 +489,13 @@ across asset classes (e.g. ["$SP500", "$CASH"]).
 - StandardDev: annualized stdev of daily returns.
 - AvgCorrelation / CointegratedPairs: mean pairwise return correlation and
   count of cointegrated ticker pairs in the portfolio.
+- LongestUnderwaterDays: the most CALENDAR days the equity curve spent below a
+  previous peak, from that peak until it was regained (to the end of the run if
+  never regained). MaxDrawdown is how deep, this is how long. Pair them when
+  answering "how bad was it": a 40% drawdown recovered in a month and a 15% one
+  lasting three years are completely different experiences and only the second
+  gets abandoned. Computed over every drawdown, not just the deepest ones the
+  results panel lists, because the longest is often not the deepest.
 - CalmarRatio: AnnualReturn / MaxDrawdown -- return per unit of worst-case
   decline. Different question from Sharpe: Sharpe penalises volatility both
   ways, Calmar counts only the deepest hole the account was in, which is what

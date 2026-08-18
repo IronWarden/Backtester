@@ -417,3 +417,76 @@ func TestGetCalendarReturnsDegenerate(t *testing.T) {
 		}
 	}
 }
+
+// MaxDrawdown says how deep the worst hole was; this says how long you would
+// have had to sit in one. A 40% drawdown recovered in a month and a 15% one
+// that took three years are not the same experience, and only the second gets
+// abandoned.
+func TestLongestUnderwaterMeasuresDuration(t *testing.T) {
+	day := func(n int) time.Time {
+		return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, n)
+	}
+
+	cases := []struct {
+		name string
+		dds  []Drawdown
+		want int
+	}{
+		{"no drawdowns", nil, 0},
+		{"one, recovered", []Drawdown{
+			{Start: day(0), Trough: day(3), Recovered: day(10)},
+		}, 10},
+		// The point of the function: the longest is not the deepest. A
+		// shallow decline that drags on outlasts a violent one that snaps
+		// back, and reporting the deepest one's duration would be wrong.
+		{"the longest is not the deepest", []Drawdown{
+			{Start: day(0), Trough: day(2), Recovered: day(5), DepthPct: 40},
+			{Start: day(20), Trough: day(25), Recovered: day(90), DepthPct: 8},
+		}, 70},
+		// Still underwater at the end is a duration, not an absence of one.
+		{"ongoing runs to the last day", []Drawdown{
+			{Start: day(10), Trough: day(30), Ongoing: true},
+		}, 0},
+	}
+	for _, tc := range cases {
+		last := day(0)
+		if tc.name == "ongoing runs to the last day" {
+			last = day(100)
+			tc.want = 90
+		}
+		if got := LongestUnderwater(tc.dds, last); got != tc.want {
+			t.Errorf("%s: LongestUnderwater = %d, want %d",
+				tc.name, got, tc.want)
+		}
+	}
+}
+
+// The subtlety worth a test of its own: a Result carries only the top-N
+// drawdowns by DEPTH, so computing this from that list would silently miss a
+// longer, shallower one. The metric must be built from every drawdown.
+func TestLongestUnderwaterNeedsEveryDrawdown(t *testing.T) {
+	// A deep, fast decline followed by a shallow, slow one.
+	values := []float64{100, 60, 100, 95, 96, 97, 98, 99, 100}
+	dates := make([]time.Time, len(values))
+	for i := range values {
+		dates[i] = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, i)
+	}
+
+	all := GetDrawdowns(values, dates, 0)
+	if len(all) != 2 {
+		t.Fatalf("expected two drawdowns, got %d: %+v", len(all), all)
+	}
+	full := LongestUnderwater(all, dates[len(dates)-1])
+
+	// Only the deepest, as a Result would carry with topDrawdowns = 1.
+	truncated := LongestUnderwater(GetDrawdowns(values, dates, 1),
+		dates[len(dates)-1])
+
+	if full <= truncated {
+		t.Fatalf("this test no longer distinguishes the two: full=%d "+
+			"truncated=%d", full, truncated)
+	}
+	if full != 6 {
+		t.Errorf("longest underwater = %d days, want 6 (the shallow one)", full)
+	}
+}

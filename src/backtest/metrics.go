@@ -52,6 +52,38 @@ type Metrics struct {
 	// deepest hole the account was ever in, which is what actually decides
 	// whether a strategy gets abandoned partway through.
 	CalmarRatio float64
+
+	// LongestUnderwaterDays is the most calendar days the equity curve ever
+	// spent below a previous peak, from the peak until it was regained — and
+	// until the end of the run for a decline never recovered.
+	//
+	// MaxDrawdown says how deep the worst hole was; this says how long you
+	// would have had to sit in one. They are different strategies' failure
+	// modes: a 40% drawdown recovered in a month and a 15% drawdown that took
+	// three years are not remotely the same experience, and only the second
+	// gets abandoned.
+	LongestUnderwaterDays int
+}
+
+// LongestUnderwater returns the most calendar days spent below a prior peak.
+// An unrecovered decline is measured to lastDay, since "still underwater at
+// the end" is a duration, not an absence of one.
+//
+// It must be given EVERY drawdown, not the top-N by depth that a Result
+// carries: the longest drawdown is frequently not the deepest, so passing a
+// truncated list produces a number that is wrong without looking wrong.
+func LongestUnderwater(drawdowns []Drawdown, lastDay time.Time) int {
+	longest := 0
+	for _, d := range drawdowns {
+		end := d.Recovered
+		if d.Ongoing {
+			end = lastDay
+		}
+		if days := daysBetween(d.Start, end); days > longest {
+			longest = days
+		}
+	}
+	return longest
 }
 
 // GetCalmarRatio is annual return over maximum drawdown. Both arguments are
@@ -555,6 +587,15 @@ func (p *Portfolio) GetBacktestingData(
 	}
 	metrics.AvgExposure, metrics.TimeInMarket = GetExposureStats(p.Exposure)
 	metrics.CalmarRatio = GetCalmarRatio(annualReturn, maxDrawdown)
+	// Every drawdown, not topDrawdowns: see LongestUnderwater.
+	if n := len(p.DailyReturns); n > 0 {
+		dates := make([]time.Time, n)
+		for i, dr := range p.DailyReturns {
+			dates[i] = dr.Date
+		}
+		metrics.LongestUnderwaterDays = LongestUnderwater(
+			GetDrawdowns(p.PortfolioCloseValues, dates, 0), dates[n-1])
+	}
 	p.Metrics = metrics
 }
 

@@ -340,6 +340,7 @@ export namespace main {
 	    turnover: number;
 	    avgExposure: number;
 	    calmarRatio: number;
+	    longestUnderwaterDays: number;
 	    timeInMarket: number;
 	    alpha: number;
 	    beta: number;
@@ -381,6 +382,7 @@ export namespace main {
 	        this.turnover = source["turnover"];
 	        this.avgExposure = source["avgExposure"];
 	        this.calmarRatio = source["calmarRatio"];
+	        this.longestUnderwaterDays = source["longestUnderwaterDays"];
 	        this.timeInMarket = source["timeInMarket"];
 	        this.alpha = source["alpha"];
 	        this.beta = source["beta"];
