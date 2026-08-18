@@ -284,7 +284,7 @@ func logCoverageShortfall(
 	} else {
 		msg += "; the missing days are gaps inside the tickers' histories"
 	}
-	log.Print(msg)
+	diagf("warn", pname, "%s", msg)
 }
 
 // runOne executes one full simulation pass over a single-strategy portfolio.

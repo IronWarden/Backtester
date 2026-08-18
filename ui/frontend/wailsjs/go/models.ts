@@ -1,5 +1,21 @@
 export namespace backtest {
 	
+	export class Diagnostic {
+	    level: string;
+	    portfolio: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Diagnostic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.level = source["level"];
+	        this.portfolio = source["portfolio"];
+	        this.message = source["message"];
+	    }
+	}
 	export class WalkForwardWindow {
 	    trainStart: string;
 	    trainEnd: string;
@@ -278,6 +294,38 @@ export namespace main {
 	        this.truncated = source["truncated"];
 	        this.elapsedMs = source["elapsedMs"];
 	    }
+	}
+	export class RunOutput {
+	    results: RunResult[];
+	    diagnostics: backtest.Diagnostic[];
+
+	    static createFrom(source: any = {}) {
+	        return new RunOutput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.results = this.convertValues(source["results"], RunResult);
+	        this.diagnostics = this.convertValues(source["diagnostics"], backtest.Diagnostic);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class RunResult {
 	    portfolioName: string;

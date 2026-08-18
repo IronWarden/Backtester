@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"sync"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -82,24 +83,89 @@ type RunResult struct {
 	DeflatedSharpe    float64                     `json:"deflatedSharpe"`
 }
 
+// RunOutput is what one run hands back: the per-portfolio results, plus
+// whatever the engine had to tell the user while producing them. Diagnostics
+// travel with the results rather than through a separate call so the console
+// can never show the leftovers of a previous run.
+type RunOutput struct {
+	Results     []RunResult           `json:"results"`
+	Diagnostics []backtest.Diagnostic `json:"diagnostics"`
+}
+
+// maxDiagnostics bounds what one run may report. A Lua script that raises on
+// every one of five thousand trading days would otherwise send five thousand
+// identical records across the bridge, which helps nobody — the first few say
+// everything the user needs.
+const maxDiagnostics = 200
+
+// diagMu serialises runs. backtest.Diagnostics is a process-global sink, so
+// two concurrent RunBacktest calls would collect each other's messages; the
+// lock is held for the whole run rather than just the swap.
+var diagMu sync.Mutex
+
+// diagCollector gathers a run's diagnostics. The engine calls record from the
+// worker pool, concurrently, and does not lock on its own behalf — so this
+// does.
+type diagCollector struct {
+	mu        sync.Mutex
+	collected []backtest.Diagnostic
+	dropped   int
+}
+
+func (c *diagCollector) record(d backtest.Diagnostic) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.collected) >= maxDiagnostics {
+		c.dropped++
+		return
+	}
+	c.collected = append(c.collected, d)
+}
+
+// records returns what was collected, with a final note when the cap bit. The
+// note matters more than the messages it replaces: a console that silently
+// stops at two hundred lines is lying about what happened.
+func (c *diagCollector) records() []backtest.Diagnostic {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := append([]backtest.Diagnostic(nil), c.collected...)
+	if c.dropped > 0 {
+		out = append(out, backtest.Diagnostic{
+			Level: "warn",
+			Message: fmt.Sprintf(
+				"%d further diagnostics were suppressed; this run reported "+
+					"more than the %d the console shows",
+				c.dropped, maxDiagnostics),
+		})
+	}
+	return out
+}
+
 // RunBacktest executes the in-editor TOML config against the chosen DB.
 // defaultLuaPath is used as the strategy for any portfolio that omits its
 // Strategy field, so the script open in the Lua tab becomes the default.
-// Returns the per-portfolio results in run order.
-func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []RunResult, err error) {
+// Returns the per-portfolio results in run order, with the run's diagnostics.
+func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("backtest panic: %v\n%s", r, debug.Stack())
 		}
 	}()
 	if dbPath == "" {
-		return nil, fmt.Errorf("db path is empty")
+		return RunOutput{}, fmt.Errorf("db path is empty")
 	}
+
+	diagMu.Lock()
+	defer diagMu.Unlock()
+	var collector diagCollector
+	backtest.Diagnostics = collector.record
+	defer func() { backtest.Diagnostics = nil }()
+
 	raw, err := backtest.RunFromConfigText(cfgText, dbPath, defaultLuaPath)
 	if err != nil {
-		return nil, err
+		return RunOutput{}, err
 	}
-	results = make([]RunResult, 0, len(raw))
+	results := make([]RunResult, 0, len(raw))
 	for _, r := range raw {
 		results = append(results, RunResult{
 			PortfolioName:     r.PortfolioName,
@@ -135,7 +201,7 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (results []Run
 			DeflatedSharpe:    r.DeflatedSharpe,
 		})
 	}
-	return results, nil
+	return RunOutput{Results: results, Diagnostics: collector.records()}, nil
 }
 
 // PickConfigFile opens a native file picker for TOML configs.

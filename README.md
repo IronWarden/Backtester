@@ -1383,6 +1383,33 @@ wails dev -tags webkit2_41              # live-reloading development build
 wails build -tags webkit2_41 && cp build/bin/ui ui/ui
 ```
 
+#### The run console
+
+Below the results panel is a **Console** strip that appears whenever a run had
+something to say. It shows only diagnostics a user can act on:
+
+| level | what produces it |
+|---|---|
+| `error` | a Lua strategy that failed to load, or raised on a given day |
+| `warn` | fewer days simulated than the window covers, and which ticker is short |
+| `warn` | a benchmark with no data, or one not covering every trading day |
+| `warn` | an in-sample/out-of-sample split with too few days either side to score |
+
+Each row carries the level, the portfolio it belongs to, and the message. The
+strip stays collapsed for warnings and opens itself when a run produced an
+error, since an error means the run did not do what was asked. A run that
+reports nothing shows no strip at all.
+
+What it deliberately does **not** show is the engine's own logging — query
+timings, row-scan warnings, the `PrintMetrics` dump. Those still go to the log
+(`backtester.log` under the CLI's `-debug`), because a console that reports
+everything is one nobody reads. The split is decided in Go at each call site,
+by `backtest.diagf`, not filtered afterwards.
+
+At most 200 diagnostics are kept per run; beyond that the console says how many
+it suppressed rather than truncating silently. A strategy that raises on every
+trading day is the case this bounds.
+
 ## AI assistant (UI) — Claude or local Ollama models
 
 The Wails UI has a built-in AI chat, toggled with the **✦ Assistant**

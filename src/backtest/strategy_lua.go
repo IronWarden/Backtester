@@ -2,7 +2,6 @@ package backtest
 
 import (
 	"fmt"
-	"log"
 	"my-backtester/src/data"
 	"os"
 	"path/filepath"
@@ -96,14 +95,15 @@ func (s *LuaStrategy) Step(
 ) {
 	if s.L == nil {
 		if err := s.init(p, hist); err != nil {
-			log.Printf("lua strategy %q init: %v", s.Path, err)
+			diagf("error", p.Pname, "lua strategy %q init: %v", s.Path, err)
 			return
 		}
 	}
 	s.L.Push(s.stepFn)
 	s.L.Push(lua.LNumber(day))
 	if err := s.L.PCall(1, 0, nil); err != nil {
-		log.Printf("lua strategy %q step day=%d: %v", s.Path, day, err)
+		diagf("error", p.Pname,
+			"lua strategy %q step day=%d: %v", s.Path, day, err)
 	}
 }
 

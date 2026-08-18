@@ -265,7 +265,7 @@ func runWalkForwardOver(
 			candidates, hist, riskFreeRates, trainStart, trainEnd, capital)
 		bestIdx := selectBest(trained, schedule.Objective)
 		if bestIdx < 0 {
-			log.Printf(
+			diagf("warn", pc.Name,
 				"walk-forward %q: no candidate produced a scorable run on "+
 					"%s..%s; skipping the window",
 				pc.Name, trainStart.Format("2006-01-02"),
@@ -278,7 +278,7 @@ func runWalkForwardOver(
 			candidates[bestIdx:bestIdx+1], hist, riskFreeRates,
 			testStart, testEnd, capital)
 		if tested[0] == nil || len(tested[0].DailyReturns) == 0 {
-			log.Printf(
+			diagf("warn", pc.Name,
 				"walk-forward %q: winner %s produced no test days on %s..%s",
 				pc.Name, candidates[bestIdx].label,
 				testStart.Format("2006-01-02"), testEnd.Format("2006-01-02"))

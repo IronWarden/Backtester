@@ -208,6 +208,26 @@ runs concurrently; results (metrics + equity curve) appear in a table and
 chart. Simulation is daily: for each trading day the strategy's step runs,
 then the portfolio is marked to market on that day's Close.
 
+## The run console
+Below the results panel is a "Console" strip that appears when a run produced
+diagnostics. It shows only things the user can act on, each with a level, the
+portfolio it belongs to, and a message:
+- error: a Lua strategy failed to load, or raised on a given day.
+- warn: fewer days were simulated than the window covers (it names the ticker
+  whose history is short), a benchmark has no data or does not cover every
+  trading day, or an in-sample/out-of-sample split leaves too few days either
+  side to score.
+It opens itself when there is an error and stays collapsed for warnings. A run
+that reports nothing shows no strip.
+It does NOT show the engine's internal logging - query timings, row-scan
+warnings, the metrics dump. Those go to backtester.log (CLI -debug only). So
+if a user asks why something is missing from the console, the answer is that
+only user-actionable diagnostics are routed there, on purpose. At most 200 are
+kept per run; past that the console says how many it suppressed.
+Tell users to check the console FIRST when a backtest reports a flat equity
+curve, no trades, or missing benchmark/split metrics - the reason is usually
+sitting there.
+
 ## TOML config format
 [[portfolio]]
 Name        = "My Portfolio"      # shown in results

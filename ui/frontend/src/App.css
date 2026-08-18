@@ -614,6 +614,111 @@ button.primary:hover:not(:disabled),
   background: var(--accent);
 }
 
+/* The run console: what the engine had to tell the user, and nothing else.
+   Sits between the results and the status bar so it is out of the way until
+   there is something in it, and never covers the results. */
+.console-panel {
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex: 0 0 auto;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  width: 100%;
+  padding: 0.35em 1em;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text-2);
+  font-size: 0.85em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.console-head:hover {
+  background: var(--bg-hover);
+}
+
+.console-caret {
+  color: var(--text-3);
+  width: 0.8em;
+}
+
+.console-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.console-count {
+  color: var(--text-3);
+}
+
+.console-count.err {
+  color: var(--neg);
+}
+
+.console-list {
+  margin: 0;
+  padding: 0 0 0.4em;
+  list-style: none;
+  overflow: auto;
+}
+
+.console-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.25em 1em;
+  font-family: var(--mono);
+  font-size: 0.82em;
+  line-height: 1.45;
+  border-left: 2px solid transparent;
+}
+
+.console-row.error {
+  border-left-color: var(--neg);
+  background: rgba(230, 103, 103, 0.06);
+}
+
+.console-row.warn {
+  border-left-color: var(--warn);
+}
+
+.console-level {
+  flex: 0 0 auto;
+  min-width: 3.4em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+}
+
+.console-level.error {
+  color: var(--neg);
+}
+
+.console-level.warn {
+  color: var(--warn);
+}
+
+/* The message keeps its own `portfolio "x":` prefix, so this chip is a
+   grouping aid rather than the only place the name appears. */
+.console-portfolio {
+  flex: 0 0 auto;
+  color: var(--text-3);
+}
+
+.console-msg {
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .status {
   display: flex;
   align-items: center;

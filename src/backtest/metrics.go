@@ -1,7 +1,6 @@
 package backtest
 
 import (
-	"log"
 	"math"
 	"my-backtester/src/data"
 	"time"
@@ -264,7 +263,7 @@ func (p *Portfolio) applyBenchmarkMetrics(
 	}
 	bars, ok := hist[p.Benchmark]
 	if !ok || len(bars) == 0 {
-		log.Printf(
+		diagf("warn", p.Pname,
 			"portfolio %q: benchmark %q has no data; skipping benchmark metrics",
 			p.Pname, p.Benchmark,
 		)
@@ -272,7 +271,7 @@ func (p *Portfolio) applyBenchmarkMetrics(
 	}
 	benchmark, ok := benchmarkReturns(bars, dates)
 	if !ok {
-		log.Printf(
+		diagf("warn", p.Pname,
 			"portfolio %q: benchmark %q does not cover every trading day in "+
 				"the window; skipping benchmark metrics",
 			p.Pname, p.Benchmark,
@@ -292,7 +291,7 @@ func (p *Portfolio) applyBenchmarkMetrics(
 		}
 	}
 	if len(portfolio) != len(benchmark) {
-		log.Printf(
+		diagf("warn", p.Pname,
 			"portfolio %q: benchmark %q produced %d returns against the "+
 				"portfolio's %d; skipping benchmark metrics",
 			p.Pname, p.Benchmark, len(benchmark), len(portfolio),
@@ -595,7 +594,7 @@ func (p *Portfolio) applySplitMetrics(riskFreeRates map[int64]float64) {
 	}
 	tail := len(p.DailyReturns) - cut
 	if cut < minSegmentDays || tail < minSegmentDays {
-		log.Printf(
+		diagf("warn", p.Pname,
 			"portfolio %q: split at %s leaves %d in-sample and %d "+
 				"out-of-sample trading days; fewer than %d either side is "+
 				"too few to score, skipping split metrics",

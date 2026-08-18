@@ -29,10 +29,11 @@ import {
     RunBacktest,
     WriteFile,
 } from "../wailsjs/go/main/App";
-import { main } from "../wailsjs/go/models";
+import { backtest, main } from "../wailsjs/go/models";
 import SimpleForm from "./SimpleForm";
 import type { SimpleForm as SimpleFormData } from "./buildToml";
 import ResultsView from "./ResultsView";
+import ConsolePanel from "./ConsolePanel";
 import ChatPanel from "./ChatPanel";
 import QueryConsole from "./QueryConsole";
 import "./App.css";
@@ -92,6 +93,9 @@ function App() {
     const [running, setRunning] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
     const [results, setResults] = useState<main.RunResult[]>([]);
+    const [diagnostics, setDiagnostics] = useState<backtest.Diagnostic[]>(
+        [],
+    );
     const [errorMsg, setErrorMsg] = useState<string>("");
     const [statusMsg, setStatusMsg] = useState<string>("");
     const [fontSize, setFontSize] = useState<number>(() => {
@@ -321,6 +325,7 @@ function App() {
     async function runConfig(cfgText: string, persist: boolean) {
         setErrorMsg("");
         setResults([]);
+        setDiagnostics([]);
         if (!dbPath) {
             setErrorMsg("Pick a DuckDB file first.");
             return;
@@ -338,8 +343,9 @@ function App() {
         setStatusMsg("Running…");
         try {
             const res = await RunBacktest(cfgText, dbPath, luaPath);
-            setResults(res);
-            setStatusMsg(`Done — ${res.length} result(s)`);
+            setResults(res.results ?? []);
+            setDiagnostics(res.diagnostics ?? []);
+            setStatusMsg(`Done — ${(res.results ?? []).length} result(s)`);
         } catch (e: any) {
             setErrorMsg(String(e?.message ?? e));
             setStatusMsg("");
@@ -533,6 +539,8 @@ function App() {
             <div className="results" style={{ height: resultsHeight * scale }}>
                 <ResultsView results={results} fontSize={fontSize} />
             </div>
+
+            <ConsolePanel diagnostics={diagnostics} fontSize={fontSize} />
 
             <footer className="status">
                 {errorMsg ? (
