@@ -399,6 +399,17 @@ func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
 	return portfolios, nil
 }
 
+// LoadConfigText decodes a config from a string rather than a file, for
+// callers that already hold the text — the UI's editor buffer, and -check
+// wanting to validate something before it is saved anywhere.
+func LoadConfigText(text string) (*Config, error) {
+	var config Config
+	if _, err := toml.Decode(text, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
 func LoadConfig(filepath string) (*Config, error) {
 	var config Config
 	_, err := toml.DecodeFile(filepath, &config)

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -24,6 +25,7 @@ func main() {
 		history     int
 		robustness  bool
 		validate    string
+		check       bool
 		bundlePath  string
 		verifyPath  string
 		research    bool
@@ -69,6 +71,12 @@ func main() {
 		"Run the adversarial checks against a strategy spec (e.g. "+
 			"lua:strategies/rsi.lua) and exit: look-ahead, did-it-trade, "+
 			"cash conservation, degenerate inputs",
+	)
+	flag.BoolVar(
+		&check, "check", false,
+		"Validate the config and exit without running: reversed dates, "+
+			"duplicate tickers, Params a strategy cannot read, swept keys "+
+			"nothing reads, an unusable [Output] block. Opens no database",
 	)
 	flag.StringVar(
 		&bundlePath, "bundle", "",
@@ -123,6 +131,39 @@ func main() {
 		report := backtest.ValidateStrategy(validate, nil)
 		fmt.Print(report.String())
 		if !report.Passed {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Checking a config runs the same construction path a run does and stops
+	// there, so it needs the config but never the market data. That is the
+	// point: a typo is reported in milliseconds rather than after a
+	// simulation.
+	if check {
+		cfg, err := backtest.LoadConfig(configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config check FAILED: %v\n", err)
+			os.Exit(1)
+		}
+		// diagf writes to the log as well as the sink, which is right during
+		// a run and pure duplication here, where the sink IS the output.
+		log.SetOutput(io.Discard)
+		var warnings int
+		backtest.Diagnostics = func(d backtest.Diagnostic) {
+			if d.Level == "warn" {
+				warnings++
+			}
+			where := ""
+			if d.Portfolio != "" {
+				where = d.Portfolio + ": "
+			}
+			fmt.Printf("%-5s %s%s\n", strings.ToUpper(d.Level), where, d.Message)
+		}
+		errors := backtest.CheckConfig(cfg, "")
+		backtest.Diagnostics = nil
+		fmt.Println(backtest.CheckSummary(errors, warnings))
+		if errors > 0 {
 			os.Exit(1)
 		}
 		return

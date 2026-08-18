@@ -585,6 +585,26 @@ Strategy specs:
 
 Note that config loading does no validation of its own: an omitted key simply zero-values, and the error surfaces later — a bad date, a reversed window, negative capital or an unknown strategy spec fails in `ToPortfolio`, an uncovered date range in the runner's coverage check.
 
+**`-check` brings all of that forward.** It runs the same construction path a
+run does and stops there, so it opens no database and simulates no days — a
+whole config is validated in milliseconds against a 2.9 GB file it never
+touches:
+
+```bash
+cd src && go run main.go -check -config ../config.toml
+```
+
+It reports exactly what a run would have reported, only sooner: reversed dates,
+duplicate tickers, negative capital, unknown strategy specs, walk-forward
+schedules with nothing to select between, `Params` a strategy cannot read,
+swept keys nothing reads, duplicate portfolio names, and an unusable `[Output]`
+block. That last one is worth the flag on its own — the output file is opened
+*after* the simulation, so a typo in `fields` is otherwise discovered at the
+end of a run that is now wasted.
+
+Errors exit `1`; warnings alone exit `0`, because a config with warnings still
+runs — it just may not do what was meant.
+
 ### `[portfolio.Costs]`
 
 Trading is free unless you say otherwise. Every field defaults to `0.0`, so
@@ -1300,6 +1320,7 @@ go run main.go -config ../strategy_library.toml
 go run main.go -scan-signals             # screen signals instead of backtesting
 go run main.go -event-study              # what happened after drawdowns, breakouts
 go run main.go -list-strategies          # the gallery: what each script needs and how it fails
+go run main.go -check                    # validate the config and exit; opens no database
 ```
 
 To build a binary:

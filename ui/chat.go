@@ -368,6 +368,12 @@ Strategy spec strings:
 Sizing: "greedy" pours all remaining cash into each ticker in order;
 "equalWeights" splits cash evenly across the portfolio's tickers.
 
+The CLI has -check: it validates a config and exits without running, opening no
+database. It reports the same errors and warnings a run would (reversed dates,
+duplicate tickers, Params a strategy cannot read, swept keys nothing reads, an
+unusable [Output] block) in milliseconds. Suggest it whenever a user is about
+to start a long run or a big sweep. Errors exit 1; warnings alone exit 0.
+
 An optional [Output] block writes results to a file:
 path, format ("txt"|"csv"|"json"), fields (list of result fields), filter
 (Go-style expression like "SharpeRatio > 0.5 && AnnualReturn > 5"),
