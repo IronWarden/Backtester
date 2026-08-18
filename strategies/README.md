@@ -174,6 +174,19 @@ buys and holds realises nothing, so those three read as zero however well it
 did. Selling on the last day makes them describe something — at the cost of one
 final round of fees, which is real and will show in `TotalFees`.
 
+**A misspelled `Params` key is reported, not silently ignored.** Scripts read
+settings as `params.lookback or 126`, so a key spelled wrong falls through to
+the default and the run proceeds with settings you did not choose. The console
+warns when a key you passed is never read by the script. In a **sweep** this
+matters more than it looks: sweep values are merged into `Params`, so a
+mistyped swept key expands to N runs that differ only in a value nothing reads
+— every trial produces identical numbers, and the deflated Sharpe still
+discounts the result for a search that never happened. The warning says so.
+
+The check reads the script's source, so a key composed at runtime
+(`params[name]`) can be reported even though it is used. It is a warning for
+that reason, never a rejection.
+
 **Use `log()`, not `print()`.** Lua's `print` writes to stdout, which is fine
 from the CLI and **invisible in the desktop app** — debugging a strategy there
 with `print` shows you nothing. `log()` goes to the run console under the

@@ -213,6 +213,13 @@ Below the results panel is a "Console" strip that appears when a run produced
 diagnostics. It shows only things the user can act on, each with a level, the
 portfolio it belongs to, and a message:
 - info: a strategy called log(). This is the script talking, not a defect.
+- warn: a [portfolio.Params] key the script never reads. Scripts read settings
+  as "params.lookback or 126", so a misspelled key silently falls back to the
+  default. IN A SWEEP THIS IS SEVERE: sweep values merge into Params, so a
+  mistyped swept key gives N runs differing only in a value nothing reads --
+  every trial identical, while the deflated Sharpe discounts for a search that
+  never happened. If a user reports a sweep where every row looks the same,
+  this is the first thing to check.
 - error: a Lua strategy failed to load, or raised on a given day.
 - error: a portfolio simulated nothing, because it has no tickers or because
   no trading day is covered by every one of them. The message names what each

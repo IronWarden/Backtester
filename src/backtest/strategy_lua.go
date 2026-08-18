@@ -5,6 +5,7 @@ import (
 	"my-backtester/src/data"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -131,6 +132,8 @@ func (s *LuaStrategy) init(
 	registerSignals(L, hist)
 	registerCrossSection(L, p)
 	registerBook(L, p, hist)
+
+	warnUnreadParams(p, s.Path, s.Params)
 
 	if err := L.DoFile(s.Path); err != nil {
 		L.Close()
@@ -284,6 +287,70 @@ func registerOHLCV(
 		L.Push(lua.LString(series[day].Date.Format("2006-01-02")))
 		return 1
 	}))
+}
+
+// warnUnreadParams reports a Params key the script never mentions, which is
+// almost always a misspelling.
+//
+// The failure it catches is silent and expensive. Scripts read their settings
+// as `params.lookback or 126`, so a key spelled wrong does not error — it
+// falls through to the default and the run proceeds with settings the user
+// did not choose. In a SWEEP it is worse: sweep values are merged into Params
+// (see ToPortfolios), so a mistyped sweep key expands to N portfolios that
+// differ only in a value nothing reads. Every trial produces identical
+// numbers, while Trials is N and the deflated Sharpe duly discounts the
+// result for a search that never happened.
+//
+// Checked against the source text rather than by instrumenting the table.
+// Making `params` a recording proxy would fire __index only on missing keys,
+// so it would have to be an empty table backed by a metatable — and gopher-lua
+// is Lua 5.1, with no __pairs, which would silently break any script iterating
+// its own params. A source scan cannot break a script that works.
+//
+// It can miss a key composed at runtime (`params[name]`), so this warns rather
+// than rejects.
+func warnUnreadParams(p *Portfolio, path string, params map[string]any) {
+	if len(params) == 0 {
+		return
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return // DoFile is about to report this properly.
+	}
+	text := string(src)
+
+	unread := make([]string, 0, len(params))
+	for key := range params {
+		if !mentionsParam(text, key) {
+			unread = append(unread, key)
+		}
+	}
+	if len(unread) == 0 {
+		return
+	}
+	sort.Strings(unread)
+
+	for _, key := range unread {
+		msg := fmt.Sprintf(
+			"lua strategy %q: Params key %q is never read by the script, so "+
+				"its value is being ignored — check the spelling",
+			path, key)
+		if p.Trials > 1 {
+			msg += fmt.Sprintf(
+				"; this is a sweep of %d trials, so if %q is a swept key "+
+					"every trial is running identical settings",
+				p.Trials, key)
+		}
+		diagf("warn", p.Pname, "%s", msg)
+	}
+}
+
+// mentionsParam reports whether the source reads this key off the params
+// table, in any of the three spellings Lua allows.
+func mentionsParam(src, key string) bool {
+	return strings.Contains(src, "params."+key) ||
+		strings.Contains(src, `params["`+key+`"]`) ||
+		strings.Contains(src, "params['"+key+"']")
 }
 
 // registerWindow tells a script how long its run is. A strategy is handed

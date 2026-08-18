@@ -1440,6 +1440,7 @@ something to say. It shows only diagnostics a user can act on:
 | level | what produces it |
 |---|---|
 | `info` | a strategy calling `log()` — the script talking, not a defect |
+| `warn` | a `[portfolio.Params]` key the strategy never reads — usually a typo, and in a sweep it means every trial ran identical settings |
 | `error` | a Lua strategy that failed to load, or raised on a given day |
 | `error` | a portfolio that simulated nothing — no tickers, or no trading day covered by all of them, with each ticker's real range named |
 | `warn` | fewer days simulated than the window covers, and which ticker is short |
