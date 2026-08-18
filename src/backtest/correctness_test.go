@@ -1047,3 +1047,34 @@ func TestOverfittingStatsGroupPerConfigBlock(t *testing.T) {
 		}
 	}
 }
+
+// Buy-and-hold spends the whole balance on day one and never sells, so it is
+// fully invested for every simulated day — both exposure figures are 100 by
+// construction, not by measurement.
+func TestBuyAndHoldIsFullyExposed(t *testing.T) {
+	p := runExact(t, "buyAndHold:equalWeights", exactCash,
+		[]string{"AAA"}, map[string][]float64{"AAA": {100, 110, 120, 130}},
+		CostConfig{})
+
+	almost(t, "AvgExposure", p.Metrics.AvgExposure, 100)
+	almost(t, "TimeInMarket", p.Metrics.TimeInMarket, 100)
+}
+
+// A strategy that never places an order has no exposure, and reporting
+// anything else would dress a flat cash line up as a position.
+func TestAStrategyThatNeverTradesHasNoExposure(t *testing.T) {
+	closes := map[string][]float64{"AAA": {100, 110, 120, 130}}
+	hist := histFrom(closes)
+	p, err := InitializePortfolio(
+		exactCash, exactEpoch, exactEpoch.AddDate(0, 0, 4), "idle",
+		[]string{"AAA"},
+		"lua:"+hostScript(t, `function step(day) end`), nil,
+	)
+	if err != nil {
+		t.Fatalf("InitializePortfolio: %v", err)
+	}
+	runOne(p, hist, map[int64]float64{})
+
+	almost(t, "AvgExposure", p.Metrics.AvgExposure, 0)
+	almost(t, "TimeInMarket", p.Metrics.TimeInMarket, 0)
+}

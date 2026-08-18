@@ -338,6 +338,8 @@ export namespace main {
 	    avgCorrelation: number;
 	    cointegratedPairs: number;
 	    turnover: number;
+	    avgExposure: number;
+	    timeInMarket: number;
 	    alpha: number;
 	    beta: number;
 	    trackingError: number;
@@ -376,6 +378,8 @@ export namespace main {
 	        this.avgCorrelation = source["avgCorrelation"];
 	        this.cointegratedPairs = source["cointegratedPairs"];
 	        this.turnover = source["turnover"];
+	        this.avgExposure = source["avgExposure"];
+	        this.timeInMarket = source["timeInMarket"];
 	        this.alpha = source["alpha"];
 	        this.beta = source["beta"];
 	        this.trackingError = source["trackingError"];

@@ -352,7 +352,8 @@ path, format ("txt"|"csv"|"json"), fields (list of result fields), filter
 sort_by, order ("asc"|"desc"), limit.
 Result fields usable in fields/filter/sort_by: PortfolioName, Strategy,
 SharpeRatio, SortinoRatio, MaxDrawdown, AnnualReturn, StandardDev,
-AvgCorrelation, CointegratedPairs, Turnover, Alpha, Beta, TrackingError,
+AvgCorrelation, CointegratedPairs, Turnover, AvgExposure, TimeInMarket,
+Alpha, Beta, TrackingError,
 InformationRatio, UpCapture, DownCapture, InitialCapital, FinalValue, Profit,
 Trials, ExpectedMaxSharpe, DeflatedSharpe.
 
@@ -437,6 +438,13 @@ across asset classes (e.g. ["$SP500", "$CASH"]).
 - Turnover: annualized gross traded notional as a multiple of the portfolio's
   average value. 1.0 means it traded its own value once over a year. Always
   reported, with or without costs — it is what costs are charged against.
+- AvgExposure: mean invested fraction of the book, as a percent.
+- TimeInMarket: percent of simulated days holding any position at all.
+  Read these two TOGETHER - alone neither is interpretable. AvgExposure 50 with
+  TimeInMarket 100 is "half invested every day"; AvgExposure 50 with
+  TimeInMarket 50 is "fully invested half the days". Same average, very
+  different strategies. Both are 0 for a portfolio that never traded, which is
+  the honest reading of a flat equity curve.
 
 Benchmark-relative metrics, computed only when the portfolio sets Benchmark
 and that ticker's data covers the whole window (otherwise all zero):

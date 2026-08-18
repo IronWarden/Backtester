@@ -310,3 +310,31 @@ func TestNoEdgeSearchDoesNotSurviveDeflation(t *testing.T) {
 			"one found by searching (%.4f)", alone, deflated)
 	}
 }
+
+// The two exposure figures exist to be read together: the same average can
+// come from a strategy that is always half invested and one that is fully
+// invested half the time, and only TimeInMarket separates them.
+func TestExposureStatsSeparateDepthFromDuration(t *testing.T) {
+	cases := []struct {
+		name            string
+		exposure        []float64
+		wantAvg, wantIn float64
+	}{
+		{"always fully invested", []float64{1, 1, 1, 1}, 100, 100},
+		{"never invested", []float64{0, 0, 0, 0}, 0, 0},
+		{"always half invested", []float64{0.5, 0.5, 0.5, 0.5}, 50, 100},
+		{"fully invested half the days", []float64{1, 0, 1, 0}, 50, 50},
+		{"no simulated days", nil, 0, 0},
+		// Float dust left by a full exit is not a holding.
+		{"dust is not a position", []float64{1, 1e-12, 1, 1e-12}, 50, 50},
+	}
+	for _, tc := range cases {
+		avg, in := GetExposureStats(tc.exposure)
+		if math.Abs(avg-tc.wantAvg) > 1e-9 {
+			t.Errorf("%s: AvgExposure = %v, want %v", tc.name, avg, tc.wantAvg)
+		}
+		if math.Abs(in-tc.wantIn) > 1e-9 {
+			t.Errorf("%s: TimeInMarket = %v, want %v", tc.name, in, tc.wantIn)
+		}
+	}
+}

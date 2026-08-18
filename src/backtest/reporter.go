@@ -46,6 +46,8 @@ var resultFields = []string{
 	"AvgCorrelation",
 	"CointegratedPairs",
 	"Turnover",
+	"AvgExposure",
+	"TimeInMarket",
 	"Alpha",
 	"Beta",
 	"TrackingError",
@@ -79,6 +81,10 @@ func resultValue(r Result, name string) (any, bool) {
 		return float64(r.Metrics.CointegratedPairs), true
 	case "Turnover":
 		return r.Metrics.Turnover, true
+	case "AvgExposure":
+		return r.Metrics.AvgExposure, true
+	case "TimeInMarket":
+		return r.Metrics.TimeInMarket, true
 	case "Alpha":
 		return r.Metrics.Alpha, true
 	case "Beta":

@@ -39,6 +39,8 @@ type RunResult struct {
 	AvgCorrelation    float64 `json:"avgCorrelation"`
 	CointegratedPairs int     `json:"cointegratedPairs"`
 	Turnover          float64 `json:"turnover"`
+	AvgExposure       float64 `json:"avgExposure"`
+	TimeInMarket      float64 `json:"timeInMarket"`
 	Alpha             float64 `json:"alpha"`
 	Beta              float64 `json:"beta"`
 	TrackingError     float64 `json:"trackingError"`
@@ -178,6 +180,8 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput
 			AvgCorrelation:    r.Metrics.AvgCorrelation,
 			CointegratedPairs: r.Metrics.CointegratedPairs,
 			Turnover:          r.Metrics.Turnover,
+			AvgExposure:       r.Metrics.AvgExposure,
+			TimeInMarket:      r.Metrics.TimeInMarket,
 			Alpha:             r.Metrics.Alpha,
 			Beta:              r.Metrics.Beta,
 			TrackingError:     r.Metrics.TrackingError,

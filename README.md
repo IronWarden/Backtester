@@ -1468,6 +1468,16 @@ Reported metrics per run:
 - `AnnualReturn` — CAGR derived from the compounded daily return series.
 - `StandardDev` — annualized stdev of daily returns.
 - `Turnover` — annualized gross traded notional as a multiple of the portfolio's average value; `1.0` means it traded its own value once over a year. Both sides of a round trip count. Reported whether or not `[portfolio.Costs]` is set.
+- `AvgExposure` — the mean invested fraction of the book, as a percent.
+- `TimeInMarket` — the percent of simulated days holding any position at all.
+
+The last two are shown side by side because **neither is interpretable alone**.
+An `AvgExposure` of 50% means "half invested every day" when `TimeInMarket` is
+100%, and "fully invested half the days" when `TimeInMarket` is 50% — the same
+average return per day, but very different strategies, and only the second is
+sitting in cash waiting for something. Both read 0 for a portfolio that never
+traded, which is the honest reading of a flat equity curve and is easy to
+mistake for a 0% return.
 
 With a `Benchmark` configured, additionally:
 

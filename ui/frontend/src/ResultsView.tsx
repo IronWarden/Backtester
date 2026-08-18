@@ -570,6 +570,12 @@ export default function ResultsView({ results, fontSize }: Props) {
                 <th className="num">Annual %</th>
                 <th className="num">Std Dev</th>
                 <th className="num">Turnover</th>
+                <th className="num" title="Mean invested fraction of the book">
+                  Exposure %
+                </th>
+                <th className="num" title="Share of simulated days holding anything">
+                  In Market %
+                </th>
                 <th className="num">Avg Corr</th>
                 <th className="num">Coint Pairs</th>
                 {swept && (
@@ -622,6 +628,8 @@ export default function ResultsView({ results, fontSize }: Props) {
                     <td className="num">{r.annualReturn.toFixed(2)}</td>
                     <td className="num">{r.standardDev.toFixed(4)}</td>
                     <td className="num">{r.turnover.toFixed(2)}</td>
+                    <td className="num">{r.avgExposure.toFixed(1)}</td>
+                    <td className="num">{r.timeInMarket.toFixed(1)}</td>
                     <td className="num">{r.avgCorrelation.toFixed(2)}</td>
                     <td className="num">{r.cointegratedPairs}</td>
                     {swept && (

@@ -31,6 +31,47 @@ type Metrics struct {
 	InformationRatio float64 // active return per unit of tracking error
 	UpCapture        float64 // % of benchmark's gain captured on its up days
 	DownCapture      float64 // % of benchmark's loss taken on its down days
+
+	// AvgExposure and TimeInMarket read the per-day invested fraction the
+	// engine already records for the random-timing null (see significance.go).
+	// They answer different questions and are reported together because
+	// neither is interpretable alone: an AvgExposure of 50% is "half invested
+	// every day" when TimeInMarket is 100%, and "fully invested half the
+	// days" when TimeInMarket is 50%. Those are very different strategies
+	// with identical returns-per-day statistics.
+	//
+	// Both are percentages. A portfolio that never buys reports 0 for both,
+	// which is the honest reading of a flat equity curve.
+	AvgExposure  float64 // mean invested fraction of the book, %
+	TimeInMarket float64 // % of simulated days holding anything at all
+}
+
+// GetExposureStats summarises the per-day invested fractions: the mean, and
+// the share of days with any position at all. Both come back as percentages.
+//
+// Pure, and defined on an empty series as 0/0 rather than NaN — a portfolio
+// that produced no days has no exposure to report, and a NaN here would
+// propagate into the results table.
+//
+// A day counts as "in the market" above a hair over zero rather than at
+// exactly zero: the invested fraction is computed by subtraction from the
+// book, so a fully-exited position can leave a float dusting behind that is
+// not a holding.
+func GetExposureStats(exposure []float64) (avgExposure, timeInMarket float64) {
+	if len(exposure) == 0 {
+		return 0, 0
+	}
+	const held = 1e-9
+	var sum float64
+	var days int
+	for _, e := range exposure {
+		sum += e
+		if e > held {
+			days++
+		}
+	}
+	n := float64(len(exposure))
+	return 100.0 * sum / n, 100.0 * float64(days) / n
 }
 
 // GetTurnover annualizes gross traded notional against the portfolio's
@@ -490,6 +531,7 @@ func (p *Portfolio) GetBacktestingData(
 		CointegratedPairs: cointegratedPairs,
 		Turnover:          GetTurnover(p.tradedNotional, p.PortfolioCloseValues),
 	}
+	metrics.AvgExposure, metrics.TimeInMarket = GetExposureStats(p.Exposure)
 	p.Metrics = metrics
 }
 
