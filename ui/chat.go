@@ -232,7 +232,7 @@ sitting there.
 [[portfolio]]
 Name        = "My Portfolio"      # shown in results
 BuyingPower = 100000.0            # starting cash
-StartDate   = "2015-01-01"        # YYYY-MM-DD
+StartDate   = "2015-01-01"        # YYYY-MM-DD; EndDate must not precede it
 EndDate     = "2025-01-01"
 Tickers     = ["AAPL", "MSFT"]    # must all have data covering the window
 Strategy    = "buyAndHold:equalWeights"   # optional; see specs below

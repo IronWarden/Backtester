@@ -565,8 +565,8 @@ Field reference:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `Name` | string | Identifier shown in metric output and results files. |
-| `BuyingPower` | float | Starting cash. |
-| `StartDate` / `EndDate` | string | `YYYY-MM-DD`. Both must be fully covered by every ticker's data or the run is rejected with an error naming the offending ticker and its real range. |
+| `BuyingPower` | float | Starting cash. Must not be negative; `0` is allowed, since `Deposit` can fund a portfolio after it starts. |
+| `StartDate` / `EndDate` | string | `YYYY-MM-DD`. `EndDate` must not precede `StartDate` — a reversed window is rejected by name rather than crashing the run. Both must be fully covered by every ticker's data or the run is rejected with an error naming the offending ticker and its real range. |
 | `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. |
 | `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
 | `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. |
@@ -583,7 +583,7 @@ Strategy specs:
 | `smaCross:<short>:<long>:<buyType>` | Built-in moving-average crossover. |
 | `lua:<path>` | Run a Lua strategy file, e.g. `lua:strategies/sma_cross.lua`. |
 
-Note that config loading does no validation of its own: an omitted key simply zero-values, and the error surfaces later — a bad date or an unknown strategy spec fails in `ToPortfolio`, an uncovered date range in the runner's coverage check.
+Note that config loading does no validation of its own: an omitted key simply zero-values, and the error surfaces later — a bad date, a reversed window, negative capital or an unknown strategy spec fails in `ToPortfolio`, an uncovered date range in the runner's coverage check.
 
 ### `[portfolio.Costs]`
 

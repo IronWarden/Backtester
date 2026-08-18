@@ -1,6 +1,7 @@
 package backtest
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"my-backtester/src/data"
@@ -101,6 +102,24 @@ func InitializePortfolio(
 	strategySpec string,
 	strategyParams map[string]any,
 ) (*Portfolio, error) {
+	// A window that ends before it starts makes days negative, and
+	// make([]T, 0, negative) panics with "makeslice: cap out of range" — so
+	// swapping two dates, or typing 2019 for 2029, used to crash the run
+	// rather than report a config mistake. The CLI died with a stack trace;
+	// the UI caught the panic and showed the user the stack instead of the
+	// typo.
+	if endTime.Before(startTime) {
+		return nil, fmt.Errorf(
+			"portfolio %q: EndDate %s is before StartDate %s",
+			pname, endTime.Format("2006-01-02"), startTime.Format("2006-01-02"))
+	}
+	// Negative capital is not a portfolio. Zero is left alone: Deposit exists,
+	// so starting empty and funding later is a shape the engine supports.
+	if buyingPower < 0 {
+		return nil, fmt.Errorf(
+			"portfolio %q: BuyingPower %.2f is negative", pname, buyingPower)
+	}
+
 	strat, err := NewStrategy(strategySpec, strategyParams)
 	if err != nil {
 		return nil, err
