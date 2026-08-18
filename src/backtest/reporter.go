@@ -33,8 +33,13 @@ type Reporter struct {
 	buf     []Result
 }
 
-// resultFields lists every value addressable from a filter expression or
-// fields list. The same names are used in `filter` and `fields`.
+// resultFields lists every value addressable from a filter expression, a
+// fields list or sort_by. resultValue is the authority on what actually
+// resolves; this list exists to name the alternatives when a user gets one
+// wrong, which is the difference between "unknown output field" and a message
+// they can act on. TestResultFieldsMatchResultValue keeps the two in step —
+// this list had already drifted, missing Trials, ExpectedMaxSharpe and
+// DeflatedSharpe, while nothing read it.
 var resultFields = []string{
 	"PortfolioName",
 	"Strategy",
@@ -57,7 +62,13 @@ var resultFields = []string{
 	"InitialCapital",
 	"FinalValue",
 	"Profit",
+	"Trials",
+	"ExpectedMaxSharpe",
+	"DeflatedSharpe",
 }
+
+// knownFields renders the addressable names for an error message.
+func knownFields() string { return strings.Join(resultFields, ", ") }
 
 func resultValue(r Result, name string) (any, bool) {
 	switch name {
@@ -104,7 +115,10 @@ func resultValue(r Result, name string) (any, bool) {
 	case "Profit":
 		return r.FinalValue - r.InitialCapital, true
 	case "Trials":
-		return r.Trials, true
+		// float64 like every other number here: evalBinary compares float64s
+		// and lessByField sorts them, so an int makes "Trials > 5" fail with
+		// a type error and sort_by = "Trials" silently not sort.
+		return float64(r.Trials), true
 	case "ExpectedMaxSharpe":
 		return r.ExpectedMaxSharpe, true
 	case "DeflatedSharpe":
@@ -137,7 +151,8 @@ func NewReporter(cfg *OutputConfig) (*Reporter, error) {
 	}
 	for _, f := range fields {
 		if _, ok := resultValue(Result{}, f); !ok {
-			return nil, fmt.Errorf("unknown output field %q", f)
+			return nil, fmt.Errorf(
+				"unknown output field %q; known fields are %s", f, knownFields())
 		}
 	}
 
@@ -156,7 +171,9 @@ func NewReporter(cfg *OutputConfig) (*Reporter, error) {
 	sortBy := cfg.SortBy
 	if sortBy != "" {
 		if _, ok := resultValue(Result{}, sortBy); !ok {
-			return nil, fmt.Errorf("unknown sort_by field %q", sortBy)
+			return nil, fmt.Errorf(
+				"unknown sort_by field %q; known fields are %s",
+				sortBy, knownFields())
 		}
 	}
 
@@ -367,7 +384,9 @@ func validateFilter(e ast.Expr) error {
 				return true
 			}
 			if _, ok := resultValue(Result{}, v.Name); !ok {
-				walkErr = fmt.Errorf("unknown identifier %q", v.Name)
+				walkErr = fmt.Errorf(
+					"unknown identifier %q; known fields are %s",
+					v.Name, knownFields())
 				return false
 			}
 		case *ast.CallExpr, *ast.SelectorExpr, *ast.IndexExpr:

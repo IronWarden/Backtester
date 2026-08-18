@@ -356,6 +356,8 @@ AvgCorrelation, CointegratedPairs, Turnover, AvgExposure, TimeInMarket,
 Alpha, Beta, TrackingError,
 InformationRatio, UpCapture, DownCapture, InitialCapital, FinalValue, Profit,
 Trials, ExpectedMaxSharpe, DeflatedSharpe.
+An unrecognised name is rejected when the config loads and the error lists the
+valid ones, so a typo fails immediately rather than silently emitting nothing.
 
 ## Lua strategy API
 A strategy script must define a global function step(day). day is a

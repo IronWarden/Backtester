@@ -1242,6 +1242,11 @@ limit   = 20                                 # 0 means unlimited
 ```
 
 `filter` is a Go-style boolean expression over the same field names as `fields`.
+`fields`, `filter` and `sort_by` all draw on one list — every metric above,
+plus `PortfolioName`, `Strategy`, `InitialCapital`, `FinalValue`, `Profit`,
+`Trials`, `ExpectedMaxSharpe` and `DeflatedSharpe`. An unrecognised name is
+rejected when the config loads, and the error names the valid alternatives
+rather than leaving you to guess.
 
 ## Running
 
