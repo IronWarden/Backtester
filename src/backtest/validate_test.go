@@ -118,10 +118,12 @@ func TestNeverTradingIsCaught(t *testing.T) {
 	}
 }
 
-// Buying a ticker outside the portfolio's list makes the cash vanish: the
-// position is never valued, so the equity curve simply loses it. That is T9, and
-// a typo'd symbol is enough to cause it.
-func TestCashLostToAnUnlistedTickerIsCaught(t *testing.T) {
+// A typo'd ticker used to make the cash vanish: Buy opened a position under
+// the unlisted key, GetPortfolioValue never valued it, and the equity curve
+// simply lost the money. Since T9 the order is refused instead, so the cash is
+// conserved — and the strategy still fails validation, now for the honest
+// reason that it never placed a trade.
+func TestTypoedTickerNoLongerLosesCash(t *testing.T) {
 	typo := luaSpec(t, `
 function step(day)
     if day == 1 then
@@ -130,15 +132,43 @@ function step(day)
 end
 `)
 	report := ValidateStrategy(typo, nil)
-	f := findingFor(t, report, "cash conserved")
-	if !f.Failed {
-		t.Errorf("cash lost to an unlisted ticker passed: %s", f.Detail)
+
+	if f := findingFor(t, report, "cash conserved"); f.Failed {
+		t.Errorf("a refused order still lost cash: %s", f.Detail)
 	}
-	if !strings.Contains(f.Detail, "NOTINLIST") {
-		t.Errorf("the finding does not name the offending ticker: %q", f.Detail)
+	if f := findingFor(t, report, "placed trades"); !f.Failed {
+		t.Errorf("a strategy whose only order was refused should report no "+
+			"trades: %s", f.Detail)
 	}
 	if report.Passed {
-		t.Error("a strategy that loses cash passed validation")
+		t.Error("a strategy that never trades passed validation")
+	}
+}
+
+// The cash-conservation check keeps its teeth even though a script can no
+// longer trip it: Portfolio.Buy will still open a position under any key, so
+// the backstop has to stay honest for every other route into it.
+func TestUnlistedPositionIsStillDetected(t *testing.T) {
+	p := &Portfolio{
+		Tickers: []string{"AAA", "BBB"},
+		Positions: map[string]*Position{
+			"AAA":       {Amount: 10, AveragePrice: 100},
+			"NOTINLIST": {Amount: 3, AveragePrice: 50},
+		},
+	}
+	ticker, shares, found := unlistedPosition(p)
+	if !found {
+		t.Fatal("a position outside the ticker list went undetected")
+	}
+	if ticker != "NOTINLIST" || shares != 3 {
+		t.Errorf("got %q x%v, want NOTINLIST x3", ticker, shares)
+	}
+
+	// An empty position under an unlisted key is not a leak: nothing was
+	// bought, so no cash left.
+	p.Positions["NOTINLIST"].Amount = 0
+	if _, _, found := unlistedPosition(p); found {
+		t.Error("a zero-share position was reported as lost cash")
 	}
 }
 

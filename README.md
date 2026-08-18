@@ -1487,7 +1487,7 @@ Each result additionally carries time-sliced views of the same run, available to
 
 Lua is the intended route — no rebuild, and the engine handles the day loop.
 
-1. Copy a file from `strategies/` and edit it. A strategy is one global `step(day)` function, called once per trading day with `day` counting from 0; the engine provides `price()`, `sma()`, `rsi()`, `cash()`, `position()`, `buy()`, `buy_max()`, `sell()`, `sell_all()`, and the `tickers` / `params` globals. Full API, patterns, and gotchas: [`strategies/README.md`](strategies/README.md).
+1. Copy a file from `strategies/` and edit it. A strategy is one global `step(day)` function, called once per trading day with `day` counting from 0; the engine provides `price()`, `sma()`, `rsi()`, `cash()`, `position()`, `buy()`, `buy_max()`, `sell()`, `sell_all()`, and the `tickers` / `params` globals. Orders may only name a ticker from the `tickers` global — a typo is refused and reported in the run console rather than silently burning the cash. Full API, patterns, and gotchas: [`strategies/README.md`](strategies/README.md).
 2. Point a portfolio at it with `Strategy = "lua:strategies/your_file.lua"` and pass any settings in a `[portfolio.Params]` block.
 3. Add it to `shippedStrategies()` in `src/backtest/strategies_library_test.go`, which runs every shipped strategy against synthetic data and fails if it errors, overspends, or never trades.
 

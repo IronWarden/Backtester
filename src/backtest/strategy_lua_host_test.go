@@ -187,10 +187,10 @@ func TestLuaHostWrongArgumentTypes(t *testing.T) {
 	p, _ := runHostScript(t, `
 function step(day)
   if day ~= 0 then return end
-  -- Strings, tables, booleans and nils where numbers are expected.
-  -- A nil *ticker* is deliberately absent here: buy(nil, 1, 100, day)
-  -- currently fills against the empty-string ticker and destroys the
-  -- cash. See T9 in TASKS.md.
+  -- Strings, tables, booleans and nils where numbers are expected, and a
+  -- nil ticker, which used to fill against the empty-string key and destroy
+  -- the cash (T9).
+  buy(nil, 1, 100, day)
   buy("AAA", "many", "cheap", day)
   buy({}, {}, {}, {})
   buy_max(true, "free", 12345, "day")
@@ -209,6 +209,47 @@ end
 `, nil)
 
 	assertNoTrades(t, p)
+}
+
+// A ticker the portfolio does not list is an error, not an order. Buy will
+// open a position under any key, but GetPortfolioValue only iterates
+// p.Tickers — so a position under a typo'd symbol is never valued and the
+// cash leaves the equity curve permanently. Before T9 this filled silently.
+func TestLuaHostRejectsUnknownTickers(t *testing.T) {
+	p, logs := runHostScript(t, `
+function step(day)
+  if day ~= 0 then return end
+  buy(nil, 1, 100, day)         -- nil reads as the empty ticker
+  buy("APPL", 1, 100, day)      -- a plausible typo for AAPL
+  buy_max("ZZZ", 100, "greedy", day)
+  sell("ZZZ", 1, 100, day)
+  sell_all("ZZZ", 100, day)
+end
+`, nil)
+
+	assertNoTrades(t, p)
+
+	// The valid list is what turns "rejected" into "you meant AAA or BBB".
+	for _, want := range []string{`"APPL"`, "buy_max", "AAA", "BBB"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("rejection log does not mention %s: %s", want, logs)
+		}
+	}
+}
+
+// A typo inside a day loop must not say the same thing on every trading day:
+// the message is reported once per function-and-ticker pair.
+func TestLuaHostReportsAnUnknownTickerOnce(t *testing.T) {
+	_, logs := runHostScript(t, `
+function step(day)
+  buy("APPL", 1, 100, day)
+end
+`, nil)
+
+	if n := strings.Count(logs, `buy("APPL")`); n != 1 {
+		t.Errorf("unknown ticker reported %d times across %d days, want 1: %s",
+			n, hostDays, logs)
+	}
 }
 
 // The read-only accessors are the ones scripts call in tight loops, so

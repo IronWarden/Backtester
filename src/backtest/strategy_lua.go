@@ -122,7 +122,7 @@ func (s *LuaStrategy) init(
 
 	registerIndicators(L, hist)
 	registerOHLCV(L, hist)
-	registerTrading(L, p, hist)
+	registerTrading(L, p, hist, s.Path)
 	// Additive only — see strategy_lua_signals.go. No global registered above
 	// is replaced, so every existing script behaves exactly as it did.
 	registerSignals(L, hist)
@@ -285,7 +285,45 @@ func registerOHLCV(
 
 func registerTrading(
 	L *lua.LState, p *Portfolio, hist map[string][]data.AssetData,
+	script string,
 ) {
+	// resolveTicker is the gate on every order function. The order functions
+	// used to read their ticker with L.ToString(1), which yields "" for a nil
+	// or non-string argument, and Buy will open a position under any key —
+	// including "". GetPortfolioValue iterates p.Tickers, so such a position is
+	// never valued: the cash left the equity curve and never came back, and a
+	// typo'd ticker read as a permanent drag on returns rather than as an
+	// error (T9).
+	//
+	// Rejecting an unknown ticker breaks nothing that ever worked. A script
+	// trading outside its Tickers list was already losing the money silently,
+	// so there is no behaviour here worth preserving.
+	//
+	// Reported once per function-and-ticker pair: a typo inside a day loop
+	// would otherwise say the same thing on every trading day.
+	valid := make(map[string]bool, len(p.Tickers))
+	for _, t := range p.Tickers {
+		valid[t] = true
+	}
+	warned := make(map[string]bool)
+	resolveTicker := func(L *lua.LState, fn string) (string, bool) {
+		ticker := L.ToString(1)
+		if valid[ticker] {
+			return ticker, true
+		}
+		key := fn + "\x00" + ticker
+		if !warned[key] {
+			warned[key] = true
+			// Naming the valid list is the point: a typo is the common case,
+			// and seeing what was expected next to what was asked for is what
+			// makes it obvious.
+			diagf("error", p.Pname,
+				"lua strategy %q: %s(%q) — not in Tickers %v; order ignored",
+				script, fn, ticker, p.Tickers)
+		}
+		return "", false
+	}
+
 	dateOf := func(ticker string, day int) time.Time {
 		if day < 0 {
 			return time.Time{}
@@ -321,7 +359,11 @@ func registerTrading(
 	// Sizes the order with generalBuy and submits it. Returns the share
 	// count it actually placed (caller can ignore).
 	L.SetGlobal("buy_max", L.NewFunction(func(L *lua.LState) int {
-		ticker := L.ToString(1)
+		ticker, ok := resolveTicker(L, "buy_max")
+		if !ok {
+			L.Push(lua.LNumber(0))
+			return 1
+		}
 		price := float64(L.ToNumber(2))
 		buyType := L.OptString(3, "equalWeights")
 		day := L.OptInt(4, -1)
@@ -333,7 +375,10 @@ func registerTrading(
 
 	// buy(ticker, amount, price, [day=-1]) — caller-sized buy.
 	L.SetGlobal("buy", L.NewFunction(func(L *lua.LState) int {
-		ticker := L.ToString(1)
+		ticker, ok := resolveTicker(L, "buy")
+		if !ok {
+			return 0
+		}
 		amount := float64(L.ToNumber(2))
 		price := float64(L.ToNumber(3))
 		day := L.OptInt(4, -1)
@@ -343,7 +388,10 @@ func registerTrading(
 
 	// sell(ticker, amount, price, [day=-1]) — caller-sized sell.
 	L.SetGlobal("sell", L.NewFunction(func(L *lua.LState) int {
-		ticker := L.ToString(1)
+		ticker, ok := resolveTicker(L, "sell")
+		if !ok {
+			return 0
+		}
 		amount := float64(L.ToNumber(2))
 		price := float64(L.ToNumber(3))
 		day := L.OptInt(4, -1)
@@ -353,7 +401,10 @@ func registerTrading(
 
 	// sell_all(ticker, price, [day=-1]) — closes the entire position.
 	L.SetGlobal("sell_all", L.NewFunction(func(L *lua.LState) int {
-		ticker := L.ToString(1)
+		ticker, ok := resolveTicker(L, "sell_all")
+		if !ok {
+			return 0
+		}
 		price := float64(L.ToNumber(2))
 		day := L.OptInt(3, -1)
 		if pos, _ := p.FindPosition(ticker); pos != nil {

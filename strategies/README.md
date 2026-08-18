@@ -157,6 +157,13 @@ accident.
 | `target_weights(day, {T = fraction, …})` | Move the whole book to those fractions of equity: sells run first so the proceeds fund the buys, and buys are clamped to available cash. A ticker absent from the table is a target of **zero**, so `target_weights(day, {})` goes to cash. |
 | `rank(day, fn)` | Score every ticker with `fn(ticker, day)` and return `{ {ticker=…, value=…}, … }` **sorted strongest first**. Tickers whose `fn` returns `nil` are left out rather than ranked last. |
 
+Every order function requires a ticker from the `tickers` global. A ticker
+the portfolio does not list — a typo, or a `nil` that reads as the empty
+string — is **refused**, and the run console says which function asked for
+what alongside the list it should have come from. It used to fill: the
+position went in under the unlisted key, was never valued, and the cash
+disappeared from the equity curve for the rest of the run.
+
 Always pass `day` as the last argument — it timestamps the trade in the
 transaction log.
 
@@ -223,9 +230,11 @@ left alone for now so there is an example of the long-hand form to copy from.
   rather than rejected. See the main README's `[portfolio.Costs]` section.
 - **`price()` returns 0, not `nil`, out of range** — guard with `> 0`
   rather than `~= nil`.
-- **Errors are logged, not raised.** If a strategy misbehaves, check the
-  app's console output; a runtime error means `step` stops for that day but
-  the backtest continues.
+- **Only tickers in the `tickers` global can be traded.** Anything else is
+  refused and reported; see "Account and orders" above.
+- **Errors are logged, not raised.** If a strategy misbehaves, check the run
+  console in the UI (or `backtester.log` under the CLI's `-debug`); a runtime
+  error means `step` stops for that day but the backtest continues.
 - **`then` is a Lua keyword** — do not name a variable `then`.
 
 ### Testing a new strategy

@@ -325,6 +325,26 @@ func checkTraded(spec string, params map[string]any) Finding {
 // enough to cause it. And the reported final value must equal cash plus the
 // marked-to-market book; anything else means the two halves of the accounting
 // disagree.
+// unlistedPosition finds a held position under a ticker the portfolio does not
+// list. Since T9 the Lua order functions refuse such a ticker, so this can no
+// longer be reached from a script — it stays as the backstop for every other
+// route into Portfolio.Buy, which will still open a position under any key.
+func unlistedPosition(p *Portfolio) (string, float64, bool) {
+	known := make(map[string]bool, len(p.Tickers))
+	for _, t := range p.Tickers {
+		known[t] = true
+	}
+	for ticker, pos := range p.Positions {
+		if pos == nil || pos.Amount == 0 {
+			continue
+		}
+		if !known[ticker] {
+			return ticker, pos.Amount, true
+		}
+	}
+	return "", 0, false
+}
+
 func checkCashConservation(spec string, params map[string]any) Finding {
 	f := Finding{Check: "cash conserved", Fatal: true}
 	hist := validationHist(validationDays, validationSeed)
@@ -335,23 +355,14 @@ func checkCashConservation(spec string, params map[string]any) Finding {
 		return f
 	}
 
-	known := make(map[string]bool, len(p.Tickers))
-	for _, t := range p.Tickers {
-		known[t] = true
-	}
-	for ticker, pos := range p.Positions {
-		if pos == nil || pos.Amount == 0 {
-			continue
-		}
-		if !known[ticker] {
-			f.Failed = true
-			f.Detail = fmt.Sprintf(
-				"holds %.4f shares of %q, which is not in the portfolio's "+
-					"ticker list — that position is never valued, so the cash "+
-					"that bought it has vanished from the equity curve",
-				pos.Amount, ticker)
-			return f
-		}
+	if ticker, shares, found := unlistedPosition(p); found {
+		f.Failed = true
+		f.Detail = fmt.Sprintf(
+			"holds %.4f shares of %q, which is not in the portfolio's "+
+				"ticker list — that position is never valued, so the cash "+
+				"that bought it has vanished from the equity curve",
+			shares, ticker)
+		return f
 	}
 
 	last := validationDays - 1

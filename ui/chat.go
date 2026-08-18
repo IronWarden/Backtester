@@ -373,6 +373,13 @@ Globals available:
 - buy_max(t, price, [buyType="equalWeights"], [day]) -- auto-sized buy
 - sell(t, amount, price, [day])
 - sell_all(t, price, [day])
+All four order functions REFUSE a ticker that is not in the tickers global -
+a typo, or a nil that reads as the empty string. The order is ignored and the
+run console reports it, naming the function, the ticker asked for and the
+valid list. (Before this it filled: the position went in under the unlisted
+key, was never valued, and the cash vanished from the equity curve.) So if a
+user reports money disappearing or a strategy doing nothing, check the console
+for a refused ticker.
 Signal primitives (these return a SECOND value saying whether the answer is
 real -- 'local r, ok = roc(t, day, 21)'; a false ok means not enough history,
 so do not treat the 0 as a signal):
