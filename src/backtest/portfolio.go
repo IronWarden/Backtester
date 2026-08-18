@@ -219,14 +219,14 @@ func (p *Portfolio) Buy(
 	// fee is clamped down to the largest size whose fee the balance does
 	// cover, exactly as a broker filling against available cash would.
 	//
-	// That reasoning holds for commission only. Slippage inflates the notional
-	// itself, so a spend-it-all order never reaches the clamp below — it is
-	// rejected here, and the strategy silently stops trading, which is the
-	// outcome the paragraph above says must not happen. Any non-zero
-	// slippage_bps therefore leaves buyAndHold flat in cash for the whole run.
-	// Known and unfixed: see task T13, which has the repro and the options.
-	// Do not "fix" this by loosening the gate without reading it — the choice
-	// changes every existing backtest that sets slippage_bps.
+	// Slippage is kept out of this gate deliberately. It inflates the notional
+	// itself, so a spend-it-all order sized against the quoted price used to be
+	// rejected here and the strategy silently stopped trading — exactly the
+	// outcome the paragraph above says must not happen (T13). The fix is on the
+	// sizing side: generalBuy asks BuyFill what a share really costs, so the
+	// order that arrives here is one the cash can already cover. Do not loosen
+	// this gate to compensate; an order that genuinely overshoots is still an
+	// error and must not fill.
 	if notional > p.BuyingPower*(1.0+1e-9) {
 		return
 	}

@@ -235,10 +235,10 @@ func TestALaterStartSkipsTheEarlyWindow(t *testing.T) {
 // moves, the cost curve is measuring two things at once and its drop cannot be
 // read as friction — so the report has to say so.
 //
-// This is not hypothetical: it fires on the shipped default config, where one
-// order of five is rejected at 5 bps and the final value falls from 590k to 69k.
-// That is T13, and the battery is how it becomes visible in a run rather than in
-// a task file.
+// This is not hypothetical: before T13 was fixed it fired on the shipped default
+// config, where one order of five was rejected at 5 bps and the final value fell
+// from 590k to 69k. The battery is how that becomes visible in a run rather than
+// in a task file, so the check stays after the bug that motivated it.
 func TestCostsChangingBehaviourIsFlagged(t *testing.T) {
 	r := Robustness{
 		Computed: true, BreakEvenBps: -1,

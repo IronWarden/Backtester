@@ -603,11 +603,15 @@ close, sells below it — and the position's cost basis records the slipped
 price. Commission is charged per filled order and treated as a cash expense
 rather than capitalized into the basis.
 
-Neither can overdraw the account. An order whose commission the balance
-cannot cover does not fill at all. An order sized against the whole balance
-(what `buy_max` and most Lua strategies do) still fills: it is clamped down
-to the largest size whose fee the balance also covers, rather than being
-rejected for the fee alone.
+Neither can overdraw the account, and neither stops a strategy trading.
+Orders are sized against the price they will actually fill at, so a strategy
+spending its whole balance asks for a quantity the cash covers even at high
+slippage — `slippage_bps = 100` buys about 1% fewer shares, it does not buy
+zero. On top of that, an order sized against the whole balance (what
+`buy_max` and most Lua strategies do) is clamped down to the largest size
+whose commission the balance also covers, rather than being rejected for the
+fee alone. An order that genuinely overshoots the balance still does not
+fill.
 
 Costs make high-turnover strategies look worse, which is the point — the
 `Turnover` metric reports how much trading each strategy is doing, so the two

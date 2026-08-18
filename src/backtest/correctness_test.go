@@ -204,13 +204,87 @@ func TestCommissionIsChargedOnceAtEntry(t *testing.T) {
 	almost(t, "final value", finalValue(t, p), 14_985.0)
 }
 
-// The equivalent end-to-end test for slippage is deliberately absent: it
-// fails, and it fails because the engine is wrong rather than because the
-// test is. Any non-zero slippage_bps makes the built-in buy-and-hold
-// strategies buy nothing at all, so the portfolio holds cash for the whole
-// run. See task T13 in TASKS.md, which carries the repro and the failing
-// test; fixing it changes the cost model's observable behaviour, so it is
-// not a change to make unattended.
+// Slippage must buy fewer shares, not stop the strategy trading. Sizing was
+// done against the quoted price while the fill happened at the slipped one, so
+// the order overshot the cash by exactly the slippage and Buy rejected it: any
+// non-zero slippage_bps left buy-and-hold in 100% cash for the whole run with
+// nothing logged (T13). Sizing against BuyFill is the fix.
+func TestSlippageBuysFewerShares(t *testing.T) {
+	p := runExact(t, "buyAndHold:equalWeights", exactCash,
+		[]string{"AAA"}, map[string][]float64{"AAA": {100, 100}},
+		CostConfig{SlippageBps: 100.0})
+
+	pos, ok := p.Positions["AAA"]
+	if !ok {
+		t.Fatal("slippage stopped the strategy trading at all")
+	}
+	almost(t, "fill price", pos.AveragePrice, 101.0)
+	almost(t, "shares", pos.Amount, exactCash/101.0)
+	// Marked back to the quoted 100: slippage is a real, immediate loss.
+	almost(t, "final value", finalValue(t, p), exactCash*100.0/101.0)
+}
+
+// The fix must be inert when the knob is off. Every backtest that does not set
+// slippage_bps has to produce the identical position it did before, down to
+// the last bit — BuyFill multiplies by exactly 1.0 there, so it does.
+func TestZeroSlippageSizesExactlyAsBefore(t *testing.T) {
+	p := runExact(t, "buyAndHold:equalWeights", exactCash,
+		[]string{"AAA"}, map[string][]float64{"AAA": {100, 100}},
+		CostConfig{})
+
+	if p.Positions["AAA"].Amount != exactCash/100.0 {
+		t.Errorf("shares = %v, want exactly %v (bit-identical, not close)",
+			p.Positions["AAA"].Amount, exactCash/100.0)
+	}
+}
+
+// Rising slippage must degrade the result smoothly. A cliff to zero shares is
+// the T13 failure mode, and it is invisible to any test that only asserts
+// costs reduce the final value — a portfolio that never trades also
+// underperforms one that does.
+func TestSlippageDegradesMonotonically(t *testing.T) {
+	var prevShares, prevValue float64
+	for i, bps := range []float64{0, 1, 10, 100, 500} {
+		p := runExact(t, "buyAndHold:equalWeights", exactCash,
+			[]string{"AAA"}, map[string][]float64{"AAA": {100, 100}},
+			CostConfig{SlippageBps: bps})
+
+		pos, ok := p.Positions["AAA"]
+		if !ok || pos.Amount <= 0 {
+			t.Fatalf("%.0f bps: bought nothing; slippage is a kill switch "+
+				"again, not a cost", bps)
+		}
+		shares, value := pos.Amount, finalValue(t, p)
+		if i > 0 && shares >= prevShares {
+			t.Errorf("%.0f bps: %v shares, want fewer than the %v before it",
+				bps, shares, prevShares)
+		}
+		if i > 0 && value >= prevValue {
+			t.Errorf("%.0f bps: final value %v, want below the %v before it",
+				bps, value, prevValue)
+		}
+		prevShares, prevValue = shares, value
+	}
+}
+
+// Slippage and commission have to compose: an order sized against the slipped
+// price spends all the cash, so the fee no longer fits and Buy's clamp resizes
+// it. That is the path commission already took on its own, and it must still
+// fill rather than being rejected.
+func TestSlippageAndCommissionTogetherStillFill(t *testing.T) {
+	p := runExact(t, "buyAndHold:equalWeights", exactCash,
+		[]string{"AAA"}, map[string][]float64{"AAA": {100, 100}},
+		CostConfig{SlippageBps: 100.0, CommissionPerTrade: 10.0})
+
+	pos, ok := p.Positions["AAA"]
+	if !ok {
+		t.Fatal("slippage plus commission stopped the strategy trading")
+	}
+	// The clamp spends exactly the balance: notional + fee == cash, so the
+	// notional is cash - 10 and the shares are that over the slipped price.
+	almost(t, "shares", pos.Amount, (exactCash-10.0)/101.0)
+	almost(t, "leftover cash", p.BuyingPower, 0.0)
+}
 
 // Turnover is annualized traded notional over average portfolio value. A
 // single entry trade of the full balance, held flat, has a known numerator

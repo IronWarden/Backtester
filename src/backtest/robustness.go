@@ -59,8 +59,8 @@ type CostPoint struct {
 	// interesting failure is not a strategy that pays more, it is one that
 	// STOPS TRADING: the returns then collapse in a cliff and stay flat, which
 	// reads as "survives higher costs" when the truth is "no longer a
-	// strategy". T13 makes exactly this happen to buyAndHold at any non-zero
-	// slippage.
+	// strategy". That is not hypothetical: it is what T13 did to buyAndHold at
+	// any non-zero slippage, and this column is how it becomes visible.
 	Trades int `json:"trades"`
 }
 
@@ -97,8 +97,9 @@ type Robustness struct {
 	// DIFFERENT number of trades than the frictionless one. Costs are supposed
 	// to change returns, not behaviour; when they change behaviour, the cost
 	// curve is measuring two things at once and the drop cannot be read as a
-	// cost. On the default config this fires at 5 bps, where one order of five
-	// is rejected and the final value falls from 590k to 69k — T13.
+	// cost. Before T13 was fixed this fired on the shipped default config at
+	// 5 bps, where one order of five was rejected and the final value fell
+	// from 590k to 69k — the check outlives its first catch.
 	TradesChangedAtBps float64 `json:"tradesChangedAtBps"`
 	Computed           bool    `json:"computed"`
 }

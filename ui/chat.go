@@ -246,6 +246,9 @@ Benchmark   = "$SP500"            # optional; scored against, NOT traded
   commission_per_trade = 1.0      # flat fee per filled order
   commission_bps       = 5.0      # fee as basis points of order notional
   slippage_bps         = 2.0      # fills worsen by bps: buys higher, sells lower
+# Orders are sized against the FILL price, so slippage buys fewer shares - it
+# never stops a strategy trading. Commission on a spend-it-all order clamps the
+# size down rather than rejecting the order.
 [portfolio.Sweep]                 # optional; parameter sweep, values are LISTS
   period     = [7, 14, 21]
   buy_thresh = [20, 30]

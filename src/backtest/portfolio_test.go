@@ -327,6 +327,10 @@ func TestSellWithCosts(t *testing.T) {
 // Costs are a drag, never a boost: a round trip at an unchanged price must
 // end with less cash than it started with, and the loss is exactly the two
 // commissions plus the two slippage legs.
+//
+// This one asserts the exact balance rather than a direction, so it already
+// cannot pass on a run that placed no trades — 10000 is not 9988. The
+// turnover test below is the one that needed a trade count.
 func TestCostsAreAlwaysADrag(t *testing.T) {
 	p := newTestPortfolio(t, 10000)
 	p.Costs = CostConfig{CommissionPerTrade: 1.0, SlippageBps: 50}
@@ -448,6 +452,10 @@ func TestSlippageDirection(t *testing.T) {
 // to scale with how much a strategy trades. This runs real shipped
 // strategies through the runner's own path, twice each, and compares.
 func TestCostsDragScalesWithTurnover(t *testing.T) {
+	// Returns the final value, and fails the test if the run placed no trades.
+	// A directional assertion cannot tell a cost from a silent no-op: a
+	// strategy that stops trading also underperforms one that does, which is
+	// how T13 hid here for as long as it did.
 	finalValue := func(script string, params map[string]any, costs CostConfig) float64 {
 		t.Helper()
 		hist := synthHist(42)
@@ -463,6 +471,10 @@ func TestCostsDragScalesWithTurnover(t *testing.T) {
 		n := len(p.PortfolioCloseValues)
 		if n == 0 {
 			t.Fatalf("%s produced no simulated days", script)
+		}
+		if len(p.Trades) == 0 {
+			t.Fatalf("%s placed no trades at costs %+v; the drag below would "+
+				"be measuring a strategy that stopped trading", script, costs)
 		}
 		return p.PortfolioCloseValues[n-1]
 	}

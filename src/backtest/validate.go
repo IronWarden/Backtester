@@ -296,7 +296,8 @@ func sameTrade(a, b Trade) bool {
 
 // checkTraded reports a strategy that never trades. Zero trades is not a 0%
 // return, it is the absence of a strategy — and it is exactly what the T13
-// slippage bug produces, which is why it needs saying out loud.
+// slippage bug used to produce silently, which is why it needs saying out loud
+// rather than being left to show up as a flat equity curve.
 func checkTraded(spec string, params map[string]any) Finding {
 	f := Finding{Check: "placed trades", Fatal: true}
 	p := runValidation(spec, params,

@@ -325,7 +325,7 @@ func registerTrading(
 		price := float64(L.ToNumber(2))
 		buyType := L.OptString(3, "equalWeights")
 		day := L.OptInt(4, -1)
-		amount := generalBuy(p.BuyingPower, price, buyType, p.Tickers)
+		amount := generalBuy(p.BuyingPower, price, buyType, p.Tickers, p.Costs)
 		p.Buy(ticker, amount, price, dateOf(ticker, day))
 		L.Push(lua.LNumber(amount))
 		return 1

@@ -122,7 +122,7 @@ func (s *BuyAndHold) Step(
 		if s.BuyType == "equalWeights" {
 			available = budget
 		}
-		amount := generalBuy(available, price, s.BuyType, p.Tickers)
+		amount := generalBuy(available, price, s.BuyType, p.Tickers, p.Costs)
 		p.Buy(ticker, amount, price, td[0].Date)
 	}
 }
@@ -181,7 +181,8 @@ func (s *SMACross) Step(
 			avg := (currentDayData.Low +
 				currentDayData.High + currentDayData.Close) / 3.0
 			if smaShort > smaLong && s.prevShort[ticker] <= s.prevLong[ticker] {
-				amount := generalBuy(p.BuyingPower, avg, s.BuyType, p.Tickers)
+				amount := generalBuy(
+					p.BuyingPower, avg, s.BuyType, p.Tickers, p.Costs)
 				p.Buy(ticker, amount, avg, currentDayData.Date)
 			} else if smaShort < smaLong && s.prevShort[ticker] >= s.prevLong[ticker] {
 				if pos, _ := p.FindPosition(ticker); pos != nil {
@@ -195,17 +196,31 @@ func (s *SMACross) Step(
 	}
 }
 
+// generalBuy sizes an order against the price it will actually fill at, not
+// the quoted one. That distinction is the whole of T13: sizing against the
+// quote asks for more shares than the cash covers once slippage inflates the
+// notional, and Buy's affordability gate then drops the order entirely — so
+// any non-zero slippage_bps stopped every spend-it-all strategy from trading
+// rather than making its fills slightly worse.
+//
+// With zero slippage BuyFill multiplies by exactly 1.0, so this is bit-for-bit
+// the previous arithmetic and no existing result moves. Commission is not
+// handled here: an order sized to spend all its cash still cannot cover a fee
+// on top, and the clamp in Buy resizes it, which is the behaviour commission
+// already had.
 func generalBuy(
 	buyingPower float64,
 	stockValue float64,
 	strategyType string,
 	tickers []string,
+	costs CostConfig,
 ) float64 {
+	fill := costs.BuyFill(stockValue)
 	switch strategyType {
 	case "greedy":
-		return greedyBuy(buyingPower, stockValue)
+		return greedyBuy(buyingPower, fill)
 	case "equalWeights":
-		return greedyBuy(buyingPower/float64(len(tickers)), stockValue)
+		return greedyBuy(buyingPower/float64(len(tickers)), fill)
 	}
 	return 0.0
 }

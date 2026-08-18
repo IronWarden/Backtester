@@ -113,7 +113,7 @@ func (s *benchSMACrossClose) Step(p *Portfolio, hist map[string][]data.AssetData
 		ps, pl := s.prevShort[ticker], s.prevLong[ticker]
 		if ps != 0 && pl != 0 {
 			if ss > ll && ps <= pl {
-				amount := generalBuy(p.BuyingPower, price, "equalWeights", p.Tickers)
+				amount := generalBuy(p.BuyingPower, price, "equalWeights", p.Tickers, p.Costs)
 				p.Buy(ticker, amount, price, td[day].Date)
 			} else if ss < ll && ps >= pl {
 				if pos, _ := p.FindPosition(ticker); pos != nil {
@@ -266,7 +266,7 @@ func newLuaBenchStrategy(
 	L.SetGlobal("buy", L.NewFunction(func(L *lua.LState) int {
 		ticker := L.ToString(1)
 		price := float64(L.ToNumber(2))
-		amount := generalBuy(p.BuyingPower, price, "equalWeights", p.Tickers)
+		amount := generalBuy(p.BuyingPower, price, "equalWeights", p.Tickers, p.Costs)
 		p.Buy(ticker, amount, price, time.Time{})
 		return 0
 	}))
