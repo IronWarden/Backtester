@@ -489,6 +489,12 @@ across asset classes (e.g. ["$SP500", "$CASH"]).
 - StandardDev: annualized stdev of daily returns.
 - AvgCorrelation / CointegratedPairs: mean pairwise return correlation and
   count of cointegrated ticker pairs in the portfolio.
+- CalmarRatio: AnnualReturn / MaxDrawdown -- return per unit of worst-case
+  decline. Different question from Sharpe: Sharpe penalises volatility both
+  ways, Calmar counts only the deepest hole the account was in, which is what
+  decides whether someone abandons a strategy partway through. A portfolio that
+  never declined reports 0, NOT infinity -- undefined, not excellent. So a 0
+  Calmar means either no drawdown or no return; check MaxDrawdown to tell which.
 - Turnover: annualized gross traded notional as a multiple of the portfolio's
   average value. 1.0 means it traded its own value once over a year. Always
   reported, with or without costs — it is what costs are charged against.

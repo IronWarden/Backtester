@@ -44,6 +44,28 @@ type Metrics struct {
 	// which is the honest reading of a flat equity curve.
 	AvgExposure  float64 // mean invested fraction of the book, %
 	TimeInMarket float64 // % of simulated days holding anything at all
+
+	// CalmarRatio is annual return per unit of worst-case decline:
+	// AnnualReturn / MaxDrawdown, both already percentages, so the ratio is
+	// dimensionless. It answers a different question from Sharpe, which
+	// penalises volatility in both directions — Calmar cares only about the
+	// deepest hole the account was ever in, which is what actually decides
+	// whether a strategy gets abandoned partway through.
+	CalmarRatio float64
+}
+
+// GetCalmarRatio is annual return over maximum drawdown. Both arguments are
+// percentages as this package reports them, and maxDrawdown is positive.
+//
+// A portfolio that never declined has no drawdown to divide by. That reports
+// 0 rather than +Inf, matching how TradeStats.ProfitFactor handles a run with
+// no losing trades: an unbounded ratio is not a better result than a large
+// one, it is an undefined one, and it would sort above every real strategy.
+func GetCalmarRatio(annualReturn, maxDrawdown float64) float64 {
+	if maxDrawdown <= 0 {
+		return 0
+	}
+	return annualReturn / maxDrawdown
 }
 
 // GetExposureStats summarises the per-day invested fractions: the mean, and
@@ -532,6 +554,7 @@ func (p *Portfolio) GetBacktestingData(
 		Turnover:          GetTurnover(p.tradedNotional, p.PortfolioCloseValues),
 	}
 	metrics.AvgExposure, metrics.TimeInMarket = GetExposureStats(p.Exposure)
+	metrics.CalmarRatio = GetCalmarRatio(annualReturn, maxDrawdown)
 	p.Metrics = metrics
 }
 

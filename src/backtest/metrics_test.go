@@ -338,3 +338,48 @@ func TestExposureStatsSeparateDepthFromDuration(t *testing.T) {
 		}
 	}
 }
+
+// Calmar is annual return per unit of worst-case decline. It answers a
+// different question from Sharpe, which penalises volatility in both
+// directions: Calmar cares only about the deepest hole the account was in,
+// which is what decides whether a strategy gets abandoned partway through.
+func TestCalmarRatioIsReturnOverWorstDecline(t *testing.T) {
+	cases := []struct {
+		name                      string
+		annualReturn, maxDD, want float64
+	}{
+		{"twice the drawdown", 20, 10, 2},
+		{"return equals drawdown", 15, 15, 1},
+		{"shallow drawdown magnifies it", 12, 3, 4},
+		// A loss is a negative Calmar, not an absolute one: the sign is the
+		// whole point of a ratio you compare across strategies.
+		{"a losing strategy scores below zero", -8, 16, -0.5},
+		// No drawdown means nothing to divide by. Reporting +Inf would sort
+		// above every real strategy; 0 says "undefined", as ProfitFactor does
+		// for a run with no losses.
+		{"never declined", 25, 0, 0},
+		{"flat and never declined", 0, 0, 0},
+	}
+	for _, tc := range cases {
+		if got := GetCalmarRatio(tc.annualReturn, tc.maxDD); math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("%s: GetCalmarRatio(%v, %v) = %v, want %v",
+				tc.name, tc.annualReturn, tc.maxDD, got, tc.want)
+		}
+	}
+}
+
+// End to end, against a path whose two inputs are already asserted elsewhere:
+// Calmar must be exactly the ratio of the metrics the run reports, not a
+// separately-derived figure that could drift from them.
+func TestCalmarMatchesTheReportedMetrics(t *testing.T) {
+	p := runExact(t, "buyAndHold:equalWeights", exactCash,
+		[]string{"AAA"}, map[string][]float64{
+			"AAA": {100, 120, 90, 130, 150},
+		}, CostConfig{})
+
+	if p.Metrics.MaxDrawdown <= 0 {
+		t.Fatal("the test path must contain a drawdown to divide by")
+	}
+	want := p.Metrics.AnnualReturn / p.Metrics.MaxDrawdown
+	almost(t, "CalmarRatio", p.Metrics.CalmarRatio, want)
+}

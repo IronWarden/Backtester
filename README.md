@@ -1516,6 +1516,7 @@ Reported metrics per run:
 - `MaxDrawdown` — peak-to-trough drawdown of the daily close-value series, as a percent.
 - `AnnualReturn` — CAGR derived from the compounded daily return series.
 - `StandardDev` — annualized stdev of daily returns.
+- `CalmarRatio` — `AnnualReturn / MaxDrawdown`. Return per unit of worst-case decline, and a different question from Sharpe: Sharpe penalises volatility in both directions, Calmar counts only the deepest hole the account was ever in — which is what actually decides whether a strategy gets abandoned partway through. **A portfolio that never declined reports 0, not infinity**: an unbounded ratio is undefined rather than excellent, and reporting it would sort a strategy that never traded above every real one.
 - `Turnover` — annualized gross traded notional as a multiple of the portfolio's average value; `1.0` means it traded its own value once over a year. Both sides of a round trip count. Reported whether or not `[portfolio.Costs]` is set.
 - `AvgExposure` — the mean invested fraction of the book, as a percent.
 - `TimeInMarket` — the percent of simulated days holding any position at all.

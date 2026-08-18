@@ -48,6 +48,7 @@ var resultFields = []string{
 	"MaxDrawdown",
 	"AnnualReturn",
 	"StandardDev",
+	"CalmarRatio",
 	"AvgCorrelation",
 	"CointegratedPairs",
 	"Turnover",
@@ -125,6 +126,8 @@ func resultValue(r Result, name string) (any, bool) {
 		return r.Metrics.AnnualReturn, true
 	case "StandardDev":
 		return r.Metrics.StandardDev, true
+	case "CalmarRatio":
+		return r.Metrics.CalmarRatio, true
 	case "AvgCorrelation":
 		return r.Metrics.AvgCorrelation, true
 	case "CointegratedPairs":

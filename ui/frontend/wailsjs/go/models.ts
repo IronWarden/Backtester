@@ -339,6 +339,7 @@ export namespace main {
 	    cointegratedPairs: number;
 	    turnover: number;
 	    avgExposure: number;
+	    calmarRatio: number;
 	    timeInMarket: number;
 	    alpha: number;
 	    beta: number;
@@ -379,6 +380,7 @@ export namespace main {
 	        this.cointegratedPairs = source["cointegratedPairs"];
 	        this.turnover = source["turnover"];
 	        this.avgExposure = source["avgExposure"];
+	        this.calmarRatio = source["calmarRatio"];
 	        this.timeInMarket = source["timeInMarket"];
 	        this.alpha = source["alpha"];
 	        this.beta = source["beta"];

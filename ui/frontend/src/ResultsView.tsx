@@ -566,6 +566,12 @@ export default function ResultsView({ results, fontSize }: Props) {
                 <th className="num">Profit</th>
                 <th className="num">Sharpe</th>
                 <th className="num">Sortino</th>
+                <th
+                  className="num"
+                  title="Annual return per unit of worst decline; 0 means it never declined"
+                >
+                  Calmar
+                </th>
                 <th className="num">Max DD %</th>
                 <th className="num">Annual %</th>
                 <th className="num">Std Dev</th>
@@ -624,6 +630,7 @@ export default function ResultsView({ results, fontSize }: Props) {
                     </td>
                     <td className="num">{r.sharpeRatio.toFixed(2)}</td>
                     <td className="num">{r.sortinoRatio.toFixed(2)}</td>
+                    <td className="num">{r.calmarRatio.toFixed(2)}</td>
                     <td className="num">{r.maxDrawdown.toFixed(2)}</td>
                     <td className="num">{r.annualReturn.toFixed(2)}</td>
                     <td className="num">{r.standardDev.toFixed(4)}</td>
