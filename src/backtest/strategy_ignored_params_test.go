@@ -130,3 +130,59 @@ func TestBuiltinWithoutParamsIsSilent(t *testing.T) {
 		t.Errorf("a plain built-in produced diagnostics: %+v", got)
 	}
 }
+
+// A walk-forward block never reaches ToPortfolios: runner.go diverts it to its
+// own path first. So the ignored-Params check has to fire there too, and it
+// matters more there than anywhere else — selecting between N candidates that
+// are all identical is not a weaker experiment, it is a report claiming a
+// selection that never happened.
+func TestWalkForwardOnABuiltinIsReported(t *testing.T) {
+	collected := captureDiagnostics(t)
+	quietLog(t)
+
+	pc := &PortfolioConfig{
+		Name: "wf-builtin", BuyingPower: 10000,
+		StartTime: "2020-01-01", EndTime: "2020-12-31",
+		Tickers: []string{"AAA"}, Strategy: "buyAndHold:equalWeights",
+		Sweep: map[string]any{
+			"lookback": []any{int64(10), int64(20), int64(30)},
+		},
+	}
+	if _, err := walkForwardCandidates(pc); err != nil {
+		t.Fatalf("walkForwardCandidates: %v", err)
+	}
+
+	got := collected()
+	if len(got) != 1 {
+		t.Fatalf("got %d diagnostics, want 1: %+v", len(got), got)
+	}
+	if !strings.Contains(got[0].Message, "identical") {
+		t.Errorf("message does not say the candidates are identical: %s",
+			got[0].Message)
+	}
+}
+
+// A walk-forward over a Lua strategy stays silent here — its swept keys are
+// checked per candidate by the Lua host, and warning twice for one problem is
+// how a warning gets ignored.
+func TestWalkForwardOnALuaStrategyIsLeftToTheHost(t *testing.T) {
+	collected := captureDiagnostics(t)
+	quietLog(t)
+
+	pc := &PortfolioConfig{
+		Name: "wf-lua", BuyingPower: 10000,
+		StartTime: "2020-01-01", EndTime: "2020-12-31",
+		Tickers:  []string{"AAA"},
+		Strategy: "lua:" + hostScript(t, `function step(day) end`),
+		Sweep: map[string]any{
+			"lookback": []any{int64(10), int64(20)},
+		},
+	}
+	if _, err := walkForwardCandidates(pc); err != nil {
+		t.Fatalf("walkForwardCandidates: %v", err)
+	}
+
+	if got := collected(); len(got) != 0 {
+		t.Errorf("warned at config time for a Lua walk-forward: %+v", got)
+	}
+}

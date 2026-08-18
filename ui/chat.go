@@ -219,6 +219,9 @@ portfolio it belongs to, and a message:
   that never happened. smaCross is the trap: its periods live in the spec
   string (smaCross:<short>:<long>:<buyType>), so it CANNOT be swept via Params
   or Sweep -- tell users to write one [[portfolio]] block per setting instead.
+  This fires for [portfolio.WalkForward] blocks too, where it is worse: if the
+  candidates are identical the walk-forward reports a selection that never
+  happened.
 - warn: a [portfolio.Params] key the script never reads. Scripts read settings
   as "params.lookback or 126", so a misspelled key silently falls back to the
   default. IN A SWEEP THIS IS SEVERE: sweep values merge into Params, so a

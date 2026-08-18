@@ -85,6 +85,13 @@ func walkForwardCandidates(pc *PortfolioConfig) ([]wfPortfolio, error) {
 				"combinations to select between; with one candidate there is " +
 				"nothing to select and a plain backtest says the same thing")
 	}
+	// A walk-forward block never reaches ToPortfolios — runner.go diverts it
+	// to this path first — so the ignored-Params check has to be repeated
+	// here. It matters more on this path than on the plain one: selecting
+	// between N candidates that are all identical is not a weaker experiment,
+	// it is a report claiming a selection that never took place.
+	warnIgnoredParams(pc.Name, pc.Strategy, pc.Params, pc.Sweep, len(combos))
+
 	out := make([]wfPortfolio, 0, len(combos))
 	for _, combo := range combos {
 		sub := *pc
