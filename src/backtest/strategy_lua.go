@@ -125,6 +125,7 @@ func (s *LuaStrategy) init(
 	registerOHLCV(L, hist)
 	registerTrading(L, p, hist, s.Path)
 	registerLogging(L, p, s.Path)
+	registerWindow(L, p, hist)
 	// Additive only — see strategy_lua_signals.go. No global registered above
 	// is replaced, so every existing script behaves exactly as it did.
 	registerSignals(L, hist)
@@ -281,6 +282,26 @@ func registerOHLCV(
 			return 1
 		}
 		L.Push(lua.LString(series[day].Date.Format("2006-01-02")))
+		return 1
+	}))
+}
+
+// registerWindow tells a script how long its run is. A strategy is handed
+// `day` and had no way to learn what it counts up to, so "do this once at the
+// end" — liquidate, take a final reading — was not expressible at all. Every
+// ticker has the same number of bars once the window is aligned (see
+// alignToWindow and T67), so one series answers it.
+func registerWindow(
+	L *lua.LState, p *Portfolio, hist map[string][]data.AssetData,
+) {
+	days := 0
+	if len(p.Tickers) > 0 {
+		days = len(hist[p.Tickers[0]])
+	}
+	// num_days() — trading days in this run. day is 0-based, so the last one
+	// is num_days() - 1.
+	L.SetGlobal("num_days", L.NewFunction(func(L *lua.LState) int {
+		L.Push(lua.LNumber(days))
 		return 1
 	}))
 }

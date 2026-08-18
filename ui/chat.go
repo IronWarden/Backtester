@@ -406,6 +406,12 @@ Globals available:
   rendered like print. TELL USERS TO USE log() AND NOT print() FOR DEBUGGING:
   Lua's print writes to stdout, which is invisible in this desktop app, so a
   user debugging with print sees nothing at all.
+- num_days() -- trading days in this run. day is 0-based, so the LAST day is
+  num_days() - 1; that off-by-one is the easy mistake. This is what makes "do
+  something once at the end" possible, e.g. sell_all on the final bar. Worth
+  suggesting when a user asks why realised P&L, win rate or profit factor are
+  zero: those come from SELLS, so a buy-and-hold realises nothing until it
+  closes out.
 All four order functions REFUSE a ticker that is not in the tickers global -
 a typo, or a nil that reads as the empty string. The order is ignored and the
 run console reports it, naming the function, the ticker asked for and the
