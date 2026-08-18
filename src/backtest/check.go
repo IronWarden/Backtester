@@ -53,14 +53,9 @@ func CheckConfig(cfg *Config, defaultLuaPath string) int {
 		}
 		seenNames[pc.Name] = true
 
-		if strings.TrimSpace(pc.Strategy) == "" {
-			if defaultLuaPath == "" {
-				fail(pc.Name,
-					"portfolio %q: Strategy is required and no default Lua "+
-						"script is set", pc.Name)
-				continue
-			}
-			pc.Strategy = "lua:" + defaultLuaPath
+		if err := pc.ResolveStrategy(defaultLuaPath); err != nil {
+			fail(pc.Name, "%v", err)
+			continue
 		}
 
 		// The same fork a run takes: a walk-forward block is a schedule of
@@ -108,20 +103,18 @@ func checkLuaParams(pc *PortfolioConfig) {
 	if err != nil {
 		return // ToPortfolios already reported it
 	}
-	params := pc.Params
+	// One expansion, not two: sweepCombos builds the whole cartesian product,
+	// and both the merged params and the trial count come out of it.
+	params, trials := pc.Params, 1
 	if len(pc.Sweep) > 0 {
-		combos, err := sweepCombos(pc.Sweep)
-		if err == nil && len(combos) > 0 {
+		if combos, err := sweepCombos(pc.Sweep); err == nil && len(combos) > 0 {
+			// Any combination will do — every one carries the same KEYS, and
+			// keys are all this check reads.
 			params = mergeParams(pc.Params, combos[0])
+			trials = len(combos)
 		}
 	}
-	p := &Portfolio{Pname: pc.Name, Trials: 1}
-	if len(pc.Sweep) > 0 {
-		if combos, err := sweepCombos(pc.Sweep); err == nil {
-			p.Trials = len(combos)
-		}
-	}
-	warnUnreadParams(p, path, params)
+	warnUnreadParams(&Portfolio{Pname: pc.Name, Trials: trials}, path, params)
 }
 
 // CheckSummary renders a one-line verdict for the CLI.

@@ -634,14 +634,8 @@ func RunFromConfigText(cfgText, dbPath, defaultLuaPath string) ([]Result, error)
 	portfolios := make([]*Portfolio, 0, len(cfg.Portfolios))
 	wfConfigs := make([]PortfolioConfig, 0, len(cfg.Portfolios))
 	for _, pc := range cfg.Portfolios {
-		if strings.TrimSpace(pc.Strategy) == "" {
-			if defaultLuaPath == "" {
-				return nil, fmt.Errorf(
-					"portfolio %q: Strategy is required and no default Lua script is set",
-					pc.Name,
-				)
-			}
-			pc.Strategy = "lua:" + defaultLuaPath
+		if err := pc.ResolveStrategy(defaultLuaPath); err != nil {
+			return nil, err
 		}
 		// A walk-forward block is not a portfolio but a schedule of them, so
 		// it runs on its own path and contributes one synthetic result.

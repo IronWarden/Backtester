@@ -402,6 +402,27 @@ func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
 // LoadConfigText decodes a config from a string rather than a file, for
 // callers that already hold the text — the UI's editor buffer, and -check
 // wanting to validate something before it is saved anywhere.
+// ResolveStrategy fills in a portfolio that omits Strategy, using the caller's
+// default Lua script — the UI passes the script open in its editor; the CLI
+// passes nothing, so an omitted Strategy is an error there.
+//
+// It lives here rather than in each caller because -check is only worth having
+// if it validates exactly the config a run would execute. Two copies of this
+// rule could drift, and the failure would be a check that passes a config the
+// run then rejects.
+func (pc *PortfolioConfig) ResolveStrategy(defaultLuaPath string) error {
+	if strings.TrimSpace(pc.Strategy) != "" {
+		return nil
+	}
+	if defaultLuaPath == "" {
+		return fmt.Errorf(
+			"portfolio %q: Strategy is required and no default Lua script "+
+				"is set", pc.Name)
+	}
+	pc.Strategy = "lua:" + defaultLuaPath
+	return nil
+}
+
 func LoadConfigText(text string) (*Config, error) {
 	var config Config
 	if _, err := toml.Decode(text, &config); err != nil {

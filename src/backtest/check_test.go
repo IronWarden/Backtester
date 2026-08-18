@@ -213,3 +213,65 @@ func TestCheckSummaryWording(t *testing.T) {
 		}
 	}
 }
+
+// -check is only worth having if it validates exactly the config a run would
+// execute. The strategy-defaulting rule used to be written out separately in
+// RunFromConfigText and CheckConfig; two copies can drift, and the failure
+// mode is a check that passes a config the run then rejects. This pins the
+// rule itself, which both now call.
+func TestResolveStrategyIsOneRule(t *testing.T) {
+	cases := []struct {
+		name, strategy, deflt, want string
+		wantErr                     bool
+	}{
+		{"explicit strategy wins", "buyAndHold:greedy", "d.lua",
+			"buyAndHold:greedy", false},
+		{"omitted takes the default", "", "d.lua", "lua:d.lua", false},
+		{"whitespace counts as omitted", "   ", "d.lua", "lua:d.lua", false},
+		{"omitted with no default is an error", "", "", "", true},
+	}
+	for _, tc := range cases {
+		pc := &PortfolioConfig{Name: "p", Strategy: tc.strategy}
+		err := pc.ResolveStrategy(tc.deflt)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%s: want an error, got none", tc.name)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if pc.Strategy != tc.want {
+			t.Errorf("%s: Strategy = %q, want %q",
+				tc.name, pc.Strategy, tc.want)
+		}
+	}
+}
+
+// The observable half of the same property: a config the check accepts only
+// because a default was supplied must still be accepted when that default is
+// absent — as an error, from both paths, with the same wording.
+func TestCheckHonoursTheDefaultLuaPath(t *testing.T) {
+	const cfg = `
+[[portfolio]]
+Name = "no strategy"
+BuyingPower = 10000.0
+StartDate = "2015-01-01"
+EndDate = "2020-01-01"
+Tickers = ["AAA"]
+`
+	collected := captureDiagnostics(t)
+	quietLog(t)
+	parsed, err := LoadConfigText(cfg)
+	if err != nil {
+		t.Fatalf("LoadConfigText: %v", err)
+	}
+	if errs := CheckConfig(parsed, ""); errs != 1 {
+		t.Fatalf("no default: got %d errors, want 1: %+v", errs, collected())
+	}
+	if !strings.Contains(collected()[0].Message, "Strategy is required") {
+		t.Errorf("unexpected message: %s", collected()[0].Message)
+	}
+}
