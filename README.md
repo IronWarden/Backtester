@@ -1440,6 +1440,7 @@ something to say. It shows only diagnostics a user can act on:
 | level | what produces it |
 |---|---|
 | `error` | a Lua strategy that failed to load, or raised on a given day |
+| `error` | a portfolio that simulated nothing — no tickers, or no trading day covered by all of them, with each ticker's real range named |
 | `warn` | fewer days simulated than the window covers, and which ticker is short |
 | `warn` | a benchmark with no data, or one not covering every trading day |
 | `warn` | an in-sample/out-of-sample split with too few days either side to score |

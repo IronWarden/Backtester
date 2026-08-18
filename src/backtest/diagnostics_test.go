@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"my-backtester/src/data"
 )
@@ -172,4 +173,76 @@ func TestDiagnosticsConcurrentDelivery(t *testing.T) {
 			t.Errorf("message was spliced: %q", d.Message)
 		}
 	}
+}
+
+// A run that simulates nothing produces a result full of zeros, and zeros sort
+// perfectly well next to real results in a sweep. Both ways of getting there
+// have to say so.
+func TestEmptyRunsExplainThemselves(t *testing.T) {
+	t.Run("no overlapping days", func(t *testing.T) {
+		collected := captureDiagnostics(t)
+		quietLog(t)
+
+		// AAA's history stops before BBB's begins, so no day has both.
+		hist := map[string][]data.AssetData{
+			"AAA": seriesFrom([]float64{100, 101, 102}),
+			"BBB": seriesStartingAt(exactEpoch.AddDate(0, 0, 30),
+				[]float64{200, 201, 202}),
+		}
+		p, err := InitializePortfolio(
+			10000, exactEpoch, exactEpoch.AddDate(0, 0, 60), "no-overlap",
+			[]string{"AAA", "BBB"}, "buyAndHold:equalWeights", nil,
+		)
+		if err != nil {
+			t.Fatalf("InitializePortfolio: %v", err)
+		}
+		runOne(p, hist, map[int64]float64{})
+
+		got := collected()
+		if len(got) != 1 {
+			t.Fatalf("got %d diagnostics, want 1: %+v", len(got), got)
+		}
+		if got[0].Level != "error" {
+			t.Errorf("level = %q, want error", got[0].Level)
+		}
+		// The actionable part is which ticker's history falls short, so the
+		// message has to carry the real ranges, not just "nothing overlapped".
+		for _, want := range []string{"no-overlap", "AAA", "BBB", "covers"} {
+			if !strings.Contains(got[0].Message, want) {
+				t.Errorf("message omits %q: %s", want, got[0].Message)
+			}
+		}
+	})
+
+	t.Run("no tickers", func(t *testing.T) {
+		collected := captureDiagnostics(t)
+		quietLog(t)
+
+		p, err := InitializePortfolio(
+			10000, exactEpoch, exactEpoch.AddDate(0, 0, 10), "empty",
+			nil, "buyAndHold:equalWeights", nil,
+		)
+		if err != nil {
+			t.Fatalf("InitializePortfolio: %v", err)
+		}
+		runOne(p, map[string][]data.AssetData{}, map[int64]float64{})
+
+		got := collected()
+		if len(got) != 1 {
+			t.Fatalf("got %d diagnostics, want 1: %+v", len(got), got)
+		}
+		if got[0].Level != "error" || !strings.Contains(got[0].Message, "empty") {
+			t.Errorf("unhelpful diagnostic: %+v", got[0])
+		}
+	})
+}
+
+// seriesStartingAt is seriesFrom with a chosen first date, for building two
+// histories that deliberately do not overlap.
+func seriesStartingAt(start time.Time, closes []float64) []data.AssetData {
+	series := seriesFrom(closes)
+	for i := range series {
+		series[i].Date = start.AddDate(0, 0, i)
+	}
+	return series
 }

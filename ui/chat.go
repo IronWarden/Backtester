@@ -213,6 +213,11 @@ Below the results panel is a "Console" strip that appears when a run produced
 diagnostics. It shows only things the user can act on, each with a level, the
 portfolio it belongs to, and a message:
 - error: a Lua strategy failed to load, or raised on a given day.
+- error: a portfolio simulated nothing, because it has no tickers or because
+  no trading day is covered by every one of them. The message names what each
+  ticker actually covers, which is the part that says which one fell short.
+  This matters in a sweep: a portfolio that never ran reports zeros, and zeros
+  sort perfectly well next to real results.
 - warn: fewer days were simulated than the window covers (it names the ticker
   whose history is short), a benchmark has no data or does not cover every
   trading day, or an in-sample/out-of-sample split leaves too few days either

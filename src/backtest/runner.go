@@ -247,6 +247,33 @@ func windowCoverage(
 	return len(days), lastDay, endsEarly
 }
 
+// noOverlapMessage explains an empty run. A day is simulated only when every
+// ticker has a bar for it, so the answer a reader needs is which ticker's
+// history does not reach the window — which means listing what each one
+// actually covers rather than only saying the intersection was empty.
+func noOverlapMessage(p *Portfolio, hist map[string][]data.AssetData) string {
+	const layout = "2006-01-02"
+	ranges := make([]string, 0, len(p.Tickers))
+	for _, t := range p.Tickers {
+		bars := hist[t]
+		if len(bars) == 0 {
+			ranges = append(ranges, fmt.Sprintf("%q has no data at all", t))
+			continue
+		}
+		ranges = append(ranges, fmt.Sprintf("%q covers %s..%s", t,
+			bars[0].Date.Format(layout), bars[len(bars)-1].Date.Format(layout)))
+	}
+	window := "the configured window"
+	if !p.StartTime.IsZero() && !p.EndTime.IsZero() {
+		window = fmt.Sprintf("%s..%s",
+			p.StartTime.Format(layout), p.EndTime.Format(layout))
+	}
+	return fmt.Sprintf(
+		"portfolio %q: no trading day in %s is covered by every ticker, so "+
+			"nothing was simulated — %s",
+		p.Pname, window, strings.Join(ranges, "; "))
+}
+
 // logCoverageShortfall names the tickers responsible when a portfolio simulated
 // fewer days than its window holds. Silence here was the whole problem: a
 // delisted holding turned a ten-year backtest into a five-year one and reported
@@ -296,11 +323,18 @@ func runOne(
 	hist map[string][]data.AssetData,
 	riskFreeRates map[int64]float64,
 ) {
+	// Both of these produce a result full of zeros. Left silent they read as a
+	// strategy that returned nothing, which is a very different statement from
+	// "this portfolio never ran" — and the zeros sort perfectly well next to
+	// real results in a sweep.
 	if len(p.Tickers) == 0 {
+		diagf("error", p.Pname,
+			"portfolio %q has no tickers, so nothing was simulated", p.Pname)
 		return
 	}
 	windowed, dataLen := alignToWindow(hist, p.Tickers, p.StartTime, p.EndTime)
 	if dataLen == 0 {
+		diagf("error", p.Pname, "%s", noOverlapMessage(p, hist))
 		return
 	}
 	logCoverageShortfall(p.Pname, hist, p.Tickers, p.StartTime, p.EndTime, dataLen)
