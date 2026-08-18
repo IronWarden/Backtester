@@ -212,6 +212,7 @@ then the portfolio is marked to market on that day's Close.
 Below the results panel is a "Console" strip that appears when a run produced
 diagnostics. It shows only things the user can act on, each with a level, the
 portfolio it belongs to, and a message:
+- info: a strategy called log(). This is the script talking, not a defect.
 - error: a Lua strategy failed to load, or raised on a given day.
 - error: a portfolio simulated nothing, because it has no tickers or because
   no trading day is covered by every one of them. The message names what each
@@ -401,6 +402,10 @@ Globals available:
 - buy_max(t, price, [buyType="equalWeights"], [day]) -- auto-sized buy
 - sell(t, amount, price, [day])
 - sell_all(t, price, [day])
+- log(...) -- say something the run console will show; any number of values,
+  rendered like print. TELL USERS TO USE log() AND NOT print() FOR DEBUGGING:
+  Lua's print writes to stdout, which is invisible in this desktop app, so a
+  user debugging with print sees nothing at all.
 All four order functions REFUSE a ticker that is not in the tickers global -
 a typo, or a nil that reads as the empty string. The order is ignored and the
 run console reports it, naming the function, the ticker asked for and the

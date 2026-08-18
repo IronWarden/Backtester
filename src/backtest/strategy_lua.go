@@ -5,6 +5,7 @@ import (
 	"my-backtester/src/data"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
@@ -123,6 +124,7 @@ func (s *LuaStrategy) init(
 	registerIndicators(L, hist)
 	registerOHLCV(L, hist)
 	registerTrading(L, p, hist, s.Path)
+	registerLogging(L, p, s.Path)
 	// Additive only — see strategy_lua_signals.go. No global registered above
 	// is replaced, so every existing script behaves exactly as it did.
 	registerSignals(L, hist)
@@ -280,6 +282,31 @@ func registerOHLCV(
 		}
 		L.Push(lua.LString(series[day].Date.Format("2006-01-02")))
 		return 1
+	}))
+}
+
+// registerLogging gives a script a way to say something its author will
+// actually see. Lua's own print writes to stdout, which is fine from the CLI
+// and invisible in the desktop app — a strategy author debugging there got
+// nothing at all. log() routes to the run console instead, and to the Go log
+// alongside it, so both launchers show it.
+//
+// Messages are info-level: they are not defects, they are the script talking.
+// The console's per-run cap is what stops a log call inside the day loop from
+// flooding it, so no deduplication here — a log line is deliberate and
+// repeating it on each day is often the point.
+func registerLogging(L *lua.LState, p *Portfolio, script string) {
+	// log(...) — any number of values, rendered as Lua's tostring would and
+	// joined with spaces, like print.
+	L.SetGlobal("log", L.NewFunction(func(L *lua.LState) int {
+		n := L.GetTop()
+		parts := make([]string, 0, n)
+		for i := 1; i <= n; i++ {
+			parts = append(parts, L.ToStringMeta(L.Get(i)).String())
+		}
+		diagf("info", p.Pname, "lua strategy %q: %s",
+			script, strings.Join(parts, " "))
+		return 0
 	}))
 }
 

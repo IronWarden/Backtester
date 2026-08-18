@@ -246,3 +246,81 @@ func seriesStartingAt(start time.Time, closes []float64) []data.AssetData {
 	}
 	return series
 }
+
+// Lua's own print goes to stdout, which is invisible in the desktop app, so a
+// strategy author debugging there saw nothing at all. log() routes to the
+// console instead.
+func TestLuaLogReachesTheConsole(t *testing.T) {
+	collected := captureDiagnostics(t)
+	quietLog(t)
+
+	runHostScript(t, `
+function step(day)
+  if day ~= 0 then return end
+  log("entering", 3, true, 1.5)
+end
+`, nil)
+
+	got := collected()
+	if len(got) != 1 {
+		t.Fatalf("got %d diagnostics, want 1: %+v", len(got), got)
+	}
+	if got[0].Level != "info" {
+		t.Errorf("level = %q, want info — a script talking is not a defect",
+			got[0].Level)
+	}
+	if got[0].Portfolio != "host-test" {
+		t.Errorf("portfolio = %q, want host-test", got[0].Portfolio)
+	}
+	// Values render as Lua's tostring would, joined like print.
+	if !strings.Contains(got[0].Message, "entering 3 true 1.5") {
+		t.Errorf("arguments not rendered like print: %q", got[0].Message)
+	}
+	// And it says which script, since a run has several.
+	if !strings.Contains(got[0].Message, ".lua") {
+		t.Errorf("message does not name the script: %q", got[0].Message)
+	}
+}
+
+// A log call in the day loop is deliberate: repeating it every day is often
+// the point, so it is not deduplicated the way a rejected ticker is. The
+// console's per-run cap is what bounds it.
+func TestLuaLogIsNotDeduplicated(t *testing.T) {
+	collected := captureDiagnostics(t)
+	quietLog(t)
+
+	runHostScript(t, `
+function step(day)
+  log("day", day)
+end
+`, nil)
+
+	if got := collected(); len(got) != hostDays {
+		t.Errorf("got %d log lines across %d days, want one per day",
+			len(got), hostDays)
+	}
+}
+
+// log() must not be able to take the run down: a script that logs a table, or
+// nothing at all, still runs to completion.
+func TestLuaLogSurvivesOddArguments(t *testing.T) {
+	captureDiagnostics(t)
+	quietLog(t)
+
+	p, logs := runHostScript(t, `
+function step(day)
+  if day ~= 0 then return end
+  log()
+  log({})
+  log(nil)
+  buy_max("AAA", price("AAA", day), "equalWeights", day)
+end
+`, nil)
+
+	if strings.Contains(logs, "step day=") {
+		t.Errorf("log() raised and aborted the day: %s", logs)
+	}
+	if _, ok := p.Positions["AAA"]; !ok {
+		t.Error("the order after the log calls never ran")
+	}
+}

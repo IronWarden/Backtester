@@ -24,7 +24,8 @@ import (
 
 // Diagnostic is one thing that went wrong in a way the user can act on.
 type Diagnostic struct {
-	// Level is "warn" when the run continued with less than it wanted, and
+	// Level is "info" when a strategy script called log() and is simply
+	// talking, "warn" when the run continued with less than it wanted, and
 	// "error" when something the user wrote did not work at all.
 	Level string `json:"level"`
 	// Portfolio is the portfolio the diagnostic belongs to, or "" when it

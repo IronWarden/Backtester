@@ -690,6 +690,12 @@ button.primary:hover:not(:disabled),
   border-left-color: var(--warn);
 }
 
+/* A strategy's own log() output. Deliberately the quietest row: it is the
+   only kind the user asked for, so it needs no alarm colour. */
+.console-row.info {
+  border-left-color: var(--border-strong);
+}
+
 .console-level {
   flex: 0 0 auto;
   min-width: 3.4em;
@@ -704,6 +710,10 @@ button.primary:hover:not(:disabled),
 
 .console-level.warn {
   color: var(--warn);
+}
+
+.console-level.info {
+  color: var(--text-3);
 }
 
 /* The message keeps its own `portfolio "x":` prefix, so this chip is a

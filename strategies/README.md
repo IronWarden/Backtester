@@ -156,6 +156,14 @@ accident.
 | `weight_of(t, day)` | The fraction of equity a position currently represents, for checking drift. |
 | `target_weights(day, {T = fraction, …})` | Move the whole book to those fractions of equity: sells run first so the proceeds fund the buys, and buys are clamped to available cash. A ticker absent from the table is a target of **zero**, so `target_weights(day, {})` goes to cash. |
 | `rank(day, fn)` | Score every ticker with `fn(ticker, day)` and return `{ {ticker=…, value=…}, … }` **sorted strongest first**. Tickers whose `fn` returns `nil` are left out rather than ranked last. |
+| `log(...)` | Say something the run console will show. Any number of values, rendered as `tostring` would and joined with spaces, like `print`. |
+
+**Use `log()`, not `print()`.** Lua's `print` writes to stdout, which is fine
+from the CLI and **invisible in the desktop app** — debugging a strategy there
+with `print` shows you nothing. `log()` goes to the run console under the
+results panel, tagged with the script name, and to `backtester.log` as well.
+It is not deduplicated: a `log()` inside the day loop fires every day, which
+is usually what you wanted, and the console keeps the first 200 lines of a run.
 
 Every order function requires a ticker from the `tickers` global. A ticker
 the portfolio does not list — a typo, or a `nil` that reads as the empty

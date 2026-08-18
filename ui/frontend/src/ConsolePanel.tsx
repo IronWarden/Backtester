@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { backtest } from "../wailsjs/go/models";
 
 // The console shows what the engine had to say about a run — a Lua script that
-// raised, a window that could not be fully simulated, a benchmark with no data.
+// raised, a window that could not be fully simulated, a benchmark with no data —
+// plus whatever a strategy chose to say for itself through log().
 // It deliberately does not show the engine's own logging: timings, row-scan
 // warnings and metric dumps stay in the log, because a console that reports
 // everything is one nobody reads. What reaches here is decided in Go, at the
@@ -13,7 +14,8 @@ type Props = { diagnostics: backtest.Diagnostic[]; fontSize: number };
 export default function ConsolePanel({ diagnostics, fontSize }: Props) {
     const [open, setOpen] = useState(false);
     const errors = diagnostics.filter((d) => d.level === "error").length;
-    const warnings = diagnostics.length - errors;
+    const warnings = diagnostics.filter((d) => d.level === "warn").length;
+    const notes = diagnostics.filter((d) => d.level === "info").length;
 
     // An error means the run did not do what was asked, so it opens itself.
     // Warnings are worth knowing and not worth interrupting for.
@@ -26,6 +28,8 @@ export default function ConsolePanel({ diagnostics, fontSize }: Props) {
     const summary = [
         errors > 0 ? `${errors} error${errors === 1 ? "" : "s"}` : "",
         warnings > 0 ? `${warnings} warning${warnings === 1 ? "" : "s"}` : "",
+        // "note" rather than "info": these are the strategy's own log() calls.
+        notes > 0 ? `${notes} note${notes === 1 ? "" : "s"}` : "",
     ]
         .filter(Boolean)
         .join(", ");
