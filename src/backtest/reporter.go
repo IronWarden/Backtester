@@ -82,6 +82,28 @@ var resultFields = []string{
 	"TotalRealized",
 	"TotalFees",
 	"AvgHoldingDays",
+	// The baseline comparison. Prefixed because BaselineStats carries its own
+	// FinalValue, SharpeRatio, MaxDrawdown and StandardDev, and an unprefixed
+	// name here would quietly resolve to the wrong one of the two.
+	"BaselineFinalValue",
+	"BaselineAnnualReturn",
+	"BaselineSharpe",
+	"BaselineMaxDrawdown",
+	"BaselineStandardDev",
+	"ExcessFinalValue",
+	"ExcessAnnualReturn",
+	"BeatBaseline",
+	"BaselineComputed",
+	// Is this better than chance. PValue is the reason to want any of this,
+	// and SignificanceComputed is the reason not to trust it alone — see the
+	// note on resultValue below.
+	"PValue",
+	"Percentile",
+	"NullMeanSharpe",
+	"NullP95Sharpe",
+	"BootstrapLow",
+	"BootstrapHigh",
+	"SignificanceComputed",
 }
 
 // knownFields renders the addressable names for an error message.
@@ -168,6 +190,46 @@ func resultValue(r Result, name string) (any, bool) {
 		return r.TradeStats.TotalFees, true
 	case "AvgHoldingDays":
 		return r.TradeStats.AvgHoldingDays, true
+	// Baseline comparison.
+	case "BaselineFinalValue":
+		return r.Baseline.FinalValue, true
+	case "BaselineAnnualReturn":
+		return r.Baseline.AnnualReturn, true
+	case "BaselineSharpe":
+		return r.Baseline.SharpeRatio, true
+	case "BaselineMaxDrawdown":
+		return r.Baseline.MaxDrawdown, true
+	case "BaselineStandardDev":
+		return r.Baseline.StandardDev, true
+	case "ExcessFinalValue":
+		return r.Baseline.ExcessFinalValue, true
+	case "ExcessAnnualReturn":
+		return r.Baseline.ExcessAnnualReturn, true
+	case "BeatBaseline":
+		return r.Baseline.Beat, true
+	// The Computed flags are addressable because without them the figures
+	// above and below LIE BY OMISSION rather than by being absent. An
+	// uncomputed Significance has PValue 0, which passes "PValue < 0.05" and
+	// reads as maximally significant; an uncomputed Baseline has Beat false
+	// and Excess 0, which reads as "tied with buy-and-hold". Neither is a
+	// result. A filter over either family wants the flag in it.
+	case "BaselineComputed":
+		return r.Baseline.Computed, true
+	// Better than chance.
+	case "PValue":
+		return r.Significance.PValue, true
+	case "Percentile":
+		return r.Significance.Percentile, true
+	case "NullMeanSharpe":
+		return r.Significance.NullMeanSharpe, true
+	case "NullP95Sharpe":
+		return r.Significance.NullP95Sharpe, true
+	case "BootstrapLow":
+		return r.Significance.BootstrapLow, true
+	case "BootstrapHigh":
+		return r.Significance.BootstrapHigh, true
+	case "SignificanceComputed":
+		return r.Significance.Computed, true
 	}
 	return nil, false
 }

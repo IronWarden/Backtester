@@ -360,10 +360,24 @@ Buys, Sells, RoundTrips, Wins, Losses, WinRate, AvgWin, AvgLoss, ProfitFactor,
 TotalRealized, TotalFees, AvgHoldingDays.
 An unrecognised name is rejected when the config loads and the error lists the
 valid ones, so a typo fails immediately rather than silently emitting nothing.
-When writing an [Output] filter for a SWEEP, include "Trades > 0". A candidate
-that never traded reports a flat curve rather than an error, so a filter over
-returns or drawdown keeps it -- and it can sort near the top on drawdown for
-never having risked anything.
+The baseline comparison and chance test are addressable too:
+BaselineFinalValue, BaselineAnnualReturn, BaselineSharpe, BaselineMaxDrawdown,
+BaselineStandardDev, ExcessFinalValue, ExcessAnnualReturn, BeatBaseline,
+BaselineComputed, PValue, Percentile, NullMeanSharpe, NullP95Sharpe,
+BootstrapLow, BootstrapHigh, SignificanceComputed. The baseline names are
+prefixed because BaselineStats has its own FinalValue/SharpeRatio/MaxDrawdown/
+StandardDev.
+THREE THINGS TO PUT IN ALMOST EVERY SWEEP FILTER:
+1. "Trades > 0" -- a candidate that never traded reports a flat curve rather
+   than an error, so a filter over returns or drawdown keeps it, and it can
+   sort near the top on drawdown for never having risked anything.
+2. "SignificanceComputed &&" before any PValue test. An UNCOMPUTED
+   Significance has PValue 0, which PASSES "PValue < 0.05" and looks maximally
+   significant when nothing was tested. Never write a bare PValue filter.
+3. "BaselineComputed &&" before BeatBaseline or the Excess figures, for the
+   same reason: uncomputed means Beat false and Excess 0, which reads as "tied
+   with buy-and-hold" rather than "no baseline existed".
+A good default: "BaselineComputed && BeatBaseline && Trades > 0".
 
 ## Lua strategy API
 A strategy script must define a global function step(day). day is a

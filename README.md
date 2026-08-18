@@ -1261,6 +1261,33 @@ filter  = "Trades > 0 && ProfitFactor > 1.5"
 sort_by = "ProfitFactor"
 ```
 
+The baseline comparison and the chance test are addressable too:
+`BaselineFinalValue`, `BaselineAnnualReturn`, `BaselineSharpe`,
+`BaselineMaxDrawdown`, `BaselineStandardDev`, `ExcessFinalValue`,
+`ExcessAnnualReturn`, `BeatBaseline`, `BaselineComputed`, and `PValue`,
+`Percentile`, `NullMeanSharpe`, `NullP95Sharpe`, `BootstrapLow`,
+`BootstrapHigh`, `SignificanceComputed`. The baseline names are prefixed
+because `BaselineStats` has its own `FinalValue`, `SharpeRatio`, `MaxDrawdown`
+and `StandardDev`.
+
+**Always pair these with their `Computed` flag.** When a figure was not
+computed it is not absent, it is **zero** — and zero is a passing value:
+
+```toml
+filter = "PValue < 0.05"                          # WRONG
+filter = "SignificanceComputed && PValue < 0.05"  # right
+```
+
+An uncomputed `Significance` reports `PValue` 0, which sails through
+`PValue < 0.05` and reads as maximally significant when nothing was tested at
+all. `Baseline` has the same shape: uncomputed means `BeatBaseline` false and
+the excess figures 0, which reads as "tied with buy-and-hold" rather than "no
+baseline existed". The filter that says what most people mean is:
+
+```toml
+filter = "BaselineComputed && BeatBaseline && Trades > 0"
+```
+
 ## Running
 
 The binary expects to be launched from `src/` because it resolves `../stock_data.db` and `../config.toml` relative to the working directory.

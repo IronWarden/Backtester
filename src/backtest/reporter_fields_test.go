@@ -66,26 +66,42 @@ func candidateFieldNames() []string {
 	return names
 }
 
+// textualFields and boolFields are the exceptions to "everything is a
+// float64". Listing them explicitly means adding a field of either kind is a
+// deliberate act rather than something that quietly slips past the type check
+// below.
+var textualFields = map[string]bool{"PortfolioName": true, "Strategy": true}
+
+var boolFields = map[string]bool{
+	"BeatBaseline":         true,
+	"BaselineComputed":     true,
+	"SignificanceComputed": true,
+}
+
 // Every numeric field must come back as a float64: evalBinary compares
 // float64s and lessByField sorts them, so an int silently breaks both. Trials
 // was an int, which made `filter = "Trials > 5"` fail with a type error and
 // take the whole output file down with it.
 func TestEveryNumericFieldIsFloat64(t *testing.T) {
-	textual := map[string]bool{"PortfolioName": true, "Strategy": true}
 	for _, name := range resultFields {
 		v, ok := resultValue(Result{}, name)
 		if !ok {
 			continue // reported by the sync test above
 		}
-		if textual[name] {
+		switch {
+		case textualFields[name]:
 			if _, isString := v.(string); !isString {
 				t.Errorf("%s = %T, want string", name, v)
 			}
-			continue
-		}
-		if _, isFloat := v.(float64); !isFloat {
-			t.Errorf("%s = %T, want float64 — comparisons and sorting both "+
-				"require float64", name, v)
+		case boolFields[name]:
+			if _, isBool := v.(bool); !isBool {
+				t.Errorf("%s = %T, want bool", name, v)
+			}
+		default:
+			if _, isFloat := v.(float64); !isFloat {
+				t.Errorf("%s = %T, want float64 — comparisons and sorting "+
+					"both require float64", name, v)
+			}
 		}
 	}
 }
@@ -95,15 +111,20 @@ func TestEveryNumericFieldIsFloat64(t *testing.T) {
 // one bad field takes down the whole output file rather than one row.
 func TestEveryNumericFieldIsFilterable(t *testing.T) {
 	for _, name := range resultFields {
-		if name == "PortfolioName" || name == "Strategy" {
+		if textualFields[name] {
 			continue
 		}
-		expr, err := parser.ParseExpr(name + " > 0")
+		// A bool field is a filter on its own; a number needs a comparison.
+		src := name + " > 0"
+		if boolFields[name] {
+			src = name
+		}
+		expr, err := parser.ParseExpr(src)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if _, err := evalFilter(expr, Result{Trials: 3}); err != nil {
-			t.Errorf("filter %q > 0 failed: %v", name, err)
+			t.Errorf("filter %q failed: %v", src, err)
 		}
 	}
 }
@@ -180,6 +201,89 @@ func TestFilteringOutStrategiesThatNeverTraded(t *testing.T) {
 			Result{TradeStats: TradeStats{}}, false},
 		{"traded but not profitable enough",
 			Result{TradeStats: TradeStats{Trades: 8, ProfitFactor: 1.1}}, false},
+	}
+	for _, tc := range cases {
+		got, err := evalFilter(expr, tc.res)
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%s: kept = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The Computed flags are not bookkeeping — without them the figures they
+// guard lie by omission. An uncomputed Significance reports PValue 0, which
+// passes "PValue < 0.05" and reads as maximally significant when the truth is
+// that nothing was tested. The same shape applies to Baseline: uncomputed
+// means Beat false and Excess 0, which reads as "tied with buy-and-hold".
+//
+// Nothing can stop a user writing the naive filter, so this pins the trap in
+// place: the naive form keeps the untested result, and the guarded form does
+// not. If a change ever makes the naive filter safe, this test says so.
+func TestUncomputedSignificanceLooksSignificant(t *testing.T) {
+	untested := Result{} // Significance.Computed false, PValue 0
+
+	naive, err := parser.ParseExpr("PValue < 0.05")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, err := evalFilter(naive, untested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !kept {
+		t.Error("the trap is gone: an untested result no longer passes " +
+			"PValue < 0.05 — update the docs, this is now safe")
+	}
+
+	guarded, err := parser.ParseExpr("SignificanceComputed && PValue < 0.05")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, err = evalFilter(guarded, untested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept {
+		t.Error("guarding with SignificanceComputed did not exclude an " +
+			"untested result, which is the only reason the flag is addressable")
+	}
+
+	// And the guard must not throw away a real one.
+	real := Result{Significance: Significance{Computed: true, PValue: 0.01}}
+	if kept, err = evalFilter(guarded, real); err != nil || !kept {
+		t.Errorf("the guarded filter dropped a genuinely significant "+
+			"result: kept=%v err=%v", kept, err)
+	}
+}
+
+// The same trap on the baseline side, plus the thing a user actually wants to
+// write: did it beat buy-and-hold, and did it trade to get there.
+func TestBeatBaselineFilter(t *testing.T) {
+	expr, err := parser.ParseExpr("BaselineComputed && BeatBaseline && Trades > 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		res  Result
+		want bool
+	}{
+		{"beat it, having traded", Result{
+			Baseline:   BaselineStats{Computed: true, Beat: true},
+			TradeStats: TradeStats{Trades: 4},
+		}, true},
+		{"no baseline was built", Result{
+			Baseline:   BaselineStats{Computed: false, Beat: false},
+			TradeStats: TradeStats{Trades: 4},
+		}, false},
+		{"beat it without trading", Result{
+			Baseline:   BaselineStats{Computed: true, Beat: true},
+			TradeStats: TradeStats{Trades: 0},
+		}, false},
 	}
 	for _, tc := range cases {
 		got, err := evalFilter(expr, tc.res)
