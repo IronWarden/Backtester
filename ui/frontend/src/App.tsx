@@ -27,6 +27,7 @@ import {
     PickDBFile,
     ReadFile,
     RunBacktest,
+    CheckConfig,
     WriteFile,
 } from "../wailsjs/go/main/App";
 import { backtest, main } from "../wailsjs/go/models";
@@ -354,6 +355,37 @@ function App() {
         }
     }
 
+    // Validate the config without running it. Opens no database and simulates
+    // nothing, so it answers immediately even for a config that would take
+    // minutes — the point is to catch a typo before waiting for one.
+    async function checkConfig() {
+        setErrorMsg("");
+        setResults([]);
+        setDiagnostics([]);
+        setStatusMsg("Checking…");
+        try {
+            const res = await CheckConfig(tomlText, luaPath);
+            const diags = res.diagnostics ?? [];
+            setDiagnostics(diags);
+            const errors = diags.filter((d) => d.level === "error").length;
+            const warnings = diags.length - errors;
+            if (errors > 0) {
+                setStatusMsg(
+                    `Config check failed — ${errors} error(s), ${warnings} warning(s)`,
+                );
+            } else if (warnings > 0) {
+                // Warnings do not stop a run; they mean it may not do what
+                // was meant.
+                setStatusMsg(`Config check passed — ${warnings} warning(s)`);
+            } else {
+                setStatusMsg("Config check passed");
+            }
+        } catch (e: any) {
+            setErrorMsg(String(e?.message ?? e));
+            setStatusMsg("");
+        }
+    }
+
     // Load a simple-mode-generated config into the Advanced editor and switch.
     function editAsToml(cfgText: string) {
         setTomlText(cfgText);
@@ -468,6 +500,13 @@ function App() {
                                 lua · {luaPath ? baseName(luaPath) : "none"}
                             </span>
                         </div>
+                        <button
+                            onClick={checkConfig}
+                            disabled={running}
+                            title="Validate the config without running it"
+                        >
+                            ✓ Check
+                        </button>
                         <button
                             onClick={() => runConfig(tomlText, true)}
                             disabled={running}

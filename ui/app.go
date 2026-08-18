@@ -145,6 +145,35 @@ func (c *diagCollector) records() []backtest.Diagnostic {
 	return out
 }
 
+// CheckConfig validates the in-editor TOML without running it. It opens no
+// database and simulates nothing, so it answers immediately even for a config
+// that would take minutes to run.
+//
+// It returns a RunOutput with no results rather than a type of its own: the
+// check produces exactly one kind of thing, diagnostics, and the console panel
+// already knows how to render those. A second wire type would mean a second
+// renderer for identical content.
+func (a *App) CheckConfig(cfgText, defaultLuaPath string) (out RunOutput, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("config check panic: %v\n%s", r, debug.Stack())
+		}
+	}()
+	cfg, err := backtest.LoadConfigText(cfgText)
+	if err != nil {
+		return RunOutput{}, fmt.Errorf("parse toml: %w", err)
+	}
+
+	diagMu.Lock()
+	defer diagMu.Unlock()
+	var collector diagCollector
+	backtest.Diagnostics = collector.record
+	defer func() { backtest.Diagnostics = nil }()
+
+	backtest.CheckConfig(cfg, defaultLuaPath)
+	return RunOutput{Diagnostics: collector.records()}, nil
+}
+
 // RunBacktest executes the in-editor TOML config against the chosen DB.
 // defaultLuaPath is used as the strategy for any portfolio that omits its
 // Strategy field, so the script open in the Lua tab becomes the default.

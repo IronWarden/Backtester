@@ -368,8 +368,12 @@ Strategy spec strings:
 Sizing: "greedy" pours all remaining cash into each ticker in order;
 "equalWeights" splits cash evenly across the portfolio's tickers.
 
-The CLI has -check: it validates a config and exits without running, opening no
-database. It reports the same errors and warnings a run would (reversed dates,
+The UI has a "✓ Check" button next to Run that validates the config in the
+editor without running it, reporting into the same console. Suggest it before
+a long run or a big sweep, and whenever you have just written a config for the
+user -- it is the fastest way for them to confirm what you wrote is valid.
+The CLI has the same thing as -check: it validates a config and exits without
+running, opening no database. It reports the same errors and warnings a run would (reversed dates,
 duplicate tickers, Params a strategy cannot read, swept keys nothing reads, an
 unusable [Output] block) in milliseconds. Suggest it whenever a user is about
 to start a long run or a big sweep. Errors exit 1; warnings alone exit 0.

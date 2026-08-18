@@ -91,3 +91,65 @@ func TestDiagCollectorConcurrentRecord(t *testing.T) {
 		t.Errorf("got %d records, want %d", len(got), workers*each)
 	}
 }
+
+// The UI check must answer without a database: that is the whole point, since
+// a config worth checking is usually one whose run takes minutes.
+func TestCheckConfigNeedsNoDatabase(t *testing.T) {
+	app := NewApp()
+	out, err := app.CheckConfig(`
+[[portfolio]]
+Name = "backwards"
+BuyingPower = 10000.0
+StartDate = "2020-01-01"
+EndDate = "2019-01-01"
+Tickers = ["AAA"]
+Strategy = "buyAndHold:equalWeights"
+`, "")
+	if err != nil {
+		t.Fatalf("CheckConfig: %v", err)
+	}
+	if len(out.Results) != 0 {
+		t.Errorf("a check produced %d results; it must not run anything",
+			len(out.Results))
+	}
+	if len(out.Diagnostics) != 1 {
+		t.Fatalf("got %d diagnostics, want 1: %+v",
+			len(out.Diagnostics), out.Diagnostics)
+	}
+	if out.Diagnostics[0].Level != "error" {
+		t.Errorf("level = %q, want error", out.Diagnostics[0].Level)
+	}
+	if !strings.Contains(out.Diagnostics[0].Message, "before StartDate") {
+		t.Errorf("unexpected message: %s", out.Diagnostics[0].Message)
+	}
+}
+
+// Unparseable TOML is an error from the call, not a diagnostic: there is no
+// config to attribute anything to.
+func TestCheckConfigRejectsBadToml(t *testing.T) {
+	app := NewApp()
+	if _, err := app.CheckConfig("this is not toml =", ""); err == nil {
+		t.Error("malformed TOML was accepted")
+	}
+}
+
+// A clean config must come back silent, or the console cries wolf on every
+// press of the button.
+func TestCheckConfigSilentOnACleanConfig(t *testing.T) {
+	app := NewApp()
+	out, err := app.CheckConfig(`
+[[portfolio]]
+Name = "clean"
+BuyingPower = 10000.0
+StartDate = "2015-01-01"
+EndDate = "2020-01-01"
+Tickers = ["AAA", "BBB"]
+Strategy = "buyAndHold:equalWeights"
+`, "")
+	if err != nil {
+		t.Fatalf("CheckConfig: %v", err)
+	}
+	if len(out.Diagnostics) != 0 {
+		t.Errorf("a clean config reported %+v", out.Diagnostics)
+	}
+}

@@ -1453,6 +1453,15 @@ wails dev -tags webkit2_41              # live-reloading development build
 wails build -tags webkit2_41 && cp build/bin/ui ui/ui
 ```
 
+#### Checking a config before running it
+
+The **✓ Check** button next to Run validates the config in the editor without
+running it — the UI half of `-check`. It opens no database and simulates
+nothing, so it answers immediately even for a config whose run would take
+minutes, and its findings appear in the same console described below. Errors
+mean the config will not run as written; warnings mean it will run but may not
+do what was meant.
+
 #### The run console
 
 Below the results panel is a **Console** strip that appears whenever a run had
