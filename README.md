@@ -567,7 +567,7 @@ Field reference:
 | `Name` | string | Identifier shown in metric output and results files. |
 | `BuyingPower` | float | Starting cash. Must not be negative; `0` is allowed, since `Deposit` can fund a portfolio after it starts. |
 | `StartDate` / `EndDate` | string | `YYYY-MM-DD`. `EndDate` must not precede `StartDate` — a reversed window is rejected by name rather than crashing the run. Both must be fully covered by every ticker's data or the run is rejected with an error naming the offending ticker and its real range. |
-| `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. |
+| `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. No duplicates — a repeated symbol is rejected by name. To hold more of something, use `[portfolio.Params.weights]` with `buy_and_hold_weighted.lua`, not a second entry. |
 | `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
 | `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. |
 | `Costs` | table | Optional trading-cost model (below). Absent means frictionless, which is how the engine behaved before costs existed. |

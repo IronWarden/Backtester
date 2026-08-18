@@ -234,7 +234,7 @@ Name        = "My Portfolio"      # shown in results
 BuyingPower = 100000.0            # starting cash
 StartDate   = "2015-01-01"        # YYYY-MM-DD; EndDate must not precede it
 EndDate     = "2025-01-01"
-Tickers     = ["AAPL", "MSFT"]    # must all have data covering the window
+Tickers     = ["AAPL", "MSFT"]   # no duplicates; all must cover the window
 Strategy    = "buyAndHold:equalWeights"   # optional; see specs below
 Benchmark   = "$SP500"            # optional; scored against, NOT traded
 [portfolio.Params]                # optional, passed to Lua as 'params'

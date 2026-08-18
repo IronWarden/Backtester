@@ -119,6 +119,24 @@ func InitializePortfolio(
 		return nil, fmt.Errorf(
 			"portfolio %q: BuyingPower %.2f is negative", pname, buyingPower)
 	}
+	// A repeated ticker corrupts the run rather than doubling a weight.
+	// alignToWindow keys its output by ticker but appends once per INDEX, so
+	// a duplicate appends the same bar twice per day and hands back a series
+	// of 2n bars alongside a length of n — which panics in the day loop. Even
+	// without that, GetPortfolioValue iterates Tickers and would count the one
+	// position twice, inflating the equity curve.
+	//
+	// Rejected rather than deduplicated: weighting a holding up is what
+	// [portfolio.Params.weights] and buy_and_hold_weighted.lua are for, and
+	// silently dropping a line from a config is its own kind of surprise.
+	seen := make(map[string]bool, len(tickers))
+	for _, t := range tickers {
+		if seen[t] {
+			return nil, fmt.Errorf(
+				"portfolio %q: ticker %q is listed more than once", pname, t)
+		}
+		seen[t] = true
+	}
 
 	strat, err := NewStrategy(strategySpec, strategyParams)
 	if err != nil {

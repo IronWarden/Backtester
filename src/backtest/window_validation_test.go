@@ -82,3 +82,53 @@ func TestReversedWindowFromConfig(t *testing.T) {
 		t.Errorf("error does not name the portfolio: %v", err)
 	}
 }
+
+// A repeated ticker used to panic in the day loop, and the panic was hiding a
+// worse problem. alignToWindow keys its output by ticker but appends once per
+// INDEX, so a duplicate appended the same bar twice per day and returned a
+// series of 2n bars alongside a length of n. GetPortfolioValue iterates
+// Tickers too, so the single position would have been counted twice and the
+// equity curve inflated.
+func TestDuplicateTickersAreRejected(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("a duplicate ticker still panics: %v", r)
+		}
+	}()
+
+	p, err := InitializePortfolio(10000, exactEpoch, exactEpoch.AddDate(0, 0, 10),
+		"dupe", []string{"AAA", "BBB", "AAA"}, "buyAndHold:equalWeights", nil)
+
+	if err == nil {
+		t.Fatal("a ticker listed twice was accepted")
+	}
+	if p != nil {
+		t.Error("a rejected config still returned a portfolio")
+	}
+	if !strings.Contains(err.Error(), `"AAA"`) {
+		t.Errorf("error does not name the repeated ticker: %v", err)
+	}
+}
+
+// The underlying defect, pinned directly so it cannot be reintroduced by a
+// caller that reaches alignToWindow without going through the constructor:
+// one entry per ticker per day, however the ticker list is spelled.
+func TestAlignToWindowEmitsOneBarPerDay(t *testing.T) {
+	hist := histFrom(map[string][]float64{
+		"AAA": {100, 101, 102},
+		"BBB": {200, 201, 202},
+	})
+	aligned, n := alignToWindow(hist, []string{"AAA", "BBB"},
+		time.Time{}, time.Time{})
+
+	if n != 3 {
+		t.Fatalf("aligned length = %d, want 3", n)
+	}
+	for ticker, bars := range aligned {
+		if len(bars) != n {
+			t.Errorf("%s has %d bars against a reported length of %d — "+
+				"indexing the series by day will run off the end",
+				ticker, len(bars), n)
+		}
+	}
+}
