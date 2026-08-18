@@ -1244,9 +1244,22 @@ limit   = 20                                 # 0 means unlimited
 `filter` is a Go-style boolean expression over the same field names as `fields`.
 `fields`, `filter` and `sort_by` all draw on one list — every metric above,
 plus `PortfolioName`, `Strategy`, `InitialCapital`, `FinalValue`, `Profit`,
-`Trials`, `ExpectedMaxSharpe` and `DeflatedSharpe`. An unrecognised name is
-rejected when the config loads, and the error names the valid alternatives
-rather than leaving you to guess.
+`Trials`, `ExpectedMaxSharpe`, `DeflatedSharpe`, and the trade blotter's
+summary: `Trades`, `Buys`, `Sells`, `RoundTrips`, `Wins`, `Losses`, `WinRate`,
+`AvgWin`, `AvgLoss`, `ProfitFactor`, `TotalRealized`, `TotalFees` and
+`AvgHoldingDays`. An unrecognised name is rejected when the config loads, and
+the error names the valid alternatives rather than leaving you to guess.
+
+`Trades > 0` is worth putting in almost every sweep filter. A candidate that
+never traded does not look like a failure — it reports a flat equity curve
+rather than an error, so a filter written in terms of returns or drawdown
+keeps it, and it can even sort near the top on drawdown for never having
+risked anything:
+
+```toml
+filter  = "Trades > 0 && ProfitFactor > 1.5"
+sort_by = "ProfitFactor"
+```
 
 ## Running
 

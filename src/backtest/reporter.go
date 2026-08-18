@@ -65,6 +65,23 @@ var resultFields = []string{
 	"Trials",
 	"ExpectedMaxSharpe",
 	"DeflatedSharpe",
+	// The blotter's summary. Trades is the one worth filtering on before any
+	// of the others: a strategy that placed no trades is not a strategy, and
+	// it reports a flat curve rather than an error, so it survives a filter
+	// written in terms of returns.
+	"Trades",
+	"Buys",
+	"Sells",
+	"RoundTrips",
+	"Wins",
+	"Losses",
+	"WinRate",
+	"AvgWin",
+	"AvgLoss",
+	"ProfitFactor",
+	"TotalRealized",
+	"TotalFees",
+	"AvgHoldingDays",
 }
 
 // knownFields renders the addressable names for an error message.
@@ -123,6 +140,34 @@ func resultValue(r Result, name string) (any, bool) {
 		return r.ExpectedMaxSharpe, true
 	case "DeflatedSharpe":
 		return r.DeflatedSharpe, true
+	// Blotter fields. The counts convert to float64 like every other number
+	// here — see the note on Trials above.
+	case "Trades":
+		return float64(r.TradeStats.Trades), true
+	case "Buys":
+		return float64(r.TradeStats.Buys), true
+	case "Sells":
+		return float64(r.TradeStats.Sells), true
+	case "RoundTrips":
+		return float64(r.TradeStats.RoundTrips), true
+	case "Wins":
+		return float64(r.TradeStats.Wins), true
+	case "Losses":
+		return float64(r.TradeStats.Losses), true
+	case "WinRate":
+		return r.TradeStats.WinRate, true
+	case "AvgWin":
+		return r.TradeStats.AvgWin, true
+	case "AvgLoss":
+		return r.TradeStats.AvgLoss, true
+	case "ProfitFactor":
+		return r.TradeStats.ProfitFactor, true
+	case "TotalRealized":
+		return r.TradeStats.TotalRealized, true
+	case "TotalFees":
+		return r.TradeStats.TotalFees, true
+	case "AvgHoldingDays":
+		return r.TradeStats.AvgHoldingDays, true
 	}
 	return nil, false
 }

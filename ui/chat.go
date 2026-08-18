@@ -355,9 +355,15 @@ SharpeRatio, SortinoRatio, MaxDrawdown, AnnualReturn, StandardDev,
 AvgCorrelation, CointegratedPairs, Turnover, AvgExposure, TimeInMarket,
 Alpha, Beta, TrackingError,
 InformationRatio, UpCapture, DownCapture, InitialCapital, FinalValue, Profit,
-Trials, ExpectedMaxSharpe, DeflatedSharpe.
+Trials, ExpectedMaxSharpe, DeflatedSharpe, and the blotter summary: Trades,
+Buys, Sells, RoundTrips, Wins, Losses, WinRate, AvgWin, AvgLoss, ProfitFactor,
+TotalRealized, TotalFees, AvgHoldingDays.
 An unrecognised name is rejected when the config loads and the error lists the
 valid ones, so a typo fails immediately rather than silently emitting nothing.
+When writing an [Output] filter for a SWEEP, include "Trades > 0". A candidate
+that never traded reports a flat curve rather than an error, so a filter over
+returns or drawdown keeps it -- and it can sort near the top on drawdown for
+never having risked anything.
 
 ## Lua strategy API
 A strategy script must define a global function step(day). day is a

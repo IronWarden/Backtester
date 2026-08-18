@@ -57,6 +57,7 @@ func candidateFieldNames() []string {
 	for _, typ := range []reflect.Type{
 		reflect.TypeOf(Result{}),
 		reflect.TypeOf(Metrics{}),
+		reflect.TypeOf(TradeStats{}),
 	} {
 		for i := range typ.NumField() {
 			names = append(names, typ.Field(i).Name)
@@ -127,6 +128,67 @@ func TestUnknownFieldErrorNamesTheAlternatives(t *testing.T) {
 		if !strings.Contains(err.Error(), "SharpeRatio") {
 			t.Errorf("%s: error does not name the field they meant: %v",
 				tc.name, err)
+		}
+	}
+}
+
+// Resolving a name is not the same as returning the right number. This pins
+// the blotter fields to the struct they read, so a copy-paste slip in the
+// switch — the easiest mistake to make in a thirty-case mapping — shows up.
+func TestBlotterFieldsReadTheBlotter(t *testing.T) {
+	res := Result{TradeStats: TradeStats{
+		Trades: 12, Buys: 7, Sells: 5, RoundTrips: 5,
+		Wins: 3, Losses: 2, WinRate: 0.6,
+		AvgWin: 210.5, AvgLoss: 90.25, ProfitFactor: 3.5,
+		TotalRealized: 431.0, TotalFees: 18.75, AvgHoldingDays: 41.5,
+	}}
+	want := map[string]float64{
+		"Trades": 12, "Buys": 7, "Sells": 5, "RoundTrips": 5,
+		"Wins": 3, "Losses": 2, "WinRate": 0.6,
+		"AvgWin": 210.5, "AvgLoss": 90.25, "ProfitFactor": 3.5,
+		"TotalRealized": 431.0, "TotalFees": 18.75, "AvgHoldingDays": 41.5,
+	}
+	for name, expect := range want {
+		v, ok := resultValue(res, name)
+		if !ok {
+			t.Errorf("%s does not resolve", name)
+			continue
+		}
+		if got, isFloat := v.(float64); !isFloat || got != expect {
+			t.Errorf("%s = %v (%T), want %v", name, v, v, expect)
+		}
+	}
+}
+
+// The reason this is worth having at all: a swept config produces candidates
+// that never traded, and they do not look like failures — they report a flat
+// curve, not an error, so a filter written in terms of returns keeps them.
+// "Trades > 0" is the one that throws them out.
+func TestFilteringOutStrategiesThatNeverTraded(t *testing.T) {
+	expr, err := parser.ParseExpr("Trades > 0 && ProfitFactor > 1.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		res  Result
+		want bool
+	}{
+		{"traded and profitable",
+			Result{TradeStats: TradeStats{Trades: 8, ProfitFactor: 2.0}}, true},
+		{"never traded",
+			Result{TradeStats: TradeStats{}}, false},
+		{"traded but not profitable enough",
+			Result{TradeStats: TradeStats{Trades: 8, ProfitFactor: 1.1}}, false},
+	}
+	for _, tc := range cases {
+		got, err := evalFilter(expr, tc.res)
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%s: kept = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 }
