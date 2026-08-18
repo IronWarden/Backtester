@@ -213,6 +213,12 @@ Below the results panel is a "Console" strip that appears when a run produced
 diagnostics. It shows only things the user can act on, each with a level, the
 portfolio it belongs to, and a message:
 - info: a strategy called log(). This is the script talking, not a defect.
+- warn: Params or Sweep keys set on a BUILT-IN strategy. NewStrategy passes
+  params to lua: specs only, so built-ins ignore them entirely. Sweeping a
+  built-in gives N identical runs with the deflated Sharpe discounting a search
+  that never happened. smaCross is the trap: its periods live in the spec
+  string (smaCross:<short>:<long>:<buyType>), so it CANNOT be swept via Params
+  or Sweep -- tell users to write one [[portfolio]] block per setting instead.
 - warn: a [portfolio.Params] key the script never reads. Scripts read settings
   as "params.lookback or 126", so a misspelled key silently falls back to the
   default. IN A SWEEP THIS IS SEVERE: sweep values merge into Params, so a

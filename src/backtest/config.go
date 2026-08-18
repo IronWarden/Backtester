@@ -366,6 +366,9 @@ func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Once per block, before expanding: a swept block would otherwise repeat
+	// the same message for every combination it produces.
+	warnIgnoredParams(pc.Name, pc.Strategy, pc.Params, pc.Sweep, len(combos))
 	if len(combos) == 0 {
 		p, err := pc.ToPortfolio()
 		if err != nil {

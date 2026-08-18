@@ -569,7 +569,7 @@ Field reference:
 | `StartDate` / `EndDate` | string | `YYYY-MM-DD`. `EndDate` must not precede `StartDate` — a reversed window is rejected by name rather than crashing the run. Both must be fully covered by every ticker's data or the run is rejected with an error naming the offending ticker and its real range. |
 | `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. No duplicates — a repeated symbol is rejected by name. To hold more of something, use `[portfolio.Params.weights]` with `buy_and_hold_weighted.lua`, not a second entry. |
 | `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
-| `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. |
+| `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. **Built-in strategies ignore it entirely** — only `lua:` specs receive it, and the console warns if you set it on a built-in. `smaCross` takes its periods from the spec string (`smaCross:<short>:<long>:<buyType>`), so it cannot be swept through `Params` at all; use one `[[portfolio]]` block per setting. |
 | `Costs` | table | Optional trading-cost model (below). Absent means frictionless, which is how the engine behaved before costs existed. |
 | `Benchmark` | string | Optional ticker to score against, e.g. `"$SP500"`. Never traded — see below. |
 
@@ -1441,6 +1441,7 @@ something to say. It shows only diagnostics a user can act on:
 |---|---|
 | `info` | a strategy calling `log()` — the script talking, not a defect |
 | `warn` | a `[portfolio.Params]` key the strategy never reads — usually a typo, and in a sweep it means every trial ran identical settings |
+| `warn` | `Params` or `Sweep` keys on a **built-in** strategy, which cannot read either |
 | `error` | a Lua strategy that failed to load, or raised on a given day |
 | `error` | a portfolio that simulated nothing — no tickers, or no trading day covered by all of them, with each ticker's real range named |
 | `warn` | fewer days simulated than the window covers, and which ticker is short |

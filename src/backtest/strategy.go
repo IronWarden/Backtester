@@ -3,6 +3,7 @@ package backtest
 import (
 	"fmt"
 	"my-backtester/src/data"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -23,6 +24,80 @@ type Strategy interface {
 //   - "buyAndHold:<buyType>"             -> BuyAndHold
 //   - "smaCross:<short>:<long>:<buyType>" -> SMACross
 //   - "lua:<path>"                       -> LuaStrategy (params from arg)
+//
+// warnIgnoredParams reports Params handed to a strategy that cannot read them.
+//
+// NewStrategy passes params to the "lua" case and to nothing else, so a
+// [portfolio.Params] block on a built-in spec is silently discarded. The Lua
+// host has its own per-key check (see warnUnreadParams); this is the case that
+// check can never see, because there is no interpreter to ask.
+//
+// The severe version is a sweep. Sweep values are merged into Params, so
+// sweeping a built-in expands to N portfolios that are byte-identical runs,
+// while Trials is N and the deflated Sharpe discounts the result for a search
+// that never happened.
+//
+// smaCross earns its own sentence: it is the built-in people most want to
+// sweep, and its periods live in the SPEC STRING rather than in Params, so
+// "Sweep = { short = [5, 10] }" looks exactly like it should work.
+func warnIgnoredParams(
+	name, spec string, params, sweep map[string]any, combos int,
+) {
+	if strings.HasPrefix(spec, "lua:") {
+		return
+	}
+	// Both maps, because a swept block usually has NO [portfolio.Params] at
+	// all — the keys arrive only in [portfolio.Sweep] and are merged in per
+	// combination afterwards. Checking Params alone would miss exactly the
+	// case that matters most.
+	seen := make(map[string]bool, len(params)+len(sweep))
+	for k := range params {
+		seen[k] = true
+	}
+	for k := range sweep {
+		seen[k] = true
+	}
+	if len(seen) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	msg := fmt.Sprintf(
+		"portfolio %q: strategy %q takes no Params, so %s %s ignored",
+		name, spec, strings.Join(quoteAll(keys), ", "),
+		plural(len(keys), "is", "are"))
+	if strings.HasPrefix(spec, "smaCross") {
+		msg += "; smaCross reads its periods from the spec string itself, " +
+			"as smaCross:<short>:<long>:<buyType>"
+	}
+	if combos > 1 {
+		msg += fmt.Sprintf(
+			"; this block expands to %d trials that will therefore be "+
+				"identical, and the deflated Sharpe will discount them as a "+
+				"search of %d", combos, combos)
+	}
+	diagf("warn", name, "%s", msg)
+}
+
+func quoteAll(ss []string) []string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = fmt.Sprintf("%q", s)
+	}
+	return out
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
 func NewStrategy(spec string, params map[string]any) (Strategy, error) {
 	parts := strings.SplitN(spec, ":", 2)
 	switch parts[0] {
