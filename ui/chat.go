@@ -859,6 +859,24 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- ONE PAGE PER CANDIDATE. -pages <dir> writes one self-contained HTML file per
+  result into <dir>, named after the portfolio. Each page holds the equity
+  curve vs its benchmark, the underwater plot, rolling 12-month Sharpe, the
+  in/out-of-sample split, walk-forward windows, calendar-year and monthly
+  returns, deepest drawdowns, trade stats and every metric.
+  The part that matters is the strip under the headline, "Does this survive the
+  obvious objections?", carrying three cards in the SAME visual weight as the
+  return: did it beat the baseline, was it better than random timing, and how
+  many trials was it picked from (with the deflated Sharpe and the no-edge
+  best-of-N bar). The trial card turns red when trials > 1 and the deflated
+  Sharpe is below 0.90.
+  Inline CSS and inline SVG, no scripts and no external requests, so it works
+  offline and years later. Suggest -pages when a user wants to review, keep or
+  send a candidate; suggest -bundle when they need it to be re-runnable
+  evidence. They are complements: a page is for reading, a bundle is for
+  verifying.
+  Engine-side: backtest.CandidatePage and backtest.WriteCandidatePages.
+
 - RUN BUNDLES. -bundle <path> writes a self-contained JSON of a run: the
   expanded config, the STRATEGY SOURCE, the engine's git sha, and every metric.
   -verify <path> re-runs it and reports whether the numbers still reproduce,

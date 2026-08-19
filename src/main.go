@@ -29,6 +29,7 @@ func main() {
 		bundlePath  string
 		verifyPath  string
 		research    bool
+		pagesDir    string
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -92,6 +93,12 @@ func main() {
 		"Run the config and report it as research: baseline, chance, "+
 			"attribution, regimes and robustness, in the order that kills an "+
 			"idea fastest. Implies -robustness",
+	)
+	flag.StringVar(
+		&pagesDir, "pages", "",
+		"After running, write one self-contained HTML page per result into "+
+			"this directory: the equity curve, the underwater plot, the "+
+			"splits, and the baseline/chance/trial-count checks together",
 	)
 	flag.StringVar(
 		&configPath, "config", "../config.toml",
@@ -284,6 +291,15 @@ func main() {
 	} else if robustness {
 		for _, res := range results {
 			fmt.Printf("\n%s\n%s", res.PortfolioName, res.Robustness.String())
+		}
+	}
+
+	if pagesDir != "" {
+		paths, err := backtest.WriteCandidatePages(results, pagesDir)
+		if err != nil {
+			log.Printf("could not write the candidate pages: %v", err)
+		} else {
+			fmt.Printf("%d candidate page(s) written to %s\n", len(paths), pagesDir)
 		}
 	}
 

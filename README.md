@@ -984,6 +984,41 @@ is plausible; a spike between two bad neighbours is overfit) and universe
 subsampling. Both need to know about the sweep that produced a result, which is
 different machinery from re-running one portfolio.
 
+### One page per candidate
+
+Deciding whether a result is real means reading a table row, squinting at a
+chart, and re-running with different dates. `-pages` collapses that into one
+self-contained HTML file per result:
+
+```bash
+cd src
+go run main.go -pages ../pages    # one <portfolio-name>.html per result
+```
+
+Each page carries the equity curve against its benchmark, the underwater plot,
+rolling 12-month Sharpe, the in/out-of-sample split, the walk-forward windows,
+calendar-year and monthly returns, the deepest drawdowns, trade statistics and
+every metric.
+
+What makes it more than a prettier table is the strip directly under the
+headline, **Does this survive the obvious objections?** — three cards in the
+same visual weight as the return itself:
+
+| Card | What it answers |
+| --- | --- |
+| Beat *&lt;baseline&gt;*? | the T32 equal-weight buy-and-hold of the same tickers, net of the same costs |
+| Better than random timing? | the significance p-value against the random-timing null |
+| How many trials was this picked from? | the trial count, the deflated Sharpe, and the Sharpe a no-edge best-of-N would show anyway |
+
+The third card turns red when a result was selected from more than one trial and
+its deflated Sharpe is below 0.90. A candidate that looks good because it was
+the best of two hundred tries should not be able to hide the two hundred, and
+those are exactly the numbers that get skipped when they sit in a footnote.
+
+The file is self-contained by design: inline CSS, inline SVG, no scripts and no
+external requests, so it still renders years later with no network. It follows
+the reader's light or dark preference and prints without a black background.
+
 ### Run bundles: hand a result to someone else
 
 A result lives in a table and cannot be checked by anyone who was not at this
