@@ -1502,3 +1502,10 @@ button.primary:hover:not(:disabled),
   color: var(--muted, #8a8a85);
   font-family: ui-monospace, monospace;
 }
+
+.month-owner {
+  font-size: 11px;
+  color: var(--muted, #8a8a85);
+  padding: 8px 12px 2px;
+}
+td.num.dim { color: var(--muted, #8a8a85); }

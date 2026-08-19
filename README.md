@@ -984,6 +984,18 @@ is plausible; a spike between two bad neighbours is overfit) and universe
 subsampling. Both need to know about the sweep that produced a result, which is
 different machinery from re-running one portfolio.
 
+### Monthly returns, in the app
+
+A year-by-month matrix per portfolio, with a compounded Year column. The
+calendar-year table says whether a year was good; this says whether it was
+steady or was one good month — the distinction a single annual figure hides
+best.
+
+The Year column **compounds** rather than sums, because returns are
+multiplicative: a year of −50% then +50% reads −25%, not 0. Partial months
+(the run does not span them) are starred and shown as the plain return over the
+days present, never annualized.
+
 ### Trading and attribution, in the app
 
 When a run traded, the results view adds a **Trading** panel (trades, round

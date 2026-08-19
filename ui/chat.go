@@ -859,6 +859,15 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
+  matrix per portfolio, with a Year column at the right. The calendar-year table
+  answers "was this a good year"; this answers whether the year was steady or
+  was one good month, which a single annual figure hides most effectively.
+  The Year column COMPOUNDS the months present, it does not sum them -- returns
+  are multiplicative, so -50% then +50% is -25%, not 0. Months the run does not
+  span are marked with an asterisk and shown as the plain return over the days
+  present, never annualized; months with no data show an em dash.
+
 - TRADING AND ATTRIBUTION IN THE APP. The results view has two more panels
   when a run traded: "Trading" (trades, round trips, win rate, avg win, avg
   loss, profit factor, avg holding days, realized P&L, fees) and

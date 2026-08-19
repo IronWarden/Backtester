@@ -1190,6 +1190,113 @@ export default function ResultsView({ results, fontSize }: Props) {
           </div>
         </div>
       )}
+
+      {results.some((r) => (r.monthlyReturns ?? []).length > 0) && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-title">Monthly returns</span>
+          </div>
+          {results.map((r, i) =>
+            (r.monthlyReturns ?? []).length === 0 ? null : (
+              <MonthGrid key={i} result={r} color={COLORS[i % COLORS.length]} showName={results.length > 1} />
+            ),
+          )}
+          <div className="panel-note">
+            * partial month — the run does not span the whole month. Shown as
+            the plain return over the days present.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// A year-by-month matrix. The calendar-year table above answers "was this a
+// good year"; this answers whether the year was steady or was one good month,
+// which is the same question the deflated Sharpe asks of a sweep and the one a
+// single annual figure hides most effectively.
+function MonthGrid({
+  result,
+  color,
+  showName,
+}: {
+  result: main.RunResult;
+  color: string;
+  showName: boolean;
+}) {
+  // Period is "YYYY-MM"; anything else is skipped rather than guessed at.
+  const byYear = new Map<string, (PeriodReturnLike | undefined)[]>();
+  for (const m of result.monthlyReturns ?? []) {
+    const [year, month] = (m.period ?? "").split("-");
+    const idx = Number(month) - 1;
+    if (!year || Number.isNaN(idx) || idx < 0 || idx > 11) continue;
+    if (!byYear.has(year)) byYear.set(year, new Array(12).fill(undefined));
+    byYear.get(year)![idx] = m;
+  }
+  const years = [...byYear.keys()].sort();
+  if (years.length === 0) return null;
+
+  return (
+    <div className="table-scroll">
+      {showName && (
+        <div className="month-owner">
+          <span
+            className="swatch"
+            style={{ background: color, display: "inline-block", marginRight: "0.5em" }}
+          />
+          {result.portfolioName}
+        </div>
+      )}
+      <table>
+        <thead>
+          <tr>
+            <th>Year</th>
+            {MONTH_LABELS.map((m) => (
+              <th className="num" key={m}>
+                {m}
+              </th>
+            ))}
+            <th className="num">Year</th>
+          </tr>
+        </thead>
+        <tbody>
+          {years.map((y) => {
+            const months = byYear.get(y)!;
+            // Compound the months present rather than summing them: returns
+            // are multiplicative, and a year with -50% then +50% is -25%.
+            const compounded =
+              (months.reduce(
+                (acc, m) => acc * (1 + (m ? m.returnPct : 0) / 100),
+                1,
+              ) -
+                1) *
+              100;
+            return (
+              <tr key={y}>
+                <td>{y}</td>
+                {months.map((m, j) => (
+                  <td
+                    key={j}
+                    className={`num ${m ? (m.returnPct < 0 ? "neg" : "pos") : "dim"}`}
+                  >
+                    {m ? `${m.returnPct.toFixed(1)}${m.partial ? "*" : ""}` : "—"}
+                  </td>
+                ))}
+                <td className={`num ${compounded < 0 ? "neg" : "pos"}`}>
+                  <b>{compounded.toFixed(1)}</b>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// The shape MonthGrid needs from a period return, kept narrow so the grid does
+// not depend on fields it never reads.
+type PeriodReturnLike = { period: string; returnPct: number; partial: boolean };
