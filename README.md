@@ -450,9 +450,38 @@ Two costs and one gap, all real. Stage 1 downloads ~31 MB per quarter (~2 GB for
 2010→now, cached afterwards, and `--from-year` bounds it). Stage 2 is one request
 per company at ~8/s. And the table is keyed by **CIK, not ticker** — EDGAR lists
 a filer's tickers only while it has a current listing, which these by definition
-do not, so this answers "what happened to this company" and not yet "what
-happened to the symbol my backtest held". Closing that needs name-matching
-against `delistings.name`, and is deliberately not guessed at.
+do not, so the table alone answers "what happened to this company" and not
+"what happened to the symbol my backtest held".
+
+`src/data.MatchDelistingSymbols` closes that gap by name-matching
+`delisting_reasons.company_name` against `delistings.name`. It is pure — both
+sides go in as slices, no database — and it refuses to guess in two ways that
+matter more than the matching does:
+
+- **The dates must agree.** A candidate whose delisting date is more than
+  `MaxDateGapDays` (30) from the registry's is rejected at any similarity. Two
+  companies can share a name; the same company leaving on the same date is much
+  stronger evidence than the name alone.
+- **Ambiguity is not a match.** When two filers tie at the same tier the result
+  is `ambiguous`, recording every contender and choosing none. A wrong join
+  silently attributes a bankruptcy to the wrong symbol, which is worse than no
+  join — an unmatched symbol simply degrades to `unknown`.
+
+Each match reports which rule fired, so callers can weigh them:
+
+| `MatchedBy` | Rule |
+| --- | --- |
+| `exact` | normalised names identical, suffixes intact |
+| `suffix` | identical after stripping INC/CORP/CO/LTD/LLC/PLC/HOLDINGS/GROUP |
+| `fuzzy` | edit-distance similarity ≥ `MinSimilarity` (0.90) |
+| `ambiguous` | two or more filers tied — recorded, not resolved |
+| `none` | nothing cleared both the name and the date gate |
+
+`MatchedBy.Resolved()` is true only for the first three.
+`ReasonsByMatchedSymbol` then produces the payoff — symbol → reason — dropping
+everything unresolved. Prefer `ReasonsBySymbol` where EDGAR listed a ticker
+itself; that path is exact but empty for most delisted filers, which is why
+this one exists.
 
 ### What is wrong with the bars themselves
 

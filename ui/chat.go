@@ -987,10 +987,19 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   1997 -30% NYSE/AMEX) overcorrects every acquisition. Engine-side:
   src/data.LoadDelistingReasons and the pure ClassifyReason;
   Reason.TerminalForHolders() is true only for bankruptcy.
-  IMPORTANT LIMIT: the table is keyed by CIK, not ticker. EDGAR lists a filer's
-  tickers only while it has a current listing, which delisted companies do not,
-  so it answers "what happened to this company" and NOT "what happened to the
-  symbol a backtest held". Do not claim otherwise.
+  The table is keyed by CIK, not ticker: EDGAR lists a filer's tickers only
+  while it has a current listing, which delisted companies do not. The symbol
+  join is src/data.MatchDelistingSymbols, which name-matches
+  delisting_reasons.company_name against delistings.name. It is pure and it
+  refuses to guess: the two delisting dates must agree within MaxDateGapDays
+  (30) or there is no match at any name similarity, and when two filers tie at
+  the same tier the result is "ambiguous" -- every contender recorded, none
+  chosen. MatchedBy is exact | suffix | fuzzy | ambiguous | none, and
+  MatchedBy.Resolved() is true only for the first three.
+  ReasonsByMatchedSymbol turns resolved matches into symbol -> reason.
+  So a symbol CAN now carry a reason, but only when the join resolved: an
+  ambiguous or unmatched symbol has no reason and must be reported as unknown,
+  never guessed.
 
 - DATA QUALITY. The bars themselves were audited on 2026-08-17 (all 34,988,956
   of them; analysis/data_quality.md). 7,193 tickers good, 1,915 usable, 1,053

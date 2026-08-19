@@ -312,7 +312,7 @@ def main() -> int:
                    impossible_bars, zero_volume_bars, longest_flat_run,
                    big_jumps, max_jump, missing_days, expected_days,
                    CAST(first_bar AS TIMESTAMP_NS), CAST(last_bar AS TIMESTAMP_NS),
-                   verdict, CAST(NOW() AS TIMESTAMP_NS)
+                   verdict, CAST(CAST(NOW() AS TIMESTAMP) AS TIMESTAMP_NS)
             FROM incoming
         """)
         con.execute("COMMIT")
