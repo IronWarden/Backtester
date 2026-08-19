@@ -78,6 +78,15 @@ type Portfolio struct {
 	// window.
 	BenchmarkCurve []float64
 	BenchmarkStats BenchmarkStats
+	// Fundamentals are the metric names the config declared; FundamentalData
+	// is what was fetched for them, dated by the day each figure became
+	// PUBLIC rather than the period it covers. Both are configuration in the
+	// Clone sense: the fetch happens once per run and every clone shares the
+	// same immutable slice rather than re-querying.
+	//
+	// Nil when the config declares nothing, which is every pre-T33 config.
+	Fundamentals    []string
+	FundamentalData []data.FundamentalPoint
 	// InSampleEnd is the last day of the in-sample segment when the config
 	// asks for a split, and the zero time when it does not. Like Costs and
 	// Benchmark it is configuration, so Clone must carry it across; Splits is
@@ -184,6 +193,8 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		Strategy:             strat,
 		Costs:                p.Costs,
 		Benchmark:            p.Benchmark,
+		Fundamentals:         p.Fundamentals,
+		FundamentalData:      p.FundamentalData,
 		InSampleEnd:          p.InSampleEnd,
 		Trials:               p.Trials,
 		TrialGroup:           p.TrialGroup,

@@ -1012,6 +1012,52 @@ frontend did not carry until now. One sign convention worth knowing:
 for losers — so the UI writes the minus sign itself rather than relying on the
 field to be signed.
 
+### Fundamentals in a strategy
+
+`PointInTimeFundamentals` has been correct since T29 and nothing called it, so
+value, quality, leverage and size were unreachable from a strategy. A portfolio
+now declares what it needs:
+
+```toml
+[[Portfolio]]
+Fundamentals = ["Net Income", "Stockholders Equity", "Total Revenue"]
+```
+
+They are fetched **once per run**, before the worker pool starts — the raw table
+is 8.5M rows, so naming the metrics is what keeps it to the handful a strategy
+reads. Absent or empty, nothing is fetched and the run is bit-identical to
+before.
+
+Two Lua globals, and deliberately no more:
+
+```lua
+fundamental(ticker, metric, day)  --> number, or nil if not yet published
+market_cap(ticker, day)           --> shares x close, or nil
+```
+
+**They return `nil`, not 0, which breaks the convention `price()` follows.** A
+price of zero is impossible, so 0 safely means "absent". A company can genuinely
+report zero net income, zero cash or negative equity, so 0 here would be
+indistinguishable from "not published yet" — precisely the ambiguity that makes
+a strategy trade on a figure it never had.
+
+The look-ahead guarantee is enforced in Go, upstream of Lua: every figure
+carries the day it became public (real SEC filing date where known, then the
+earnings-calendar date, then period end + 90 days as the worst case), and a
+lookup only ever returns what was public that morning. `market_cap` also fetches
+`Ordinary Shares Number` whether or not you named it, and returns `nil` rather
+than a plausible-looking number when the share count is missing or the close is
+≤ 0.
+
+**Coverage is measured rather than enforced.** Reported data begins in 2020, so
+a strategy run from 2010 sees `nil` for the first decade, trades only in the
+back half, and looks like it found an edge. Refusing that window would be too
+blunt — a strategy may legitimately act only when fundamentals exist — so the
+`FundamentalCoverage` metric reports the share of (day × ticker × declared
+metric) cells that had a figure, shown as **Fund Cov %** in the results table
+and as an em dash for runs that declared nothing. A low figure beside a good
+Sharpe is the thing to look at first.
+
 ### The same verdict, in the app
 
 The results view carries the same three cards under the portfolio summaries, in

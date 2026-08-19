@@ -104,6 +104,15 @@ type PortfolioConfig struct {
 	// a return series for the benchmark-relative metrics. Empty means those
 	// metrics are not computed.
 	Benchmark string `toml:"Benchmark"`
+	// Fundamentals declares which reported figures the strategy needs, e.g.
+	// ["Net Income", "Stockholders Equity"]. They are fetched once per run and
+	// reach Lua through fundamental() and market_cap().
+	//
+	// A declaration is required rather than fetching everything because the
+	// raw table is 8.5M rows; naming the metrics keeps it to the handful a
+	// strategy actually reads. Absent or empty, nothing is fetched and nothing
+	// about the run changes, which is why every existing config is unaffected.
+	Fundamentals []string `toml:"Fundamentals"`
 	// Sweep turns one config block into many runs: every key maps to a LIST
 	// of values, and the block expands to the cartesian product of them. Each
 	// resulting portfolio takes Params with its own sweep values written over
@@ -468,6 +477,7 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 	// signature carries readably.
 	p.Costs = pc.Costs
 	p.Benchmark = pc.Benchmark
+	p.Fundamentals = pc.Fundamentals
 
 	if !pc.Validation.Zero() {
 		split, err := time.Parse("2006-01-02", pc.Validation.InSampleEnd)

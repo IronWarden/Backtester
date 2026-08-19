@@ -40,6 +40,11 @@ type RunResult struct {
 	CointegratedPairs     int     `json:"cointegratedPairs"`
 	Turnover              float64 `json:"turnover"`
 	AvgExposure           float64 `json:"avgExposure"`
+	// FundamentalCoverage is the share of (day x ticker x declared metric)
+	// cells that had a published figure. 0 when the config declares no
+	// Fundamentals, so the column is blank for every run that does not use
+	// them rather than showing a misleading zero.
+	FundamentalCoverage float64 `json:"fundamentalCoverage"`
 	CalmarRatio           float64 `json:"calmarRatio"`
 	LongestUnderwaterDays int     `json:"longestUnderwaterDays"`
 	TimeInMarket          float64 `json:"timeInMarket"`
@@ -225,6 +230,7 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput
 			CointegratedPairs:     r.Metrics.CointegratedPairs,
 			Turnover:              r.Metrics.Turnover,
 			AvgExposure:           r.Metrics.AvgExposure,
+			FundamentalCoverage:   r.Metrics.FundamentalCoverage,
 			CalmarRatio:           r.Metrics.CalmarRatio,
 			LongestUnderwaterDays: r.Metrics.LongestUnderwaterDays,
 			TimeInMarket:          r.Metrics.TimeInMarket,

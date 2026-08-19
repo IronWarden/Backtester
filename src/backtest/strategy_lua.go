@@ -131,6 +131,7 @@ func (s *LuaStrategy) init(
 	// is replaced, so every existing script behaves exactly as it did.
 	registerSignals(L, hist)
 	registerCrossSection(L, p)
+	registerFundamentals(L, p, hist)
 	registerBook(L, p, hist)
 
 	warnUnreadParams(p, s.Path, s.Params)

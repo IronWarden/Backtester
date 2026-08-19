@@ -42,6 +42,16 @@ type Metrics struct {
 	//
 	// Both are percentages. A portfolio that never buys reports 0 for both,
 	// which is the honest reading of a flat equity curve.
+	// FundamentalCoverage is the fraction of (day x ticker x declared metric)
+	// cells that had a published figure, in percent. 0 when the config
+	// declares no [[Portfolio]] Fundamentals, which is every config that does
+	// not use them.
+	//
+	// It is reported because the failure it measures is silent: reported data
+	// begins in 2020, so a fundamental strategy run from 2010 sees nothing for
+	// the first decade and can look like it found an edge in the back half.
+	FundamentalCoverage float64
+
 	AvgExposure  float64 // mean invested fraction of the book, %
 	TimeInMarket float64 // % of simulated days holding anything at all
 

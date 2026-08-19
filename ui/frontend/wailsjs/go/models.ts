@@ -447,6 +447,7 @@ export namespace main {
 	    cointegratedPairs: number;
 	    turnover: number;
 	    avgExposure: number;
+	    fundamentalCoverage: number;
 	    calmarRatio: number;
 	    longestUnderwaterDays: number;
 	    timeInMarket: number;
@@ -492,6 +493,7 @@ export namespace main {
 	        this.cointegratedPairs = source["cointegratedPairs"];
 	        this.turnover = source["turnover"];
 	        this.avgExposure = source["avgExposure"];
+	        this.fundamentalCoverage = source["fundamentalCoverage"];
 	        this.calmarRatio = source["calmarRatio"];
 	        this.longestUnderwaterDays = source["longestUnderwaterDays"];
 	        this.timeInMarket = source["timeInMarket"];

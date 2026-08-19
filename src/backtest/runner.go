@@ -356,6 +356,7 @@ func runOne(
 	for i, bar := range windowed[p.Tickers[0]] {
 		dates[i] = bar.Date
 	}
+	p.applyFundamentalCoverage(dates)
 	p.applyBenchmarkMetrics(hist, dates, riskFreeRates)
 	p.applySplitMetrics(riskFreeRates)
 	// After the portfolio's own metrics, since the comparison reads them.
@@ -433,6 +434,68 @@ func validateCoverage(portfolios []*Portfolio) error {
 // Run executes every portfolio concurrently and always returns the
 // collected results. If output is non-nil, results are also written to a
 // file via the configured Reporter.
+
+// prefetchFundamentals fetches every declared metric once, before the worker
+// pool starts, and hands the same immutable slice to each portfolio that
+// declared anything.
+//
+// Here rather than in a worker for two reasons: the raw table is 8.5M rows and
+// one query beats N, and this runs single-threaded before any goroutine exists,
+// so it adds nothing to the concurrency surface of the pool below.
+//
+// A portfolio declaring no Fundamentals is skipped entirely, so a config that
+// does not use them performs exactly as it did.
+func prefetchFundamentals(
+	portfolios []*Portfolio, startTime, endTime time.Time,
+) {
+	tickerSet := make(map[string]bool)
+	metricSet := make(map[string]bool)
+	for _, p := range portfolios {
+		if len(p.Fundamentals) == 0 {
+			continue
+		}
+		for _, t := range p.Tickers {
+			tickerSet[t] = true
+		}
+		for _, m := range p.Fundamentals {
+			metricSet[m] = true
+		}
+		// market_cap() needs the share count whether or not the config named
+		// it, since it is the one metric a user can need without knowing to
+		// ask for it.
+		metricSet[sharesMetric] = true
+	}
+	if len(tickerSet) == 0 || len(metricSet) == 0 {
+		return
+	}
+
+	tickers := make([]string, 0, len(tickerSet))
+	for t := range tickerSet {
+		tickers = append(tickers, t)
+	}
+	metrics := make([]string, 0, len(metricSet))
+	for m := range metricSet {
+		metrics = append(metrics, m)
+	}
+
+	points := data.PointInTimeFundamentals(tickers, metrics, startTime, endTime)
+	if len(points) == 0 {
+		// Absent table, or nothing reported in the window. Every lookup then
+		// returns nil and FundamentalCoverage reports 0, which is the honest
+		// reading rather than a failure.
+		diagf("warn", "",
+			"no fundamentals were found for the declared metrics over %s..%s; "+
+				"fundamental() will return nil throughout",
+			startTime.Format("2006-01-02"), endTime.Format("2006-01-02"))
+		return
+	}
+	for _, p := range portfolios {
+		if len(p.Fundamentals) > 0 {
+			p.FundamentalData = points
+		}
+	}
+}
+
 func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 	if len(portfolios) == 0 {
 		return nil, fmt.Errorf("no portfolios to run")
@@ -469,6 +532,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 	historicalData := data.QueryAssetsForTickers(
 		allTickers, startTime, endTime,
 	)
+	prefetchFundamentals(portfolios, startTime, endTime)
 
 	numWorkers := runtime.NumCPU()
 	totalJobs := len(portfolios)

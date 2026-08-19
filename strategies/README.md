@@ -111,6 +111,49 @@ All take `(ticker, day)` and return 0 when the day is out of range.
 | `volume_at(t, day)` | Volume. |
 | `date_at(t, day)` | `"YYYY-MM-DD"` string (`""` when out of range). |
 
+### Fundamentals
+
+Reported figures, dated by the day they became **public** — never by the period
+they describe. Declare what you need in the config first; nothing is fetched
+otherwise:
+
+```toml
+[[Portfolio]]
+Fundamentals = ["Net Income", "Stockholders Equity", "Total Revenue"]
+```
+
+| Function | Returns |
+|---|---|
+| `fundamental(t, metric, day)` | The newest figure published on or before that day, or **`nil`**. |
+| `market_cap(t, day)` | Shares × close, or **`nil`** when the share count is missing or the close is ≤ 0. |
+
+**These return `nil`, not 0 — the opposite of `price()`.** That is deliberate.
+A price of zero is impossible, so `price()` can safely use 0 to mean "absent".
+A company can genuinely report zero net income, zero cash, or negative equity,
+so a 0 here would be indistinguishable from "not published yet" — the exact
+ambiguity that makes a strategy trade on a figure it never had. Test for `nil`:
+
+```lua
+local ni = fundamental(t, "Net Income", day)
+local eq = fundamental(t, "Stockholders Equity", day)
+if ni ~= nil and eq ~= nil and eq > 0 then
+  local roe = ni / eq
+  ...
+end
+```
+
+You cannot see the future here even if you try: the publication date is applied
+in Go, upstream of Lua, so a lookup only ever returns what was public that
+morning. Ratios, rankings and cross-sectional sorts are arithmetic you do
+yourself — there is no wider API on purpose.
+
+**Coverage is measured, not enforced.** Reported data starts in 2020, so a
+strategy run from 2010 sees `nil` for the first decade, trades only in the back
+half, and can look like it found an edge. The engine will not refuse that
+window; it reports a `Fund Cov %` metric instead — the share of
+(day × ticker × declared metric) cells that had a figure. Read it before
+believing the Sharpe.
+
 ### Indicators
 
 Computed in Go, so they are cheap to call in a loop.
@@ -265,6 +308,7 @@ left alone for now so there is an example of the long-hand form to copy from.
   and are invisible to strategy code — `cash()` already reflects them, and a
   `buy_max` sized against the whole balance is clamped down to cover its fee
   rather than rejected. See the main README's `[portfolio.Costs]` section.
+- **`fundamental()` and `market_cap()` return `nil`, while `price()` returns 0.** The two conventions genuinely differ, because 0 is an impossible price but a possible fundamental. Guard prices with `> 0` and fundamentals with `~= nil`.
 - **`price()` returns 0, not `nil`, out of range** — guard with `> 0`
   rather than `~= nil`.
 - **Only tickers in the `tickers` global can be traded.** Anything else is

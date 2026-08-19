@@ -677,6 +677,12 @@ export default function ResultsView({ results, fontSize }: Props) {
                 <th className="num" title="Mean invested fraction of the book">
                   Exposure %
                 </th>
+                <th
+                  className="num"
+                  title="Share of day x ticker x declared-metric cells that had a published figure. Blank unless the config declares Fundamentals."
+                >
+                  Fund Cov %
+                </th>
                 <th className="num" title="Share of simulated days holding anything">
                   In Market %
                 </th>
@@ -735,6 +741,14 @@ export default function ResultsView({ results, fontSize }: Props) {
                     <td className="num">{r.standardDev.toFixed(4)}</td>
                     <td className="num">{r.turnover.toFixed(2)}</td>
                     <td className="num">{r.avgExposure.toFixed(1)}</td>
+                    {/* Blank rather than 0.0 when no Fundamentals were
+                        declared: a zero here would read as "the data was
+                        missing" rather than "this run never asked for it". */}
+                    <td className="num">
+                      {(r.fundamentalCoverage ?? 0) > 0
+                        ? r.fundamentalCoverage.toFixed(1)
+                        : "—"}
+                    </td>
                     <td className="num">{r.timeInMarket.toFixed(1)}</td>
                     <td className="num">{r.avgCorrelation.toFixed(2)}</td>
                     <td className="num">{r.cointegratedPairs}</td>

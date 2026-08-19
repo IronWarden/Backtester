@@ -882,6 +882,49 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   that never traded is the single most important signal a result can carry, so
   say that plainly rather than reporting empty tables.
 
+- FUNDAMENTALS IN LUA STRATEGIES. A portfolio declares which reported figures
+  it needs with the Fundamentals config key:
+
+      [[Portfolio]]
+      Fundamentals = ["Net Income", "Stockholders Equity", "Total Revenue"]
+
+  They are fetched ONCE per run, before the worker pool starts, and reach a
+  script through exactly two globals:
+
+      fundamental(ticker, metric, day)  --> number, or nil if not yet published
+      market_cap(ticker, day)           --> shares x close, or nil
+
+  THESE RETURN nil, NOT 0, and that deliberately breaks the convention price()
+  follows. A price of zero is impossible so 0 safely means absent; a company
+  can genuinely report zero net income, zero cash or negative equity, so 0 here
+  would be indistinguishable from "not published yet" -- the exact ambiguity
+  that makes a strategy trade on a figure it never had. Tell authors to test
+  for nil, never for > 0.
+
+  Ratios, rankings and cross-sectional sorts are arithmetic a script does
+  itself; there is no wider surface and asking for one is a feature request.
+
+  LOOK-AHEAD IS ENFORCED IN GO, upstream of Lua: every figure carries the day
+  it became PUBLIC (real SEC filing date where known, then the earnings-calendar
+  date, then period end + 90 days as the worst case), and a lookup only ever
+  returns figures known on or before the simulated day. A script cannot reach a
+  value it could not have had.
+
+  market_cap needs the share count, so the loader fetches "Ordinary Shares
+  Number" whether or not the config named it. market_cap returns nil when the
+  share count is missing or the close is <= 0 (negative closes are real in this
+  database).
+
+  COVERAGE IS MEASURED, NOT ENFORCED. Reported data begins in 2020, so a
+  fundamental strategy run from 2010 sees nil for the first decade, trades only
+  in the back half, and can look like it found an edge. The engine does NOT
+  refuse such a window -- a strategy may legitimately act only when fundamentals
+  exist -- so the metric FundamentalCoverage reports the share of
+  (day x ticker x declared metric) cells that had a published figure. It is 0
+  when the config declares no Fundamentals, and the results table shows an em
+  dash in that case rather than 0.0. A low coverage figure alongside a good
+  Sharpe is the single most important thing to point out about such a run.
+
 - THE VERDICT STRIP IN THE APP. The results view shows a panel titled "Does
   this survive the obvious objections?" directly under the portfolio cards,
   carrying the same three cards as the -pages export: did it beat the baseline
