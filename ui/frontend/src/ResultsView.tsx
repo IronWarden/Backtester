@@ -153,6 +153,96 @@ type Hover = {
   rows: { name: string; color: string; v: number; x: number; y: number }[];
 };
 
+// The three questions that kill an idea, in the same visual weight as the
+// return above them. They are computed on every run and used to be visible
+// only on the CLI, which is the same failure mode as burying them in a
+// footnote: a candidate that looks good because it was the best of two hundred
+// tries should not be able to hide the two hundred.
+//
+// Deliberately mirrors the -pages export (src/backtest/candidatepage.go) card
+// for card, so a result read in the app and the same result read from a file
+// say the same thing.
+function VerdictStrip({ results }: { results: main.RunResult[] }) {
+  const shown = results.filter(
+    (r) => r.baseline?.computed || r.significance?.computed || (r.trials ?? 0) > 1,
+  );
+  if (shown.length === 0) return null;
+
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <span className="panel-title">Does this survive the obvious objections?</span>
+      </div>
+      <div className="verdicts">
+        {shown.map((r, i) => (
+          <div className="verdict-group" key={i}>
+            {shown.length > 1 && (
+              <div className="verdict-owner">{r.portfolioName}</div>
+            )}
+            <div className="verdict-cards">
+              {r.baseline?.computed ? (
+                <div className={`vcard ${r.baseline.beat ? "good" : "bad"}`}>
+                  <span className="vq">Beat {r.baseline.name}?</span>
+                  <span className="va">{r.baseline.beat ? "YES" : "NO"}</span>
+                  <span className="vd">
+                    {r.baseline.excessAnnualReturn >= 0 ? "+" : ""}
+                    {r.baseline.excessAnnualReturn.toFixed(2)}%/yr ·{" "}
+                    {fmtDollars(r.baseline.excessFinalValue)} in final value
+                  </span>
+                </div>
+              ) : (
+                <div className="vcard unknown">
+                  <span className="vq">Beat the baseline?</span>
+                  <span className="va">—</span>
+                  <span className="vd">no baseline could be built</span>
+                </div>
+              )}
+
+              {r.significance?.computed ? (
+                <div className={`vcard ${r.significance.pValue <= 0.05 ? "good" : "bad"}`}>
+                  <span className="vq">Better than random timing?</span>
+                  <span className="va">
+                    {r.significance.pValue <= 0.05 ? "YES" : "NO"}
+                  </span>
+                  <span className="vd">
+                    p = {r.significance.pValue.toFixed(3)} ·{" "}
+                    {r.significance.percentile.toFixed(0)}th percentile of{" "}
+                    {r.significance.draws} draws
+                  </span>
+                </div>
+              ) : (
+                <div className="vcard unknown">
+                  <span className="vq">Better than random timing?</span>
+                  <span className="va">—</span>
+                  <span className="vd">not computed</span>
+                </div>
+              )}
+
+              <div className={`vcard ${trialClass(r)}`}>
+                <span className="vq">How many trials was this picked from?</span>
+                <span className="va">{Math.max(r.trials ?? 0, 1)}</span>
+                <span className="vd">
+                  deflated Sharpe {r.deflatedSharpe.toFixed(3)} · a no-edge
+                  best-of-{Math.max(r.trials ?? 0, 1)} would show{" "}
+                  {r.expectedMaxSharpe.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// An unswept run is not being warned about at all; a swept one always is, and
+// how loudly depends on whether the deflated Sharpe clears the bar. Same rule
+// as writeVerdictStrip in candidatepage.go.
+function trialClass(r: main.RunResult): string {
+  if ((r.trials ?? 0) <= 1) return "good";
+  return r.deflatedSharpe < 0.9 ? "bad" : "warn";
+}
+
 type Props = { results: main.RunResult[]; fontSize: number };
 
 export default function ResultsView({ results, fontSize }: Props) {
@@ -405,6 +495,8 @@ export default function ResultsView({ results, fontSize }: Props) {
           );
         })}
       </div>
+
+      <VerdictStrip results={results} />
 
       {chart && (
         <div className="panel">

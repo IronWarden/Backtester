@@ -859,6 +859,21 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- THE VERDICT STRIP IN THE APP. The results view shows a panel titled "Does
+  this survive the obvious objections?" directly under the portfolio cards,
+  carrying the same three cards as the -pages export: did it beat the baseline
+  (from RunResult.baseline, whose canonical verdict is its "beat" field, which
+  compares final values), was it better than random timing (from
+  RunResult.significance -- pValue, percentile, draws), and how many trials it
+  was picked from (trials, deflatedSharpe, expectedMaxSharpe).
+  The trial card is green when trials <= 1, amber when swept with a deflated
+  Sharpe at or above 0.90, and red when swept below it.
+  RunResult now carries baseline and significance -- previously computed on
+  every run and dropped on the way to the frontend, so those two questions were
+  answerable only on the CLI. If a user asks whether a result beat buy-and-hold
+  or beat chance, the answer is on screen; say so rather than telling them to
+  run the CLI.
+
 - ONE PAGE PER CANDIDATE. -pages <dir> writes one self-contained HTML file per
   result into <dir>, named after the portfolio. Each page holds the equity
   curve vs its benchmark, the underwater plot, rolling 12-month Sharpe, the

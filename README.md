@@ -984,6 +984,19 @@ is plausible; a spike between two bad neighbours is overfit) and universe
 subsampling. Both need to know about the sweep that produced a result, which is
 different machinery from re-running one portfolio.
 
+### The same verdict, in the app
+
+The results view carries the same three cards under the portfolio summaries, in
+a panel titled **Does this survive the obvious objections?** — beat the
+baseline, better than random timing, and how many trials the result was picked
+from. Both surfaces read the same fields and apply the same rules, so a result
+reviewed on screen and the same result read from an exported page cannot
+disagree.
+
+`Baseline` and `Significance` are computed on every run. They used to be dropped
+on the way to the frontend, which meant the two questions that most often kill
+an idea were answerable only from the CLI.
+
 ### One page per candidate
 
 Deciding whether a result is real means reading a table row, squinting at a

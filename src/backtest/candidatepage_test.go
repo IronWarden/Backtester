@@ -42,7 +42,7 @@ func pageFixture() Result {
 			LongestUnderwaterDays: 141, Beta: 0.88, Alpha: 3.1,
 		},
 		Baseline: BaselineStats{
-			Computed: true, Name: "equal-weight buy & hold",
+			Computed: true, Beat: true, Name: "equal-weight buy & hold",
 			ExcessAnnualReturn: 2.4, ExcessFinalValue: 8100,
 		},
 		Significance: Significance{Draws: 1000, PValue: 0.021, Percentile: 97.9},
@@ -128,6 +128,24 @@ func TestCandidatePageLeadsWithTheObjections(t *testing.T) {
 
 // A result selected from 200 trials with a weak deflated Sharpe must be flagged,
 // not merely reported — that is the difference between disclosure and warning.
+// The canonical answer to "did it beat the baseline" is Baseline.Beat, which
+// compares final values. Recomputing it from ExcessAnnualReturn would let the
+// page disagree with the app about the same result.
+func TestCandidatePageFollowsTheCanonicalBeatField(t *testing.T) {
+	r := pageFixture()
+	r.Baseline.Beat = false
+	r.Baseline.ExcessAnnualReturn = 2.4 // positive, but Beat says no
+	page := CandidatePage(r)
+	if !strings.Contains(page, `<div class="card bad"><span class="q">Beat `) {
+		t.Error("the baseline card ignored Baseline.Beat and recomputed its own verdict")
+	}
+
+	r.Baseline.Beat = true
+	if !strings.Contains(CandidatePage(r), `<div class="card good"><span class="q">Beat `) {
+		t.Error("Beat=true did not produce a passing baseline card")
+	}
+}
+
 func TestCandidatePageFlagsAWeakDeflatedSharpe(t *testing.T) {
 	r := pageFixture()
 	r.DeflatedSharpe = 0.62

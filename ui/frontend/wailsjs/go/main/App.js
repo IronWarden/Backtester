@@ -6,6 +6,10 @@ export function Chat(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['Chat'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CheckConfig(arg1, arg2) {
+  return window['go']['main']['App']['CheckConfig'](arg1, arg2);
+}
+
 export function FileExists(arg1) {
   return window['go']['main']['App']['FileExists'](arg1);
 }
@@ -40,10 +44,6 @@ export function PickLuaFile() {
 
 export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
-}
-
-export function CheckConfig(arg1, arg2) {
-  return window['go']['main']['App']['CheckConfig'](arg1, arg2);
 }
 
 export function RunBacktest(arg1, arg2, arg3) {

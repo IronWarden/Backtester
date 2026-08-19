@@ -163,8 +163,11 @@ func writeVerdictStrip(b *strings.Builder, r Result) {
 
 	// Beat the baseline?
 	if r.Baseline.Computed {
+		// Baseline.Beat is the canonical answer (it compares final values);
+		// recomputing it from ExcessAnnualReturn here would let the two
+		// surfaces disagree about the same result.
 		cls, verdict := "bad", "NO"
-		if r.Baseline.ExcessAnnualReturn > 0 {
+		if r.Baseline.Beat {
 			cls, verdict = "good", "YES"
 		}
 		fmt.Fprintf(b, `<div class="card %s"><span class="q">Beat %s?</span>

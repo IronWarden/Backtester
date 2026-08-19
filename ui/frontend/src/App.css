@@ -1453,3 +1453,52 @@ button.primary:hover:not(:disabled),
   border-radius: var(--radius-s);
   padding: 0.45em 1em;
 }
+
+/* Verdict strip — the baseline / chance / trial-count cards. Mirrors the
+   -pages HTML export so the same result reads the same way in both places. */
+.verdicts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 14px 14px;
+}
+.verdict-owner {
+  font-size: 11px;
+  color: var(--muted, #8a8a85);
+  margin-bottom: 6px;
+}
+.verdict-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.vcard {
+  flex: 1 1 220px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: var(--surface-2, #1f1f1e);
+  border: 1px solid var(--border, #2a2a28);
+  border-left-width: 4px;
+}
+.vcard.good { border-left-color: #199e70; }
+.vcard.warn { border-left-color: #c98500; }
+.vcard.bad { border-left-color: #d95926; }
+.vcard.unknown { border-left-color: var(--muted, #8a8a85); }
+.vcard .vq {
+  display: block;
+  font-size: 11px;
+  color: var(--muted, #8a8a85);
+}
+.vcard .va {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 1px 0;
+}
+.vcard .vd {
+  display: block;
+  font-size: 10px;
+  color: var(--muted, #8a8a85);
+  font-family: ui-monospace, monospace;
+}

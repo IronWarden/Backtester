@@ -85,6 +85,14 @@ type RunResult struct {
 	Trials            int                         `json:"trials"`
 	ExpectedMaxSharpe float64                     `json:"expectedMaxSharpe"`
 	DeflatedSharpe    float64                     `json:"deflatedSharpe"`
+	// Baseline is what an equal-weight buy-and-hold of the SAME tickers would
+	// have returned over the same days with the same costs, and Significance
+	// is the result against a random-timing null. Both are computed on every
+	// run and were previously dropped on the way to the frontend, which left
+	// the two questions that kill an idea — "was this better than doing
+	// nothing" and "was this better than luck" — visible only on the CLI.
+	Baseline     backtest.BaselineStats `json:"baseline"`
+	Significance backtest.Significance  `json:"significance"`
 }
 
 // RunOutput is what one run hands back: the per-portfolio results, plus
@@ -236,6 +244,8 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput
 			Trials:                r.Trials,
 			ExpectedMaxSharpe:     r.ExpectedMaxSharpe,
 			DeflatedSharpe:        r.DeflatedSharpe,
+			Baseline:              r.Baseline,
+			Significance:          r.Significance,
 		})
 	}
 	return RunOutput{Results: results, Diagnostics: collector.records()}, nil
