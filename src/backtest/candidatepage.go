@@ -198,11 +198,14 @@ func writeVerdictStrip(b *strings.Builder, r Result) {
 	if trials < 1 {
 		trials = 1
 	}
+	// An unswept run is not being warned about at all; a swept one always is,
+	// and how loudly depends on whether the deflated Sharpe clears the bar.
 	cls := "good"
-	if trials > 1 && r.DeflatedSharpe < 0.90 {
-		cls = "bad"
-	} else if trials > 1 {
+	if trials > 1 {
 		cls = "warn"
+		if r.DeflatedSharpe < 0.90 {
+			cls = "bad"
+		}
 	}
 	group := r.TrialGroup
 	if group == "" {
