@@ -53,14 +53,16 @@ func WriteCandidatePages(results []Result, dir string) ([]string, error) {
 	paths := make([]string, 0, len(results))
 	used := make(map[string]int, len(results))
 	for _, r := range results {
-		name := safeFilename(r.PortfolioName)
 		// Two portfolios can share a name; suffix rather than overwrite, since
 		// silently losing a candidate's page is the one failure that would not
-		// be noticed.
-		if n := used[name]; n > 0 {
-			name = fmt.Sprintf("%s-%d", name, n+1)
+		// be noticed. The tally is keyed on the BASE name, never the suffixed
+		// one, or the second duplicate would start its own count.
+		base := safeFilename(r.PortfolioName)
+		name := base
+		if n := used[base]; n > 0 {
+			name = fmt.Sprintf("%s-%d", base, n+1)
 		}
-		used[safeFilename(r.PortfolioName)]++
+		used[base]++
 
 		path := filepath.Join(dir, name+".html")
 		if err := os.WriteFile(path, []byte(CandidatePage(r)), 0o644); err != nil {
