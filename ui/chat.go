@@ -882,6 +882,49 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   that never traded is the single most important signal a result can carry, so
   say that plainly rather than reporting empty tables.
 
+- HYPOTHESIS IN, VERDICT OUT. -hypothesis <file.toml> judges a run against a
+  criterion registered BEFORE it ran:
+
+      ID          = "H-1"
+      Claim       = "12-1 momentum beats buy-and-hold on the benchmarks"
+      Campaign    = "trend"
+      Criterion   = "sharpe >= 1.2"
+      TrialBudget = 200
+
+  A Criterion is one metric, one operator (> >= < <=) and one number -- not an
+  expression language, because a criterion needing parentheses is one nobody
+  can check was written in advance. Usable metrics: sharpe, sortino, calmar,
+  annual_return, max_drawdown, total_return, turnover, exposure,
+  time_in_market, p_value. Anything else is refused at load, not at judgement.
+
+  THREE VERDICTS ONLY: survives, rejected, inconclusive. Four conditions, ALL
+  of which must pass to survive: the pre-registered criterion; campaign-
+  deflated confidence >= 0.90; beating the automatic baseline OUT OF SAMPLE;
+  and robustness >= 0.6 with a non-zero parameter-neighbourhood component.
+
+  "INCONCLUSIVE" IS COMMON AND IS NOT A FAILURE. Rejected is a claim about the
+  strategy (a condition was evaluated and failed). Inconclusive is a claim
+  about the EVIDENCE (a condition could not be evaluated at all). Never
+  describe an inconclusive result as a failure or as a near-miss.
+
+  RIGHT NOW NOTHING CAN SURVIVE, and this is deliberate rather than a bug:
+  condition 4 needs the parameter-neighbourhood check, which T24 did not build,
+  so it always reports unavailable and every otherwise-good result is
+  inconclusive with that named as the reason. Unevaluable must never read as a
+  pass. Say this plainly if a user asks why nothing survives.
+
+  Condition 3 needs [portfolio.Validation] set, because without a split there
+  is no out-of-sample stretch; it will NOT fall back to a whole-run comparison,
+  which would score parameter fitting as a finding. A run that declared
+  Fundamentals and scored under 50% coverage is disqualified as evidence
+  (inconclusive), not rejected.
+
+  The trial budget (default 200) is reported when spent but never decides a
+  verdict -- it says the campaign is over and further searching is not
+  evidence. Engine-side: backtest.LoadHypothesis, Judge, ParseCriterion,
+  VerdictReport. The rule that is not configurable: a changed question is a NEW
+  hypothesis ID, never an edit to an existing one.
+
 - FUNDAMENTALS IN LUA STRATEGIES. A portfolio declares which reported figures
   it needs with the Fundamentals config key:
 

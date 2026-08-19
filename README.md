@@ -1012,6 +1012,59 @@ frontend did not carry until now. One sign convention worth knowing:
 for losers — so the UI writes the minus sign itself rather than relying on the
 field to be signed.
 
+### Hypothesis in, verdict out
+
+A backtest lies mainly through one mechanism: deciding what counts as success
+*after* seeing the results. The fix is to write the criterion down first and
+evaluate it mechanically.
+
+```toml
+# hypothesis.toml
+ID          = "H-1"
+Claim       = "12-1 momentum beats buy-and-hold on the benchmark series"
+Campaign    = "trend"
+Criterion   = "sharpe >= 1.2"
+TrialBudget = 200
+```
+
+```bash
+cd src
+go run main.go -hypothesis ../hypothesis.toml
+```
+
+A `Criterion` is one metric, one operator (`>` `>=` `<` `<=`) and one number —
+deliberately not an expression language, because a criterion complex enough to
+need parentheses is one nobody can check was written in advance. It is parsed
+at *load*, so an unparseable criterion fails before the run rather than after
+the numbers exist.
+
+**Three verdicts, and four conditions that must *all* pass to survive:**
+
+| Condition | Source |
+| --- | --- |
+| The pre-registered criterion | your `Criterion` |
+| Campaign-deflated confidence ≥ 0.90 | T17/T23 |
+| Beats the baseline **out of sample** | T32 + `[portfolio.Validation]` |
+| Robustness ≥ 0.6, parameter-neighbourhood non-zero | T24 |
+
+`rejected` is a claim about the **strategy** — something was evaluated and
+failed. `inconclusive` is a claim about the **evidence** — something could not
+be evaluated at all. They are not degrees of the same thing.
+
+**Nothing can survive today, on purpose.** Condition 4 needs the
+parameter-neighbourhood check that T24 did not build, so it always reports
+unavailable and every otherwise-good result reads inconclusive with that named
+as the reason. Unevaluable must never read as a pass; finishing T24 turns this
+on without changing the verdict engine.
+
+Two more refusals worth knowing: condition 3 will not substitute a whole-run
+baseline when no split is configured, because that would score parameter fitting
+as a finding; and a run that declared `Fundamentals` but scored under 50%
+coverage is disqualified as evidence rather than rejected as a strategy.
+
+The trial budget is reported when spent but never decides a verdict — it says
+the campaign is over and further searching is not evidence.
+
 ### Fundamentals in a strategy
 
 `PointInTimeFundamentals` has been correct since T29 and nothing called it, so

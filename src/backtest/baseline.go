@@ -52,6 +52,17 @@ type BaselineStats struct {
 	// or a universe the equal-weight hold could not enter. Distinguishes "the
 	// strategy matched the baseline exactly" from "there was no baseline".
 	Computed bool `json:"computed"`
+	// OutOfSampleAnnualReturn is the baseline measured over the SAME
+	// out-of-sample window as the strategy, and is the only baseline figure a
+	// verdict may compare against (T26 condition 3). The whole-run figure
+	// cannot answer that question: the strategy's parameters were chosen with
+	// the in-sample half in view, so comparing its full-window return to a
+	// full-window baseline scores the fitting as if it were a finding.
+	//
+	// OutOfSampleComputed is false when the portfolio configures no
+	// [portfolio.Validation] split, or the segment is too short to report.
+	OutOfSampleAnnualReturn float64 `json:"outOfSampleAnnualReturn"`
+	OutOfSampleComputed     bool    `json:"outOfSampleComputed"`
 }
 
 // BaselineName is what the comparison is called wherever it surfaces.
@@ -101,6 +112,23 @@ func equalWeightBaseline(
 	}
 	base.GetBacktestingData(riskFreeRates, windowed, dataLen)
 
+	// The baseline is split on the SAME date as the strategy so condition 3 of
+	// a verdict compares two figures measured over one window. Set after the
+	// simulation because the split reads DailyReturns, and deliberately here
+	// rather than on the constructed portfolio above: the baseline must not
+	// inherit the split for any other purpose.
+	var oosAnnual float64
+	var oosComputed bool
+	if !p.InSampleEnd.IsZero() {
+		base.InSampleEnd = p.InSampleEnd
+		base.applySplitMetrics(riskFreeRates)
+		for _, seg := range base.Splits {
+			if seg.Label == "out-of-sample" {
+				oosAnnual, oosComputed = seg.AnnualReturn, true
+			}
+		}
+	}
+
 	if len(base.PortfolioCloseValues) == 0 {
 		return stats
 	}
@@ -114,6 +142,9 @@ func equalWeightBaseline(
 		MaxDrawdown:  base.Metrics.MaxDrawdown,
 		StandardDev:  base.Metrics.StandardDev,
 		Computed:     true,
+
+		OutOfSampleAnnualReturn: oosAnnual,
+		OutOfSampleComputed:     oosComputed,
 	}
 	if len(p.PortfolioCloseValues) > 0 {
 		strategyFinal := p.PortfolioCloseValues[len(p.PortfolioCloseValues)-1]

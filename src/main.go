@@ -30,6 +30,7 @@ func main() {
 		verifyPath  string
 		research    bool
 		pagesDir    string
+		hypothPath  string
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
 	flag.BoolVar(
@@ -93,6 +94,12 @@ func main() {
 		"Run the config and report it as research: baseline, chance, "+
 			"attribution, regimes and robustness, in the order that kills an "+
 			"idea fastest. Implies -robustness",
+	)
+	flag.StringVar(
+		&hypothPath, "hypothesis", "",
+		"Judge the run against a pre-registered hypothesis file (ID, Claim, "+
+			"Criterion, TrialBudget). The verdict is mechanical: survives, "+
+			"rejected or inconclusive",
 	)
 	flag.StringVar(
 		&pagesDir, "pages", "",
@@ -294,6 +301,24 @@ func main() {
 		}
 	}
 
+	// Judged before anything is written out, so a rejection is visible in the
+	// same breath as the numbers that produced it rather than after them.
+	if hypothPath != "" {
+		h, err := backtest.LoadHypothesis(hypothPath)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		for _, res := range results {
+			trials := res.Trials
+			if h.Campaign != "" {
+				if n, err := campaignTrialCount(h.Campaign); err == nil && n > trials {
+					trials = n
+				}
+			}
+			fmt.Print(backtest.Judge(h, res, trials).String())
+		}
+	}
+
 	if pagesDir != "" {
 		paths, err := backtest.WriteCandidatePages(results, pagesDir)
 		if err != nil {
@@ -360,4 +385,21 @@ func recordRun(
 	fmt.Printf("recorded %d result(s) to %s\n",
 		len(results), backtest.DefaultRegistryPath)
 	return nil
+}
+
+// campaignTrialCount reads a campaign's cumulative trial count from the
+// research log, so a verdict deflates against every trial ever spent on the
+// question rather than only the ones in this invocation.
+//
+// A missing or unreadable log is not an error here: the verdict falls back to
+// this run's own trial count, which is the conservative direction (fewer
+// trials means a lower bar, so it can only make a verdict harder to justify,
+// never easier to fake).
+func campaignTrialCount(campaign string) (int, error) {
+	reg, err := backtest.OpenRegistry(backtest.DefaultRegistryPath)
+	if err != nil {
+		return 0, err
+	}
+	defer reg.Close()
+	return reg.CampaignTrials(campaign)
 }
