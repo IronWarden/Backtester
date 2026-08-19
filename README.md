@@ -1012,6 +1012,19 @@ frontend did not carry until now. One sign convention worth knowing:
 for losers — so the UI writes the minus sign itself rather than relying on the
 field to be signed.
 
+### The same loop, in the app
+
+The config pane carries a collapsible **Pre-register a hypothesis** box holding
+the same TOML the CLI reads. It sits *above* the run button deliberately: a
+criterion typed after seeing a result is not a pre-registration. An empty box
+runs the backtest unjudged — which is not the same as judging it against a
+default nobody chose.
+
+Results then show a **Hypothesis verdict** panel above the standing objections,
+with the verdict colour-coded and every condition listed as PASS / FAIL / n/a
+alongside the numbers behind it. A criterion the parser refuses shows as an
+error in the box rather than a run that quietly went unjudged.
+
 ### Hypothesis in, verdict out
 
 A backtest lies mainly through one mechanism: deciding what counts as success

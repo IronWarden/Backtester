@@ -882,6 +882,21 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   that never traded is the single most important signal a result can carry, so
   say that plainly rather than reporting empty tables.
 
+- THE HYPOTHESIS PANEL IN THE APP. The config pane has a collapsible
+  "Pre-register a hypothesis" box ABOVE the run button, taking the same TOML the
+  CLI's -hypothesis flag reads (ID, Claim, Campaign, Criterion, TrialBudget).
+  It is above the button on purpose: a criterion typed after seeing a result is
+  not a pre-registration. Leaving it EMPTY runs the backtest unjudged, which is
+  different from judging against a default nobody chose -- never invent a
+  criterion for a user.
+  A criterion the parser refuses is reported in the box as an error and the run
+  is simply not judged, rather than silently going unjudged.
+  Results then show a "Hypothesis verdict" panel above the standing-objections
+  strip, with the verdict word colour-coded (survives green, rejected red,
+  inconclusive amber) and every check listed as PASS / FAIL / n/a with its
+  detail. RunBacktest takes the hypothesis text as its fourth argument and
+  returns verdicts plus hypothesisError on RunOutput.
+
 - HYPOTHESIS IN, VERDICT OUT. -hypothesis <file.toml> judges a run against a
   criterion registered BEFORE it ran:
 

@@ -46,8 +46,8 @@ export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
 }
 
-export function RunBacktest(arg1, arg2, arg3) {
-  return window['go']['main']['App']['RunBacktest'](arg1, arg2, arg3);
+export function RunBacktest(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RunBacktest'](arg1, arg2, arg3, arg4);
 }
 
 export function RunUserQuery(arg1, arg2) {

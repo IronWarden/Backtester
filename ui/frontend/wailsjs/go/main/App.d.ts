@@ -24,7 +24,7 @@ export function PickLuaFile():Promise<string>;
 
 export function ReadFile(arg1:string):Promise<string>;
 
-export function RunBacktest(arg1:string,arg2:string,arg3:string):Promise<main.RunOutput>;
+export function RunBacktest(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.RunOutput>;
 
 export function RunUserQuery(arg1:string,arg2:string):Promise<main.QueryResult>;
 

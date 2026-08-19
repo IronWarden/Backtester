@@ -94,6 +94,12 @@ function App() {
     const [running, setRunning] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
     const [results, setResults] = useState<main.RunResult[]>([]);
+    // Pre-registration. Kept as raw TOML so the app and the CLI validate one
+    // identical thing; an empty box means the run is simply not judged, which
+    // is different from judging it against a default nobody registered.
+    const [hypothesis, setHypothesis] = useState("");
+    const [verdicts, setVerdicts] = useState<backtest.VerdictReport[]>([]);
+    const [hypothesisError, setHypothesisError] = useState("");
     const [diagnostics, setDiagnostics] = useState<backtest.Diagnostic[]>(
         [],
     );
@@ -343,9 +349,11 @@ function App() {
         setRunning(true);
         setStatusMsg("Running…");
         try {
-            const res = await RunBacktest(cfgText, dbPath, luaPath);
+            const res = await RunBacktest(cfgText, dbPath, luaPath, hypothesis);
             setResults(res.results ?? []);
             setDiagnostics(res.diagnostics ?? []);
+            setVerdicts(res.verdicts ?? []);
+            setHypothesisError(res.hypothesisError ?? "");
             setStatusMsg(`Done — ${(res.results ?? []).length} result(s)`);
         } catch (e: any) {
             setErrorMsg(String(e?.message ?? e));
@@ -516,6 +524,38 @@ function App() {
                         </button>
                     </div>
 
+                    {/* Deliberately above the run button: a criterion is a
+                        pre-registration, and one typed after seeing results is
+                        not one. Leaving it empty runs unjudged rather than
+                        judging against a default nobody chose. */}
+                    <details className="prereg">
+                        <summary>
+                            Pre-register a hypothesis
+                            {hypothesis.trim() ? " — registered" : " (optional)"}
+                        </summary>
+                        <textarea
+                            className="prereg-input"
+                            spellCheck={false}
+                            placeholder={
+                                'ID          = "H-1"\n' +
+                                'Claim       = "12-1 momentum beats buy-and-hold"\n' +
+                                'Criterion   = "sharpe >= 1.2"\n' +
+                                "TrialBudget = 200"
+                            }
+                            value={hypothesis}
+                            onChange={(e) => setHypothesis(e.target.value)}
+                        />
+                        <div className="prereg-note">
+                            One metric, one operator, one number — e.g.{" "}
+                            <code>sharpe &gt;= 1.2</code>. Write it before you run,
+                            and never edit it after seeing a result: a changed
+                            question is a new <code>ID</code>.
+                        </div>
+                        {hypothesisError && (
+                            <div className="prereg-error">{hypothesisError}</div>
+                        )}
+                    </details>
+
                     <div className="tabs">
                         <button
                             className={tab === "toml" ? "tab active" : "tab"}
@@ -576,7 +616,7 @@ function App() {
             />
 
             <div className="results" style={{ height: resultsHeight * scale }}>
-                <ResultsView results={results} fontSize={fontSize} />
+                <ResultsView results={results} fontSize={fontSize} verdicts={verdicts} />
             </div>
 
             <ConsolePanel diagnostics={diagnostics} fontSize={fontSize} />

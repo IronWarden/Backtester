@@ -1509,3 +1509,43 @@ button.primary:hover:not(:disabled),
   padding: 8px 12px 2px;
 }
 td.num.dim { color: var(--muted, #8a8a85); }
+
+/* Pre-registration box and the hypothesis verdict. */
+.prereg { margin: 8px 0 0; font-size: 12px; }
+.prereg > summary { cursor: pointer; color: var(--muted, #8a8a85); padding: 4px 0; }
+.prereg-input {
+  width: 100%; min-height: 92px; margin-top: 6px; padding: 8px;
+  font-family: ui-monospace, monospace; font-size: 12px;
+  background: var(--surface-2, #1f1f1e); color: inherit;
+  border: 1px solid var(--border, #2a2a28); border-radius: 6px; resize: vertical;
+}
+.prereg-note { color: var(--muted, #8a8a85); font-size: 11px; margin-top: 5px; }
+.prereg-error {
+  margin-top: 6px; padding: 7px 9px; border-radius: 6px; font-size: 11px;
+  font-family: ui-monospace, monospace;
+  background: rgba(217, 89, 38, 0.12); border-left: 3px solid #d95926;
+}
+.vhead { display: flex; align-items: baseline; gap: 10px; padding-bottom: 4px; }
+.vverdict {
+  font-size: 15px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.vhead.survives .vverdict { color: #199e70; }
+.vhead.rejected .vverdict { color: #d95926; }
+.vhead.inconclusive .vverdict { color: #c98500; }
+.vid { font-family: ui-monospace, monospace; color: var(--muted, #8a8a85); }
+.vport { color: var(--muted, #8a8a85); font-size: 12px; }
+.vclaim { font-size: 13px; margin-bottom: 3px; }
+.vcriterion, .vbudget { font-size: 11px; color: var(--muted, #8a8a85); }
+.vbudget { color: #c98500; margin-top: 3px; }
+.vchecks { list-style: none; margin: 8px 0 0; padding: 0; }
+.vcheck {
+  display: grid; grid-template-columns: 44px 210px 1fr; gap: 10px;
+  padding: 5px 0; border-top: 1px solid var(--border, #2a2a28);
+  align-items: baseline; font-size: 12px;
+}
+.vstatus { font-family: ui-monospace, monospace; font-weight: 700; font-size: 11px; }
+.vcheck.pass .vstatus { color: #199e70; }
+.vcheck.fail .vstatus { color: #d95926; }
+.vcheck.unavailable .vstatus { color: var(--muted, #8a8a85); }
+.vdetail { color: var(--muted, #8a8a85); font-size: 11px; }

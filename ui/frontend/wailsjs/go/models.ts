@@ -11,6 +11,8 @@ export namespace backtest {
 	    excessAnnualReturn: number;
 	    beat: boolean;
 	    computed: boolean;
+	    outOfSampleAnnualReturn: number;
+	    outOfSampleComputed: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BaselineStats(source);
@@ -28,6 +30,8 @@ export namespace backtest {
 	        this.excessAnnualReturn = source["excessAnnualReturn"];
 	        this.beat = source["beat"];
 	        this.computed = source["computed"];
+	        this.outOfSampleAnnualReturn = source["outOfSampleAnnualReturn"];
+	        this.outOfSampleComputed = source["outOfSampleComputed"];
 	    }
 	}
 	export class BenchmarkStats {
@@ -48,6 +52,22 @@ export namespace backtest {
 	        this.sharpeRatio = source["sharpeRatio"];
 	        this.maxDrawdown = source["maxDrawdown"];
 	        this.standardDev = source["standardDev"];
+	    }
+	}
+	export class Check {
+	    name: string;
+	    status: string;
+	    detail: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Check(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.detail = source["detail"];
 	    }
 	}
 	export class Diagnostic {
@@ -324,6 +344,57 @@ export namespace backtest {
 		    return a;
 		}
 	}
+	export class VerdictReport {
+	    hypothesisId: string;
+	    claim: string;
+	    campaign: string;
+	    portfolio: string;
+	    criterion: string;
+	    verdict: string;
+	    checks: Check[];
+	    // Go type: time
+	    judgedAt: any;
+	    trialsSpent: number;
+	    budget: number;
+	    budgetSpent: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new VerdictReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hypothesisId = source["hypothesisId"];
+	        this.claim = source["claim"];
+	        this.campaign = source["campaign"];
+	        this.portfolio = source["portfolio"];
+	        this.criterion = source["criterion"];
+	        this.verdict = source["verdict"];
+	        this.checks = this.convertValues(source["checks"], Check);
+	        this.judgedAt = this.convertValues(source["judgedAt"], null);
+	        this.trialsSpent = source["trialsSpent"];
+	        this.budget = source["budget"];
+	        this.budgetSpent = source["budgetSpent"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class WalkForwardWindow {
 	    trainStart: string;
 	    trainEnd: string;
@@ -544,6 +615,8 @@ export namespace main {
 	export class RunOutput {
 	    results: RunResult[];
 	    diagnostics: backtest.Diagnostic[];
+	    verdicts: backtest.VerdictReport[];
+	    hypothesisError: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new RunOutput(source);
@@ -553,6 +626,8 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.results = this.convertValues(source["results"], RunResult);
 	        this.diagnostics = this.convertValues(source["diagnostics"], backtest.Diagnostic);
+	        this.verdicts = this.convertValues(source["verdicts"], backtest.VerdictReport);
+	        this.hypothesisError = source["hypothesisError"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

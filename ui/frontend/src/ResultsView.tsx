@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { main } from "../wailsjs/go/models";
+import { backtest, main } from "../wailsjs/go/models";
 
 // Categorical palette (dark-surface steps), assigned by portfolio index in
 // fixed slot order. Validated against the #1a1a19 card surface for CVD
@@ -153,6 +153,63 @@ type Hover = {
   rows: { name: string; color: string; v: number; x: number; y: number }[];
 };
 
+// The mechanical judgement against a pre-registered criterion. Rendered above
+// the standing objections because it is the question the user actually asked;
+// the strip below is the set of questions asked on their behalf.
+//
+// Three verdicts, and the colours say what they mean rather than good/bad:
+// rejected is a claim about the STRATEGY, inconclusive a claim about the
+// EVIDENCE. They are not degrees of the same thing, so inconclusive is amber
+// and neutral rather than a paler shade of failure.
+function HypothesisVerdicts({ verdicts }: { verdicts: backtest.VerdictReport[] }) {
+  if (verdicts.length === 0) return null;
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <span className="panel-title">Hypothesis verdict</span>
+      </div>
+      <div className="verdicts">
+        {verdicts.map((v, i) => (
+          <div className="verdict-group" key={i}>
+            <div className={`vhead ${v.verdict}`}>
+              <span className="vverdict">{v.verdict}</span>
+              <span className="vid">{v.hypothesisId}</span>
+              {v.portfolio && <span className="vport">{v.portfolio}</span>}
+            </div>
+            {v.claim && <div className="vclaim">{v.claim}</div>}
+            <div className="vcriterion">
+              criterion <code>{v.criterion}</code>
+              {v.campaign
+                ? ` · campaign ${v.campaign}: ${v.trialsSpent} of ${v.budget} trials spent`
+                : ""}
+            </div>
+            {v.budgetSpent && (
+              <div className="vbudget">
+                Budget spent — further searching in this campaign is not evidence.
+              </div>
+            )}
+            <ul className="vchecks">
+              {(v.checks ?? []).map((c: backtest.Check, j: number) => (
+                <li className={`vcheck ${c.status}`} key={j}>
+                  <span className="vstatus">
+                    {c.status === "pass"
+                      ? "PASS"
+                      : c.status === "fail"
+                        ? "FAIL"
+                        : "n/a"}
+                  </span>
+                  <span className="vname">{c.name}</span>
+                  <span className="vdetail">{c.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // The three questions that kill an idea, in the same visual weight as the
 // return above them. They are computed on every run and used to be visible
 // only on the CLI, which is the same failure mode as burying them in a
@@ -243,9 +300,13 @@ function trialClass(r: main.RunResult): string {
   return r.deflatedSharpe < 0.9 ? "bad" : "warn";
 }
 
-type Props = { results: main.RunResult[]; fontSize: number };
+type Props = {
+  results: main.RunResult[];
+  fontSize: number;
+  verdicts?: backtest.VerdictReport[];
+};
 
-export default function ResultsView({ results, fontSize }: Props) {
+export default function ResultsView({ results, fontSize, verdicts }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   const [hover, setHover] = useState<Hover | null>(null);
@@ -495,6 +556,8 @@ export default function ResultsView({ results, fontSize }: Props) {
           );
         })}
       </div>
+
+      <HypothesisVerdicts verdicts={verdicts ?? []} />
 
       <VerdictStrip results={results} />
 

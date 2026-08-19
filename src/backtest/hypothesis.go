@@ -469,25 +469,35 @@ func (v VerdictReport) String() string {
 // that turns out to be unparseable only after a run has produced numbers is a
 // criterion chosen after seeing them, whatever the file's timestamp says.
 func LoadHypothesis(path string) (Hypothesis, error) {
-	var h Hypothesis
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return h, fmt.Errorf("reading hypothesis %s: %w", path, err)
+		return Hypothesis{}, fmt.Errorf("reading hypothesis %s: %w", path, err)
 	}
+	h, err := ParseHypothesis(raw)
+	if err != nil {
+		return h, fmt.Errorf("hypothesis %s: %w", path, err)
+	}
+	return h, nil
+}
+
+// ParseHypothesis reads a pre-registration from TOML text, so the desktop app
+// and the CLI validate one identically — a criterion the app accepts and the
+// CLI refuses would be a way to register a claim that cannot be judged.
+func ParseHypothesis(raw []byte) (Hypothesis, error) {
+	var h Hypothesis
 	if err := toml.Unmarshal(raw, &h); err != nil {
-		return h, fmt.Errorf("parsing hypothesis %s: %w", path, err)
+		return h, err
 	}
 	if strings.TrimSpace(h.ID) == "" {
-		return h, fmt.Errorf("hypothesis %s: ID is required — a changed "+
-			"question is a new hypothesis with a new ID, never an edit to "+
-			"this one", path)
+		return h, fmt.Errorf("ID is required — a changed question is a new " +
+			"hypothesis with a new ID, never an edit to this one")
 	}
 	if strings.TrimSpace(h.Criterion) == "" {
-		return h, fmt.Errorf("hypothesis %s: Criterion is required; without "+
-			"one this is not a pre-registration", path)
+		return h, fmt.Errorf(
+			"Criterion is required; without one this is not a pre-registration")
 	}
 	if _, err := ParseCriterion(h.Criterion); err != nil {
-		return h, fmt.Errorf("hypothesis %s: %w", path, err)
+		return h, err
 	}
 	h.RegisteredAt = time.Now()
 	return h, nil

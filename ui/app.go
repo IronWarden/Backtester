@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"strings"
 	"sync"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -29,22 +30,22 @@ func (a *App) startup(ctx context.Context) {
 // RunResult is the wire shape of a single portfolio's metrics, exposed to
 // the frontend. Float fields are sent as JSON numbers.
 type RunResult struct {
-	PortfolioName         string  `json:"portfolioName"`
-	Strategy              string  `json:"strategy"`
-	SharpeRatio           float64 `json:"sharpeRatio"`
-	SortinoRatio          float64 `json:"sortinoRatio"`
-	MaxDrawdown           float64 `json:"maxDrawdown"`
-	AnnualReturn          float64 `json:"annualReturn"`
-	StandardDev           float64 `json:"standardDev"`
-	AvgCorrelation        float64 `json:"avgCorrelation"`
-	CointegratedPairs     int     `json:"cointegratedPairs"`
-	Turnover              float64 `json:"turnover"`
-	AvgExposure           float64 `json:"avgExposure"`
+	PortfolioName     string  `json:"portfolioName"`
+	Strategy          string  `json:"strategy"`
+	SharpeRatio       float64 `json:"sharpeRatio"`
+	SortinoRatio      float64 `json:"sortinoRatio"`
+	MaxDrawdown       float64 `json:"maxDrawdown"`
+	AnnualReturn      float64 `json:"annualReturn"`
+	StandardDev       float64 `json:"standardDev"`
+	AvgCorrelation    float64 `json:"avgCorrelation"`
+	CointegratedPairs int     `json:"cointegratedPairs"`
+	Turnover          float64 `json:"turnover"`
+	AvgExposure       float64 `json:"avgExposure"`
 	// FundamentalCoverage is the share of (day x ticker x declared metric)
 	// cells that had a published figure. 0 when the config declares no
 	// Fundamentals, so the column is blank for every run that does not use
 	// them rather than showing a misleading zero.
-	FundamentalCoverage float64 `json:"fundamentalCoverage"`
+	FundamentalCoverage   float64 `json:"fundamentalCoverage"`
 	CalmarRatio           float64 `json:"calmarRatio"`
 	LongestUnderwaterDays int     `json:"longestUnderwaterDays"`
 	TimeInMarket          float64 `json:"timeInMarket"`
@@ -112,6 +113,15 @@ type RunResult struct {
 type RunOutput struct {
 	Results     []RunResult           `json:"results"`
 	Diagnostics []backtest.Diagnostic `json:"diagnostics"`
+	// Verdicts is one mechanical judgement per result, present only when the
+	// run was given a pre-registered hypothesis. Empty otherwise — a run with
+	// no registered claim has nothing to be judged against, and inventing a
+	// default criterion would be the exact failure the feature prevents.
+	Verdicts []backtest.VerdictReport `json:"verdicts"`
+	// HypothesisError is a hypothesis that could not be registered, reported
+	// separately so a bad criterion is a visible refusal rather than a run
+	// that quietly went unjudged.
+	HypothesisError string `json:"hypothesisError"`
 }
 
 // maxDiagnostics bounds what one run may report. A Lua script that raises on
@@ -196,7 +206,12 @@ func (a *App) CheckConfig(cfgText, defaultLuaPath string) (out RunOutput, err er
 // defaultLuaPath is used as the strategy for any portfolio that omits its
 // Strategy field, so the script open in the Lua tab becomes the default.
 // Returns the per-portfolio results in run order, with the run's diagnostics.
-func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput, err error) {
+// RunBacktest runs a config and, when hypothesisText is non-empty, judges every
+// result against it. The hypothesis is parsed BEFORE the run, so a criterion
+// that cannot be judged is refused while there are still no numbers to see.
+func (a *App) RunBacktest(
+	cfgText, dbPath, defaultLuaPath, hypothesisText string,
+) (out RunOutput, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("backtest panic: %v\n%s", r, debug.Stack())
@@ -211,6 +226,19 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput
 	var collector diagCollector
 	backtest.Diagnostics = collector.record
 	defer func() { backtest.Diagnostics = nil }()
+
+	// Registered first: parsing after the run would mean a criterion accepted
+	// or rejected with the results already in hand.
+	var hyp backtest.Hypothesis
+	var hypErr string
+	if strings.TrimSpace(hypothesisText) != "" {
+		h, perr := backtest.ParseHypothesis([]byte(hypothesisText))
+		if perr != nil {
+			hypErr = perr.Error()
+		} else {
+			hyp = h
+		}
+	}
 
 	raw, err := backtest.RunFromConfigText(cfgText, dbPath, defaultLuaPath)
 	if err != nil {
@@ -260,7 +288,21 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput
 			TradeStats:            r.TradeStats,
 		})
 	}
-	return RunOutput{Results: results, Diagnostics: collector.records()}, nil
+	out = RunOutput{
+		Results:         results,
+		Diagnostics:     collector.records(),
+		HypothesisError: hypErr,
+	}
+	if hyp.ID != "" {
+		for _, r := range raw {
+			// The campaign trial count lives in the research log, which the
+			// desktop app does not open; this run's own trial group is the
+			// conservative fallback (fewer trials is a lower bar, so it can
+			// never make a verdict easier to fake).
+			out.Verdicts = append(out.Verdicts, backtest.Judge(hyp, r, r.Trials))
+		}
+	}
+	return out, nil
 }
 
 // PickConfigFile opens a native file picker for TOML configs.
