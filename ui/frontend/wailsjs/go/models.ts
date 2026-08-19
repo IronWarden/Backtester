@@ -244,6 +244,86 @@ export namespace backtest {
 	        this.computed = source["computed"];
 	    }
 	}
+	export class TickerPnL {
+	    ticker: string;
+	    realized: number;
+	    unrealized: number;
+	    fees: number;
+	    trades: number;
+	    sharesHeld: number;
+	    averageCost: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TickerPnL(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.realized = source["realized"];
+	        this.unrealized = source["unrealized"];
+	        this.fees = source["fees"];
+	        this.trades = source["trades"];
+	        this.sharesHeld = source["sharesHeld"];
+	        this.averageCost = source["averageCost"];
+	    }
+	}
+	export class TradeStats {
+	    trades: number;
+	    buys: number;
+	    sells: number;
+	    roundTrips: number;
+	    wins: number;
+	    losses: number;
+	    winRate: number;
+	    avgWin: number;
+	    avgLoss: number;
+	    profitFactor: number;
+	    totalRealized: number;
+	    totalFees: number;
+	    avgHoldingDays: number;
+	    perTicker: TickerPnL[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TradeStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.trades = source["trades"];
+	        this.buys = source["buys"];
+	        this.sells = source["sells"];
+	        this.roundTrips = source["roundTrips"];
+	        this.wins = source["wins"];
+	        this.losses = source["losses"];
+	        this.winRate = source["winRate"];
+	        this.avgWin = source["avgWin"];
+	        this.avgLoss = source["avgLoss"];
+	        this.profitFactor = source["profitFactor"];
+	        this.totalRealized = source["totalRealized"];
+	        this.totalFees = source["totalFees"];
+	        this.avgHoldingDays = source["avgHoldingDays"];
+	        this.perTicker = this.convertValues(source["perTicker"], TickerPnL);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class WalkForwardWindow {
 	    trainStart: string;
 	    trainEnd: string;
@@ -393,6 +473,7 @@ export namespace main {
 	    deflatedSharpe: number;
 	    baseline: backtest.BaselineStats;
 	    significance: backtest.Significance;
+	    tradeStats: backtest.TradeStats;
 	
 	    static createFrom(source: any = {}) {
 	        return new RunResult(source);
@@ -437,6 +518,7 @@ export namespace main {
 	        this.deflatedSharpe = source["deflatedSharpe"];
 	        this.baseline = this.convertValues(source["baseline"], backtest.BaselineStats);
 	        this.significance = this.convertValues(source["significance"], backtest.Significance);
+	        this.tradeStats = this.convertValues(source["tradeStats"], backtest.TradeStats);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

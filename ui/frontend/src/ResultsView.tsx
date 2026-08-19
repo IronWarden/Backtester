@@ -997,6 +997,135 @@ export default function ResultsView({ results, fontSize }: Props) {
         </div>
       )}
 
+      {results.some((r) => (r.tradeStats?.trades ?? 0) > 0) && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-title">Trading</span>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th className="num">Trades</th>
+                  <th className="num">Round trips</th>
+                  <th className="num">Win rate %</th>
+                  <th className="num">Avg win</th>
+                  <th className="num">Avg loss</th>
+                  <th className="num">Profit factor</th>
+                  <th className="num">Avg hold (d)</th>
+                  <th className="num">Realized</th>
+                  <th className="num">Fees</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r, i) => {
+                  const t = r.tradeStats;
+                  if (!t || t.trades === 0) return null;
+                  return (
+                    <tr key={i}>
+                      <td>
+                        <span
+                          className="swatch"
+                          style={{
+                            background: COLORS[i % COLORS.length],
+                            display: "inline-block",
+                            marginRight: "0.5em",
+                          }}
+                        />
+                        {r.portfolioName}
+                      </td>
+                      <td className="num">{t.trades}</td>
+                      <td className="num">{t.roundTrips}</td>
+                      <td className="num">{t.winRate.toFixed(1)}</td>
+                      <td className="num pos">{fmtDollars(t.avgWin)}</td>
+                      {/* AvgLoss is a positive magnitude (blotter.go sums
+                          -RealizedPnL), so the sign has to be written in or a
+                          red "$540" reads as if the field were already signed. */}
+                      <td className="num neg">
+                        {t.avgLoss > 0 ? "−" : ""}
+                        {fmtDollars(Math.abs(t.avgLoss))}
+                      </td>
+                      <td className="num">{t.profitFactor.toFixed(2)}</td>
+                      <td className="num">{t.avgHoldingDays.toFixed(0)}</td>
+                      <td className={`num ${t.totalRealized < 0 ? "neg" : "pos"}`}>
+                        {fmtDollars(t.totalRealized)}
+                      </td>
+                      <td className="num">{fmtDollars(t.totalFees)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {results.some((r) => (r.tradeStats?.perTicker ?? []).length > 0) && (
+        <div className="panel">
+          <div className="panel-head">
+            <span className="panel-title">Attribution — which position made the money</span>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th>Ticker</th>
+                  <th className="num">Total P&amp;L</th>
+                  <th className="num">Realized</th>
+                  <th className="num">Unrealized</th>
+                  <th className="num">Fees</th>
+                  <th className="num">Trades</th>
+                  <th className="num">Shares held</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  // Biggest contributors first: the decision-changing question
+                  // is whether one position carried the whole result.
+                  [...(r.tradeStats?.perTicker ?? [])]
+                    .sort(
+                      (a, b) =>
+                        Math.abs(b.realized + b.unrealized) -
+                        Math.abs(a.realized + a.unrealized),
+                    )
+                    .map((t, j) => {
+                      const total = t.realized + t.unrealized;
+                      return (
+                        <tr key={`${i}-${j}`}>
+                          <td>
+                            <span
+                              className="swatch"
+                              style={{
+                                background: COLORS[i % COLORS.length],
+                                display: "inline-block",
+                                marginRight: "0.5em",
+                              }}
+                            />
+                            {r.portfolioName}
+                          </td>
+                          <td>{t.ticker}</td>
+                          <td className={`num ${total < 0 ? "neg" : "pos"}`}>
+                            {fmtDollars(total)}
+                          </td>
+                          <td className="num">{fmtDollars(t.realized)}</td>
+                          <td className="num">{fmtDollars(t.unrealized)}</td>
+                          <td className="num">{fmtDollars(t.fees)}</td>
+                          <td className="num">{t.trades}</td>
+                          <td className="num">
+                            {t.sharesHeld > 0 ? t.sharesHeld.toFixed(2) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    }),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {results.some((r) => (r.yearlyReturns ?? []).length > 0) && (
         <div className="panel">
           <div className="panel-head">

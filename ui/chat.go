@@ -859,6 +859,20 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- TRADING AND ATTRIBUTION IN THE APP. The results view has two more panels
+  when a run traded: "Trading" (trades, round trips, win rate, avg win, avg
+  loss, profit factor, avg holding days, realized P&L, fees) and
+  "Attribution -- which position made the money" (per ticker: total P&L,
+  realized, unrealized, fees, trades, shares held), sorted by absolute total so
+  the biggest contributor is first. That ordering is the point: it answers
+  whether an edge was broad or was one lucky position.
+  Both read RunResult.tradeStats, which the frontend previously did not carry at
+  all. NOTE THE SIGN: tradeStats.avgLoss is a POSITIVE MAGNITUDE, not a
+  negative number, because the blotter sums -RealizedPnL for losers. The UI
+  writes the minus in itself. Neither panel appears when trades == 0, and a run
+  that never traded is the single most important signal a result can carry, so
+  say that plainly rather than reporting empty tables.
+
 - THE VERDICT STRIP IN THE APP. The results view shows a panel titled "Does
   this survive the obvious objections?" directly under the portfolio cards,
   carrying the same three cards as the -pages export: did it beat the baseline

@@ -93,6 +93,11 @@ type RunResult struct {
 	// nothing" and "was this better than luck" — visible only on the CLI.
 	Baseline     backtest.BaselineStats `json:"baseline"`
 	Significance backtest.Significance  `json:"significance"`
+	// TradeStats is the blotter's summary — win rate, profit factor, holding
+	// periods — plus the per-ticker P&L attribution, which answers whether an
+	// edge was broad or was one lucky position. Trades == 0 is itself the most
+	// important signal it can carry.
+	TradeStats backtest.TradeStats `json:"tradeStats"`
 }
 
 // RunOutput is what one run hands back: the per-portfolio results, plus
@@ -246,6 +251,7 @@ func (a *App) RunBacktest(cfgText, dbPath, defaultLuaPath string) (out RunOutput
 			DeflatedSharpe:        r.DeflatedSharpe,
 			Baseline:              r.Baseline,
 			Significance:          r.Significance,
+			TradeStats:            r.TradeStats,
 		})
 	}
 	return RunOutput{Results: results, Diagnostics: collector.records()}, nil

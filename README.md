@@ -984,6 +984,22 @@ is plausible; a spike between two bad neighbours is overfit) and universe
 subsampling. Both need to know about the sweep that produced a result, which is
 different machinery from re-running one portfolio.
 
+### Trading and attribution, in the app
+
+When a run traded, the results view adds a **Trading** panel (trades, round
+trips, win rate, average win and loss, profit factor, average holding days,
+realized P&L, fees) and an **Attribution** panel listing per-ticker total P&L,
+realized, unrealized, fees, trades and shares held — **sorted by absolute
+total**, so the position that carried the result is first. That is the whole
+point of the view: it distinguishes an edge that worked broadly from one lucky
+position, which no scalar metric does.
+
+Both read `TradeStats`, which the blotter has produced since T31 and which the
+frontend did not carry until now. One sign convention worth knowing:
+`AvgLoss` is a **positive magnitude** — the blotter accumulates `-RealizedPnL`
+for losers — so the UI writes the minus sign itself rather than relying on the
+field to be signed.
+
 ### The same verdict, in the app
 
 The results view carries the same three cards under the portfolio summaries, in
