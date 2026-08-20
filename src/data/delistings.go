@@ -119,10 +119,18 @@ const (
 	// CoverageRecycled means the bars run years past the delisting date. Two
 	// different companies are spliced into one price series. Do not trade it.
 	CoverageRecycled Coverage = "recycled"
+
+	// CoverageRenamed means the dates look recycled but company_profile says
+	// the delisted name is one the filer trading today used to have. The
+	// registry recorded a RENAME as a delisting, no company died, and the
+	// series is continuous. Tradable — see renames.go for why this needs
+	// saying separately rather than collapsing into clean.
+	CoverageRenamed Coverage = "renamed"
 )
 
 // Trustworthy reports whether a series may be used in a simulation without
-// silently mixing companies. Suspect and recycled series may not.
+// silently mixing companies. Suspect and recycled series may not; a renamed one
+// may, because nothing was mixed.
 func (c Coverage) Trustworthy() bool {
 	return c != CoverageSuspect && c != CoverageRecycled
 }
@@ -196,8 +204,13 @@ func ClassifyCoverage(r DateRange, d Delisting) TickerCoverage {
 // present in ranges but absent from delistings are reported as
 // CoverageUnknown, so the result covers every ticker asked about rather than
 // only the condemned ones. Pure, for the same reason as ClassifyCoverage.
+// profiles may be nil, which is the state of any database where
+// add_company_info.py has not been run: no rename is then corroborable and
+// every verdict is exactly what it was before renames.go existed.
 func ClassifyTickers(
-	ranges map[string]DateRange, delistings map[string]Delisting,
+	ranges map[string]DateRange,
+	delistings map[string]Delisting,
+	profiles map[string]CompanyProfile,
 ) map[string]TickerCoverage {
 	out := make(map[string]TickerCoverage, len(ranges))
 	for ticker, r := range ranges {
@@ -221,7 +234,16 @@ func ClassifyTickers(
 		// The registry keys on its own symbol column; make sure the verdict is
 		// labelled with the ticker actually asked about.
 		d.Symbol = ticker
-		out[ticker] = ClassifyCoverage(r, d)
+		tc := ClassifyCoverage(r, d)
+		// Only a condemning verdict is worth a second opinion: a series that
+		// already reads clean has nothing to be cleared of.
+		if !tc.Verdict.Trustworthy() {
+			base, _ := ParseGeneration(ticker)
+			if IsRename(d.Name, profiles[base]) {
+				tc.Verdict = CoverageRenamed
+			}
+		}
+		out[ticker] = tc
 	}
 	return out
 }
@@ -302,7 +324,9 @@ func LoadDelistings(tickers []string) (map[string]Delisting, error) {
 // table's date ranges to the registry and returns a verdict per ticker. An
 // empty tickers slice covers the whole price table.
 //
-// With no `delistings` table every ticker comes back CoverageUnknown.
+// With no `delistings` table every ticker comes back CoverageUnknown. With no
+// `company_profile` table no rename is recognised, which is exactly the
+// behaviour that shipped before renames.go.
 func DelistingCoverage(tickers []string) (map[string]TickerCoverage, error) {
 	ranges, err := TickerDateRanges(tickers)
 	if err != nil {
@@ -312,7 +336,13 @@ func DelistingCoverage(tickers []string) (map[string]TickerCoverage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ClassifyTickers(ranges, delistings), nil
+	// nil profiles (no company_profile table) simply means no rename can be
+	// corroborated; it is never an error.
+	profiles, err := LoadCompanyProfiles(tickers)
+	if err != nil {
+		return nil, err
+	}
+	return ClassifyTickers(ranges, delistings, profiles), nil
 }
 
 // tableExists reports whether a table is present, so an optional dataset can

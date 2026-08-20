@@ -684,9 +684,21 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   in it. Omitting the condition overstates the problem by 149 symbols.
 
   Engine-side this is src/data.DelistingCoverage, which returns a per-ticker
-  verdict: clean, stale_tail, suspect, recycled, or unknown. Suspect and
-  recycled series must not be traded. unknown means the registry has no
+  verdict: clean, stale_tail, suspect, recycled, renamed, or unknown. Suspect
+  and recycled series must not be traded. unknown means the registry has no
   death date — absence of evidence, never a clean bill of health.
+
+- RENAMED IS NOT RECYCLED. The registry cannot tell a death from a name
+  change: it records a symbol leaving an exchange either way. So a verdict of
+  recycled is corroborated against company_profile's name and former_names
+  first, and a symbol whose delisted name is one the current filer used to
+  have comes back "renamed" — one continuous company, tradable. DD is the
+  case to remember: "DowDuPont Inc" is a former name of DuPont de Nemours,
+  same CIK. 74 symbols on the loaded database are renamed, not recycled.
+  With no company_profile table nothing is corroborated and every verdict is
+  what it was before. Known limitation worth stating if asked: an ACQUIRER
+  that takes its target's name matches too, so COHR reads renamed although
+  Coherent Inc really was bought by II-VI.
 
 - REPAIRING A RECYCLED SERIES. python3 split_recycled.py separates the
   companies: the one trading today keeps the bare symbol and the previous

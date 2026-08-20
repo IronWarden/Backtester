@@ -301,12 +301,31 @@ a verdict per ticker, based on how far the bars run past the delisting date:
 | `stale_tail` | 6–89 days — vendor disagreement about the final session | yes |
 | `suspect` | 90–730 days — the death date is wrong, or a second company took the symbol | **no** |
 | `recycled` | > 730 days — two companies in one series | **no** |
+| `renamed` | the dates look recycled, but the delisted name is one the filer trading today used to have | yes |
 | `unknown` | no registry entry | yes |
 
 A series that **begins after** its delisting date is `clean` whatever its last
 bar says: the price table simply has no bars for the dead company, so there is
 nothing spliced to worry about. That rule alone reclassifies 149 of the symbols
 a last-bar-only test called `recycled`.
+
+`renamed` exists because **the registry cannot tell a death from a name change**.
+Alpha Vantage records a symbol leaving an exchange the same way whether somebody
+else took it over or the company simply renamed itself, so on dates alone `DD`
+looks identical to a recycling — when "DowDuPont Inc" is a *former name* of the
+filer now called DuPont de Nemours, same CIK. `src/data.MatchRename` corroborates
+a condemning verdict against `company_profile`'s current and former names, using
+the same normalisation and tier order as `symbol_match.go` so that the audit and
+`split_recycled.py` never disagree about which symbols are recycled. On the
+loaded database that clears **74 symbols** that would otherwise be untradable.
+
+With no `company_profile` table nothing is corroborated and every verdict is
+what it was before — the same inert-when-absent rule as every other optional
+dataset here. The matching errs toward `renamed`, because wrongly condemning a
+continuous series costs a usable ticker while the opposite leaves things as they
+already are; its known cost is an acquirer that takes its target's name, and
+`COHR` is the live example (Coherent Inc was bought by II-VI, which renamed
+itself Coherent Corp).
 
 `Coverage.Trustworthy()` collapses that to a boolean, and
 `UntrustworthyTickers` names the offenders. `unknown` is the absence of

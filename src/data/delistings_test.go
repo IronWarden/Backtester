@@ -123,7 +123,7 @@ func TestClassifyTickersCoversEveryTicker(t *testing.T) {
 		"ENRNQ": {Symbol: "ENRNQ", DelistingDate: day("2001-11-29")},
 	}
 
-	got := ClassifyTickers(ranges, delistings)
+	got := ClassifyTickers(ranges, delistings, nil)
 
 	if len(got) != len(ranges) {
 		t.Fatalf("got %d verdicts, want %d (one per priced ticker)",
@@ -177,7 +177,7 @@ func TestClassifySplitPairIsClean(t *testing.T) {
 
 	unsplit := ClassifyTickers(map[string]DateRange{
 		"DD": {Min: day("1972-06-01"), Max: day("2026-07-02")},
-	}, registry)
+	}, registry, nil)
 	if got := unsplit["DD"].Verdict; got != CoverageRecycled {
 		t.Fatalf("unsplit DD: got %q, want %q — the regression guard for the "+
 			"whole feature", got, CoverageRecycled)
@@ -188,7 +188,7 @@ func TestClassifySplitPairIsClean(t *testing.T) {
 		"DD": {Min: day("2019-06-03"), Max: day("2026-07-02")},
 		// The dead occupant ends at it.
 		"DD.1": {Min: day("1972-06-01"), Max: day("2019-05-31")},
-	}, registry)
+	}, registry, nil)
 
 	for _, ticker := range []string{"DD", "DD.1"} {
 		tc := split[ticker]
@@ -237,28 +237,112 @@ func TestParseGenerationRoundTrips(t *testing.T) {
 	}
 }
 
-// DD used to head the list above, and it does not belong there. "DowDuPont Inc"
-// is a FORMER NAME of the filer now called DuPont de Nemours -- the same CIK,
-// renamed, not a symbol re-issued to somebody else. The registry records the
-// rename as a delisting, so the date-based classifier still condemns the series,
-// and split_recycled.py's corroboration step is the only thing that knows
-// better.
+// DD used to head the list above and does not belong there: "DowDuPont Inc" is a
+// FORMER NAME of the filer now called DuPont de Nemours -- the same CIK, renamed,
+// not a symbol re-issued to somebody else.
 //
-// This test pins that gap rather than papering over it: the verdict IS recycled
-// today, and a reader who assumes a recycled verdict means two companies will be
-// wrong about 57 symbols. Closing it needs the corroboration fed back into the
-// classifier, which is filed as its own task.
-func TestRenameIsStillReportedRecycled(t *testing.T) {
-	got := ClassifyCoverage(
-		DateRange{Min: day("1972-06-01"), Max: day("2026-07-02")},
-		Delisting{
-			Symbol:        "DD",
-			Name:          "DowDuPont Inc",
-			DelistingDate: day("2019-05-31"),
+// On dates alone the series is indistinguishable from a recycling, so this is
+// the test that the corroboration is what makes the difference: identical bars
+// and an identical registry row, classified with and without the profile.
+func TestRenameIsRecognisedOnlyWithCorroboration(t *testing.T) {
+	ranges := map[string]DateRange{
+		"DD": {Min: day("1972-06-01"), Max: day("2026-07-02")},
+	}
+	registry := map[string]Delisting{
+		"DD": {Symbol: "DD", Name: "DowDuPont Inc", DelistingDate: day("2019-05-31")},
+	}
+
+	// No company_profile table: the state this shipped in, and the dates alone
+	// still condemn it.
+	bare := ClassifyTickers(ranges, registry, nil)
+	if got := bare["DD"].Verdict; got != CoverageRecycled {
+		t.Errorf("without profiles: got %q, want %q", got, CoverageRecycled)
+	}
+
+	withProfile := ClassifyTickers(ranges, registry, map[string]CompanyProfile{
+		"DD": {
+			Ticker:      "DD",
+			CIK:         "0001666700",
+			Name:        "DuPont de Nemours, Inc.",
+			FormerNames: []string{"DowDuPont Inc."},
+		},
+	})
+	tc := withProfile["DD"]
+	if tc.Verdict != CoverageRenamed {
+		t.Errorf("with profiles: got %q, want %q", tc.Verdict, CoverageRenamed)
+	}
+	if !tc.Verdict.Trustworthy() {
+		t.Error("a renamed series is continuous and must be tradable")
+	}
+}
+
+// The guard that matters: corroboration must not clear a genuine recycling.
+// Arch Coal has nothing to do with Albertsons, and no tier may say otherwise.
+func TestCorroborationDoesNotClearARealRecycling(t *testing.T) {
+	got := ClassifyTickers(
+		map[string]DateRange{
+			"ACI": {Min: day("2020-06-26"), Max: day("2026-07-02")},
+		},
+		map[string]Delisting{
+			"ACI": {Symbol: "ACI", Name: "Arch Coal Inc", DelistingDate: day("2020-09-15")},
+		},
+		map[string]CompanyProfile{
+			"ACI": {Ticker: "ACI", Name: "Albertsons Companies, Inc."},
 		})
-	if got.Verdict != CoverageRecycled {
-		t.Fatalf("DD: got %q, want %q — if this now passes, the classifier "+
-			"learned about renames and this test should become the assertion "+
-			"that DD reads clean", got.Verdict, CoverageRecycled)
+	if v := got["ACI"].Verdict; v != CoverageRecycled {
+		t.Fatalf("ACI: got %q, want %q — corroboration cleared a real "+
+			"recycling, which is the failure this whole check must not have", v,
+			CoverageRecycled)
+	}
+}
+
+func TestMatchRenameTiers(t *testing.T) {
+	cases := []struct {
+		name     string
+		delisted string
+		profile  CompanyProfile
+		want     RenameMethod
+	}{
+		{"current name, exact", "Agora Inc",
+			CompanyProfile{Name: "Agora, Inc."}, RenameExact},
+		{"former name, exact", "DowDuPont Inc",
+			CompanyProfile{Name: "DuPont de Nemours, Inc.",
+				FormerNames: []string{"DowDuPont Inc."}}, RenameExact},
+		{"suffix only", "Coherent Inc",
+			CompanyProfile{Name: "COHERENT CORP."}, RenameSuffix},
+		{"core prefix", "Ads-Tec Energy Plc",
+			CompanyProfile{Name: "Ads-Tec Energy Public Ltd Co"}, RenameCore},
+		{"different companies", "Arch Coal Inc",
+			CompanyProfile{Name: "Albertsons Companies, Inc."}, RenameNone},
+		{"no profile at all", "Arch Coal Inc",
+			CompanyProfile{}, RenameNone},
+		{"empty delisted name", "",
+			CompanyProfile{Name: "Albertsons Companies, Inc."}, RenameNone},
+		// One shared word is not evidence; MinRenameWords exists for this.
+		{"one word in common", "American Coal Inc",
+			CompanyProfile{Name: "American Airlines Group Inc"}, RenameNone},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, matched := MatchRename(tc.delisted, tc.profile)
+			if got != tc.want {
+				t.Errorf("MatchRename(%q) = %q (matched %q), want %q",
+					tc.delisted, got, matched, tc.want)
+			}
+		})
+	}
+}
+
+// The evidence reported must be the name that actually matched, which for a
+// rename is routinely NOT the filer's current name.
+func TestMatchRenameReportsTheNameThatMatched(t *testing.T) {
+	_, matched := MatchRename("DowDuPont Inc", CompanyProfile{
+		Name:        "DuPont de Nemours, Inc.",
+		FormerNames: []string{"DowDuPont Inc."},
+	})
+	if matched != "DowDuPont Inc." {
+		t.Errorf("matched %q, want the former name — reporting the current "+
+			"name would describe a match that did not happen", matched)
 	}
 }
