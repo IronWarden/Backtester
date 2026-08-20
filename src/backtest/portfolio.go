@@ -574,6 +574,43 @@ func (p *Portfolio) AdjustPortfolioParameters(
 	}
 }
 
+// chargeBorrow accrues one trading day of borrow cost on every short the book
+// is carrying INTO this day, and is why it runs before the strategy acts: a
+// position opened today was not borrowed overnight, and one closed today was.
+//
+// The short is valued at the mark it was carried at — the previous day's close,
+// which AdjustPortfolioParameters left on the position — rather than at today's,
+// because that is the price the borrow was actually against.
+//
+// Charged straight to cash rather than as a trade: no shares change hands, so a
+// blotter entry would corrupt the trade count, the win rate and the holding
+// period. Metrics.BorrowPaid is where it surfaces instead.
+func (p *Portfolio) chargeBorrow() {
+	if p.Costs.BorrowBpsAnnual == 0 {
+		return
+	}
+	gross := 0.0
+	for _, pos := range p.Positions {
+		if pos.Amount >= 0 {
+			continue
+		}
+		price := pos.CurrentPrice
+		if price <= 0 {
+			// First day of a short, before any mark has been written.
+			price = pos.AveragePrice
+		}
+		gross += -pos.Amount * price
+	}
+	if gross <= 0 {
+		return
+	}
+	// One day of the annual rate, over the same 252-trading-day year every
+	// other annualised figure here uses.
+	fee := gross * bps(p.Costs.BorrowBpsAnnual) / 252.0
+	p.BuyingPower -= fee
+	p.Metrics.BorrowPaid += fee
+}
+
 // grossExposure is the absolute notional at risk, long and short alike. A
 // market-neutral book nets to nothing and is not thereby unexposed, which is
 // the whole reason this is not a signed sum.

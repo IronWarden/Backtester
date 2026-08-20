@@ -403,11 +403,39 @@ Exposure becomes **gross** — long plus short, absolute — rather than
 everything-that-is-not-cash, because a short raises cash while adding exposure.
 A market-neutral book reports its real exposure instead of zero.
 
-**What is not built yet.** There is no borrow cost and no real margin model.
-Gross short notional is capped at the portfolio's cash, which exists to stop
-unbounded leverage rather than to model a broker. **A short-side result is
-therefore optimistic by the borrow it never paid**, and assumes a margin regime
-nobody has implemented. Borrow cost and margin are the next two increments.
+#### Borrow cost
+
+Shorts are not free to hold.
+
+```toml
+[[portfolio]]
+AllowShort = true
+
+  [portfolio.Costs]
+  borrow_bps_annual = 50
+```
+
+`borrow_bps_annual` is the annual borrow rate in basis points of the short's
+**marked** value, accrued once per trading day over a 252-day year and charged
+straight to cash *before* the strategy acts — the borrow is owed on what was
+held overnight, not on what today's orders leave behind. It is charged only on
+negative positions, so it is inert for a long-only book whatever it is set to,
+and `0` (the default) charges nothing.
+
+It never appears in the blotter: no shares change hands, and a trade record
+would corrupt the trade count, win rate and holding period. The `BorrowPaid`
+metric is the total charged over the run. **A short-side edge that `BorrowPaid`
+eats is not an edge**, and nothing else in the result would show it.
+
+One flat rate is a deliberate simplification. Real borrow is per-security and
+moves daily — general collateral is a few tens of basis points, a hard-to-borrow
+name can be hundreds or thousands — so a strategy shorting crowded or small
+names is under-charged here, possibly by an order of magnitude.
+
+**What is still not built.** There is no real margin model: gross short notional
+is capped at the portfolio's cash, which exists to stop unbounded leverage
+rather than to model a broker. No initial or maintenance requirement, and no
+forced cover.
 
 ### What a holding is worth when the company dies
 

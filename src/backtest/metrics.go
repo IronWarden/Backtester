@@ -51,6 +51,12 @@ type Metrics struct {
 	// begins in 2020, so a fundamental strategy run from 2010 sees nothing for
 	// the first decade and can look like it found an edge in the back half.
 	FundamentalCoverage float64
+	// BorrowPaid is the total borrow cost charged over the run for holding
+	// shorts. Zero for any long-only book and for any config that leaves
+	// borrow_bps_annual unset — which is every config written before shorting
+	// existed. Reported because a short-side edge that the borrow eats is not
+	// an edge, and nothing else in the result would show it.
+	BorrowPaid float64
 	// DelistedHoldings is how many positions were liquidated at
 	// DelistingReturn because the company failed. Zero for every run that does
 	// not set DelistingReturn, which is every run written before it existed.

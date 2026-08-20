@@ -42,12 +42,24 @@ type CostConfig struct {
 	// SlippageBps worsens the fill price by basis points: buys fill higher
 	// than the quoted close, sells fill lower.
 	SlippageBps float64 `toml:"slippage_bps"`
+	// BorrowBpsAnnual is the annual cost of borrowing shares to hold short,
+	// in basis points of the short position's marked value, accrued once per
+	// trading day over a 252-day year. It is charged only on NEGATIVE
+	// positions, so it is inert for a long-only book whatever it is set to.
+	//
+	// A real borrow rate is per-security and moves daily — general collateral
+	// is a few tens of basis points while a hard-to-borrow name can be
+	// hundreds or thousands. One flat rate is a deliberate simplification and
+	// is the wrong shape for a strategy that shorts hard-to-borrow names; see
+	// README.
+	BorrowBpsAnnual float64 `toml:"borrow_bps_annual"`
 }
 
 // Zero reports whether the config charges nothing, i.e. whether trades
 // execute exactly as they did before the cost model existed.
 func (c CostConfig) Zero() bool {
-	return c.CommissionPerTrade == 0 && c.CommissionBps == 0 && c.SlippageBps == 0
+	return c.CommissionPerTrade == 0 && c.CommissionBps == 0 &&
+		c.SlippageBps == 0 && c.BorrowBpsAnnual == 0
 }
 
 // bps converts a basis-point figure to a plain multiplier.
@@ -498,6 +510,12 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 	// A positive delisting return would pay a holder for a bankruptcy, and
 	// below -1 would take more than the position is worth. Rejected by name
 	// rather than clamped: a config asking for either meant something else.
+	if pc.Costs.BorrowBpsAnnual < 0 {
+		return nil, fmt.Errorf(
+			"portfolio %q: borrow_bps_annual is %.2f; a negative borrow rate "+
+				"would pay a strategy to hold a short",
+			pc.Name, pc.Costs.BorrowBpsAnnual)
+	}
 	if pc.DelistingReturn > 0 || pc.DelistingReturn < -1 {
 		return nil, fmt.Errorf(
 			"portfolio %q: DelistingReturn is %.4f; it is the fraction of a "+

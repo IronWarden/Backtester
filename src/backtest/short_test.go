@@ -232,3 +232,145 @@ func TestExposureIsGrossWhenShorting(t *testing.T) {
 			got)
 	}
 }
+
+func TestBorrowIsChargedOnShortsOnly(t *testing.T) {
+	// 10% a year on a 200 short is 20 a year, or 20/252 a day.
+	const rate = 1000.0 // bps
+	want := 200 * (rate / 10000.0) / 252.0
+
+	short := shortBook(1000, true)
+	short.Costs = CostConfig{BorrowBpsAnnual: rate}
+	short.Sell("X", 10, 20, shortDay("2020-01-02"))
+	cashBefore := short.BuyingPower
+	short.chargeBorrow()
+
+	if got := cashBefore - short.BuyingPower; !nearly(got, want) {
+		t.Errorf("borrow charged %.6f, want %.6f", got, want)
+	}
+	if !nearly(short.Metrics.BorrowPaid, want) {
+		t.Errorf("BorrowPaid = %.6f, want %.6f", short.Metrics.BorrowPaid, want)
+	}
+
+	// The same rate on a long book charges nothing at all.
+	long := shortBook(1000, false)
+	long.Costs = CostConfig{BorrowBpsAnnual: rate}
+	long.Buy("X", 10, 20, shortDay("2020-01-02"))
+	cashBefore = long.BuyingPower
+	long.chargeBorrow()
+
+	if long.BuyingPower != cashBefore || long.Metrics.BorrowPaid != 0 {
+		t.Errorf("a long book was charged borrow: cash moved %.6f, paid %.6f",
+			cashBefore-long.BuyingPower, long.Metrics.BorrowPaid)
+	}
+}
+
+// A long in the same book must not offset the short's borrow. Found by mutation
+// testing: skipping the sign check still passed every other test here, because a
+// long's negative contribution left `gross` at or below zero and a later guard
+// bailed out. On a MIXED book that same slip silently under-charges the short.
+func TestBorrowIgnoresLongsInAMixedBook(t *testing.T) {
+	p := &Portfolio{
+		Pname: "mixed", Tickers: []string{"L", "S"},
+		BuyingPower: 10000, InitialBuyingPower: 10000,
+		Positions:  map[string]*Position{},
+		AllowShort: true,
+		Costs:      CostConfig{BorrowBpsAnnual: 1000},
+	}
+	p.Buy("L", 50, 20, shortDay("2020-01-02"))  // long 1000
+	p.Sell("S", 10, 20, shortDay("2020-01-02")) // short 200
+
+	p.chargeBorrow()
+
+	// The short's 200, not 200 netted against the long's 1000.
+	want := 200 * 0.10 / 252.0
+	if got := p.Metrics.BorrowPaid; !nearly(got, want) {
+		t.Errorf("borrow on a mixed book = %.6f, want %.6f — the long must "+
+			"not offset the short", got, want)
+	}
+}
+
+func TestBorrowAccruesEveryDayItIsHeld(t *testing.T) {
+	p := shortBook(1000, true)
+	p.Costs = CostConfig{BorrowBpsAnnual: 1000}
+	p.Sell("X", 10, 20, shortDay("2020-01-02"))
+
+	one := 200 * 0.10 / 252.0
+	for i := 0; i < 5; i++ {
+		p.chargeBorrow()
+	}
+	if got := p.Metrics.BorrowPaid; !nearly(got, 5*one) {
+		t.Errorf("five days of borrow = %.6f, want %.6f", got, 5*one)
+	}
+
+	// Covered: nothing further accrues.
+	p.Buy("X", 10, 20, shortDay("2020-02-03"))
+	p.chargeBorrow()
+	if got := p.Metrics.BorrowPaid; !nearly(got, 5*one) {
+		t.Errorf("borrow accrued after covering: %.6f, want %.6f", got, 5*one)
+	}
+}
+
+// The borrow is valued at the mark the position was CARRIED at, not at a price
+// it never had.
+func TestBorrowUsesTheCarriedMark(t *testing.T) {
+	p := shortBook(1000, true)
+	p.Costs = CostConfig{BorrowBpsAnnual: 1000}
+	p.Sell("X", 10, 20, shortDay("2020-01-02"))
+	// The stock doubled and the position was marked there yesterday.
+	p.Positions["X"].CurrentPrice = 40
+
+	p.chargeBorrow()
+	want := 400 * 0.10 / 252.0
+	if got := p.Metrics.BorrowPaid; !nearly(got, want) {
+		t.Errorf("borrow on a marked-up short = %.6f, want %.6f (10 shares at "+
+			"the 40 mark, not the 20 it was shorted at)", got, want)
+	}
+}
+
+// A borrow charge must never turn into a blotter entry: no shares move, and a
+// trade record would corrupt the trade count, win rate and holding period.
+func TestBorrowIsNotATrade(t *testing.T) {
+	p := shortBook(1000, true)
+	p.Costs = CostConfig{BorrowBpsAnnual: 1000}
+	p.Sell("X", 10, 20, shortDay("2020-01-02"))
+	before := len(p.Trades)
+	p.chargeBorrow()
+
+	if len(p.Trades) != before {
+		t.Errorf("borrow wrote %d blotter entries, want 0",
+			len(p.Trades)-before)
+	}
+}
+
+func TestZeroBorrowRateChargesNothing(t *testing.T) {
+	p := shortBook(1000, true)
+	p.Sell("X", 10, 20, shortDay("2020-01-02"))
+	cash := p.BuyingPower
+	p.chargeBorrow()
+
+	if p.BuyingPower != cash || p.Metrics.BorrowPaid != 0 {
+		t.Errorf("the default borrow rate charged something: %.6f",
+			cash-p.BuyingPower)
+	}
+}
+
+func TestNegativeBorrowRateIsRejected(t *testing.T) {
+	pc := PortfolioConfig{
+		Name: "paid-to-short", BuyingPower: 1000,
+		StartTime: "2020-01-01", EndTime: "2020-12-31",
+		Tickers: []string{"AAPL"}, Strategy: "buyandhold",
+		Costs: CostConfig{BorrowBpsAnnual: -50},
+	}
+	if _, err := pc.ToPortfolio(); err == nil {
+		t.Error("a negative borrow rate was accepted; it would pay a strategy " +
+			"to hold a short")
+	}
+}
+
+func nearly(a, b float64) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d < 1e-9
+}

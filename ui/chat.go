@@ -1044,12 +1044,34 @@ different proposition from one with the same Sharpe and shallow drawdowns.
      everything-that-is-not-cash, because a short RAISES cash while adding
      exposure. A market-neutral book reports its real exposure, not zero.
 
-  WHAT IS NOT BUILT YET, and this is the important part: there is NO borrow
-  cost, and NO real margin model. Gross short notional is capped at the
-  portfolio's cash, which is a placeholder to stop unbounded leverage, not a
-  model of a broker. So a short-side result is optimistic by the borrow it
-  never paid and assumes a margin regime nobody implemented. Do not present
-  short-side backtests as costed. Borrow cost is T27b and margin is T27c.
+  BORROW COST. Shorts are not free to hold, and the engine charges for them:
+
+      [[portfolio.Costs]]
+      borrow_bps_annual = 50
+
+  borrow_bps_annual is the annual borrow rate in basis points of the short's
+  MARKED value, accrued once per trading day over a 252-day year, charged
+  straight to cash before the strategy acts each day -- the borrow is owed on
+  what was held overnight, not on what today's orders leave behind. It is
+  charged only on NEGATIVE positions, so it is inert for a long-only book
+  whatever it is set to, and 0 (the default) charges nothing at all. A negative
+  rate is REJECTED: it would pay a strategy to hold a short.
+
+  It never appears in the blotter, because no shares change hands and a trade
+  record would corrupt the trade count, win rate and holding period. The metric
+  BorrowPaid is the total charged over the run. A short-side edge that BorrowPaid
+  eats is not an edge, and it is worth saying so when the two are close.
+
+  ONE FLAT RATE IS A SIMPLIFICATION. Real borrow is per-security and moves
+  daily: general collateral is a few tens of basis points, a hard-to-borrow name
+  can be hundreds or thousands. A strategy that shorts crowded or small names is
+  under-charged by this model, possibly by an order of magnitude. Say so rather
+  than treating the figure as settled.
+
+  WHAT IS STILL NOT BUILT: there is NO real margin model. Gross short notional
+  is capped at the portfolio's cash, which is a placeholder to stop unbounded
+  leverage, not a model of a broker -- no initial or maintenance requirement, no
+  forced cover. That is T27c.
 
 - WHAT A HOLDING IS WORTH WHEN THE COMPANY DIES. The engine marks every
   position at its last printed close. For an acquisition that is about right;

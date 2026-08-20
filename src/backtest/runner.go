@@ -342,6 +342,9 @@ func runOne(
 	p.Strategy.Step(p, windowed, 0)
 	prev := p.GetPortfolioValue(p.Tickers, windowed, 0)
 	for day := 1; day < dataLen; day++ {
+		// Before the strategy acts: the borrow is owed on what was held
+		// overnight, not on what today's orders leave behind.
+		p.chargeBorrow()
 		p.Strategy.Step(p, windowed, day)
 		curr := p.GetPortfolioValue(p.Tickers, windowed, day)
 		p.AdjustPortfolioParameters(p.Tickers, windowed, day, prev, curr)

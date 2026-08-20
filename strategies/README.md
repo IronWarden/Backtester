@@ -216,9 +216,14 @@ was shorted at. Buying covers it, and the gain is `avg_price - fill` — the
 mirror of a long. Without `AllowShort` the engine is long-only and the same call
 is refused, so a strategy that shorts must say so in its config.
 
-Two things the engine does **not** model yet: there is no borrow cost, and no
-real margin rule — gross short notional is simply capped at the portfolio's
-cash. A short-side result is optimistic by the borrow it never paid.
+Borrow cost is charged if the config asks for it — `borrow_bps_annual` under
+`[portfolio.Costs]`, accrued daily on the short's marked value and visible as
+the `BorrowPaid` metric. It defaults to zero, so a short-side result is
+optimistic by the borrow it never paid unless the config sets a rate.
+
+What the engine still does **not** model: a real margin rule. Gross short
+notional is simply capped at the portfolio's cash — no maintenance requirement,
+no forced cover.
 
 `num_days()` is what makes "do this once, at the end" expressible — `step` is
 handed `day` with nothing to compare it against:
