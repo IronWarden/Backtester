@@ -391,8 +391,15 @@ AllowShort = true
 ```
 
 With it on, `sell(ticker, n, price)` past the holding closes the long first and
-shorts the remainder — there is no separate `short()` global, the existing
-`sell` *is* the short, and `sell_all` closes a position whichever way it points.
+shorts the remainder, and `short(ticker, n, price, day)` says it directly —
+a **target**, not a delta, so after the call the position is exactly `-n`,
+reached from a long as readily as from flat, and `short(t, 0, …)` goes flat.
+`cover(ticker, price, day)` buys the whole short back and is a no-op on a long;
+`sell_all` closes a position whichever way it points. **Market-neutral needs no
+new API**: a negative weight in `target_weights(day, {A = 0.5, B = -0.5})` is a
+short leg. A short order on a portfolio without `AllowShort` is refused *and says
+so*, including a negative `target_weights` leg — which would otherwise leave the
+book at half the size the strategy asked for with nothing to show for it.
 A short's `Amount` is negative and its `AveragePrice` is the price it was
 shorted at; valuation adds `Amount * close`, which subtracts the cost of buying
 back, while the proceeds sit in cash. Covering realises `AveragePrice - fill`,

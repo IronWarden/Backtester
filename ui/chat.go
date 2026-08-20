@@ -1031,9 +1031,20 @@ different proposition from one with the same Sharpe and shallow drawdowns.
 
   With it on:
    * sell(ticker, n, price) past the holding closes the long first and shorts
-     the remainder. There is no separate short() global; the existing sell IS
-     the short. sell_all closes a position whichever way it points, buying the
-     shares back when it is short.
+     the remainder, and short(ticker, n, price, day) says it directly.
+     short() is a TARGET, not a delta -- after the call the position is
+     exactly -n, reached from a long or from flat, and short(t, 0) goes flat.
+     cover(ticker, price, day) buys the whole short back and is a no-op on a
+     long. sell_all closes a position whichever way it points.
+   * MARKET-NEUTRAL NEEDS NO NEW API: a NEGATIVE weight in
+     target_weights(day, {A = 0.5, B = -0.5}) is a short leg, because the
+     rebalancer's sell pass sells past what is held and its buy pass covers.
+     This is the shape to reach for when a user asks for long/short, pairs or
+     market-neutral.
+   * A short order on a portfolio WITHOUT AllowShort is refused and says so in
+     the run console, including a negative target_weights leg -- which would
+     otherwise leave the book at half the size the strategy asked for with
+     nothing to show for it.
    * A short's Position.Amount is NEGATIVE and AveragePrice is the price it was
      shorted AT. Valuation adds Amount*close, which subtracts what it would
      cost to buy back, while the proceeds sit in cash -- the pair marks the

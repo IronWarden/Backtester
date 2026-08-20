@@ -422,6 +422,15 @@ func registerTrading(
 		valid[t] = true
 	}
 	warned := make(map[string]bool)
+	// Say a thing once per distinct cause. A mistake inside a day loop would
+	// otherwise repeat itself on every trading day and bury everything else.
+	warnOnce := func(key, format string, args ...any) {
+		if warned[key] {
+			return
+		}
+		warned[key] = true
+		diagf("error", p.Pname, format, args...)
+	}
 	resolveTicker := func(L *lua.LState, fn string) (string, bool) {
 		ticker := L.ToString(1)
 		if valid[ticker] {
@@ -512,6 +521,69 @@ func registerTrading(
 		price := float64(L.ToNumber(3))
 		day := L.OptInt(4, -1)
 		p.Sell(ticker, amount, price, dateOf(ticker, day))
+		return 0
+	}))
+
+	// short(ticker, shares, price, [day=-1]) — be short exactly `shares` after
+	// this call.
+	//
+	// A TARGET, not a delta, which is the opposite of buy and sell and is
+	// deliberate. "short 30" said as a delta is ambiguous the moment a position
+	// already exists — is 30 more, or 30 in total? — and the ambiguity is
+	// invisible until a backtest is wrong. As a target it needs no reading of
+	// the current position to be correct, short(t, 0) is "go flat", and the
+	// engine works out whether that means selling or buying.
+	L.SetGlobal("short", L.NewFunction(func(L *lua.LState) int {
+		ticker, ok := resolveTicker(L, "short")
+		if !ok {
+			return 0
+		}
+		shares := float64(L.ToNumber(2))
+		price := float64(L.ToNumber(3))
+		day := L.OptInt(4, -1)
+		if shares < 0 {
+			warnOnce("short-negative\x00"+ticker,
+				"lua strategy %q: short(%q, %.4f) — a short size is a "+
+					"magnitude, so a negative one is meaningless; use buy() to "+
+					"go long. Order ignored",
+				script, ticker, shares)
+			return 0
+		}
+		if shares > 0 && !p.AllowShort {
+			warnOnce("short-disallowed\x00"+ticker,
+				"lua strategy %q: short(%q, %.4f) — this portfolio does not "+
+					"set AllowShort, so the order is ignored. Add "+
+					"AllowShort = true to the [[portfolio]] block",
+				script, ticker, shares)
+			return 0
+		}
+		held := 0.0
+		if pos, _ := p.FindPosition(ticker); pos != nil {
+			held = pos.Amount
+		}
+		// Where the book has to move to end at -shares.
+		delta := -shares - held
+		switch {
+		case delta < 0:
+			p.Sell(ticker, -delta, price, dateOf(ticker, day))
+		case delta > 0:
+			p.Buy(ticker, delta, price, dateOf(ticker, day))
+		}
+		return 0
+	}))
+
+	// cover(ticker, price, [day=-1]) — buy back the whole short. Exactly
+	// short(ticker, 0, ...), spelled the way a strategy means it.
+	L.SetGlobal("cover", L.NewFunction(func(L *lua.LState) int {
+		ticker, ok := resolveTicker(L, "cover")
+		if !ok {
+			return 0
+		}
+		price := float64(L.ToNumber(2))
+		day := L.OptInt(3, -1)
+		if pos, _ := p.FindPosition(ticker); pos != nil && pos.Amount < 0 {
+			p.Buy(ticker, -pos.Amount, price, dateOf(ticker, day))
+		}
 		return 0
 	}))
 

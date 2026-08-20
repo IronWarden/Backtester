@@ -291,6 +291,12 @@ func registerCrossSection(L *lua.LState, p *Portfolio) {
 func registerBook(
 	L *lua.LState, p *Portfolio, hist map[string][]data.AssetData,
 ) {
+	// A negative target on a long-only portfolio is refused by Sell and would
+	// otherwise do nothing at all, silently: the rebalance would simply leave
+	// that leg flat and the strategy would look like it had traded. Said once
+	// per ticker, because a rebalance runs every day.
+	warnedShort := make(map[string]bool)
+
 	priceOf := func(ticker string, day int) float64 {
 		series, ok := hist[ticker]
 		if !ok || day < 0 || day >= len(series) {
@@ -330,6 +336,12 @@ func registerBook(
 	// fractions of equity. Weights are fractions, not percentages, and a ticker
 	// absent from the table is a target of zero, so passing {} goes to cash.
 	//
+	// A NEGATIVE weight is a short leg, and needs no special handling here: the
+	// sell pass sees a target below what is held and sells past it, which is
+	// exactly what opens a short, and the buy pass covers one the same way it
+	// tops up a long. That is why market-neutral is expressible as
+	// `target_weights(day, { A = 0.5, B = -0.5 })` and not as a second API.
+	//
 	// Sells run in a first pass and buys in a second, so the proceeds fund the
 	// purchases — a single interleaved pass would fail to buy whenever the book
 	// is fully invested. Buys are clamped to available cash. This is lifted
@@ -357,6 +369,26 @@ func registerBook(
 		}
 
 		eq := equity(day)
+		if !p.AllowShort && targets != nil {
+			targets.ForEach(func(k, v lua.LValue) {
+				w, ok := v.(lua.LNumber)
+				if !ok || float64(w) >= 0 {
+					return
+				}
+				ticker := k.String()
+				if warnedShort[ticker] {
+					return
+				}
+				warnedShort[ticker] = true
+				diagf("error", p.Pname,
+					"lua strategy: target_weights asked for %.4f of %q, but "+
+						"this portfolio does not set AllowShort — the short "+
+						"leg is ignored and the book is only half of what the "+
+						"strategy asked for. Add AllowShort = true to the "+
+						"[[portfolio]] block",
+					float64(w), ticker)
+			})
+		}
 		for _, ticker := range p.Tickers {
 			px := priceOf(ticker, day)
 			if px <= 0 {

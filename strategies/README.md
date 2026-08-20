@@ -195,6 +195,8 @@ accident.
 | `buy_max(t, price, buyType, day)` | Size the order automatically; `buyType` is `"equalWeights"` or `"greedy"`. |
 | `sell(t, shares, price, day)` | Sell an exact share count. With `AllowShort`, a sell past the holding closes the long and **shorts the remainder**; without it, such an order is refused. |
 | `sell_all(t, price, day)` | Close the whole position, whichever way it points — a short is closed by buying the shares back. |
+| `short(t, shares, price, day)` | Be short exactly `shares` after this call. A **target**, not a delta — see below. `short(t, 0, …)` goes flat. Needs `AllowShort`. |
+| `cover(t, price, day)` | Buy the whole short back. A no-op on a long. |
 | `equity(day)` | Cash plus every position marked at that day's close. |
 | `weight_of(t, day)` | The fraction of equity a position currently represents, for checking drift. |
 | `target_weights(day, {T = fraction, …})` | Move the whole book to those fractions of equity: sells run first so the proceeds fund the buys, and buys are clamped to available cash. A ticker absent from the table is a target of **zero**, so `target_weights(day, {})` goes to cash. |
@@ -204,12 +206,32 @@ accident.
 
 ### Shorting
 
-There is no `short()` function. With `AllowShort = true` on the portfolio,
-`sell` past the holding *is* the short:
+With `AllowShort = true` on the portfolio, `sell` past the holding *is* a short,
+and `short()` says it directly:
 
 ```lua
-sell(t, 100, price(t, day), day)   -- flat before this: now short 100
+short(t, 100, price(t, day), day)   -- be short 100, from wherever you are
+cover(t, price(t, day), day)        -- buy it all back
 ```
+
+**`short` is a target, not a delta**, which is the opposite of `buy` and `sell`
+and is deliberate. "Short 30" said as a delta is ambiguous the moment a position
+already exists — 30 more, or 30 in total? — and the ambiguity is invisible until
+a backtest is wrong. As a target it is correct without reading the current
+position first, it reaches the target from a long as readily as from flat, and
+`short(t, 0, …)` is "go flat" with no extra function.
+
+**Market-neutral is a target weight away**, and needs no new API at all: a
+negative weight is a short leg, because the rebalancer's sell pass sells past
+what is held and its buy pass covers.
+
+```lua
+target_weights(day, { LONG_ONE = 0.5, SHORT_ONE = -0.5 })
+```
+
+A short order on a portfolio without `AllowShort` is refused **and says so** —
+including a negative `target_weights` leg, which would otherwise leave the book
+at half the size the strategy asked for with nothing to show that it had.
 
 `position(t).amount` is **negative** for a short and `avg_price` is the price it
 was shorted at. Buying covers it, and the gain is `avg_price - fill` — the
