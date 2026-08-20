@@ -57,6 +57,11 @@ type Metrics struct {
 	// existed. Reported because a short-side edge that the borrow eats is not
 	// an edge, and nothing else in the result would show it.
 	BorrowPaid float64
+	// MarginCalls is how many days a maintenance breach forced a cover the
+	// strategy did not ask for. Zero for any long-only book. A non-zero value
+	// means the result includes trades the strategy never chose, which is
+	// usually the most important thing about it.
+	MarginCalls int
 	// DelistedHoldings is how many positions were liquidated at
 	// DelistingReturn because the company failed. Zero for every run that does
 	// not set DelistingReturn, which is every run written before it existed.

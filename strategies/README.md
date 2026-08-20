@@ -221,9 +221,11 @@ Borrow cost is charged if the config asks for it — `borrow_bps_annual` under
 the `BorrowPaid` metric. It defaults to zero, so a short-side result is
 optimistic by the borrow it never paid unless the config sets a rate.
 
-What the engine still does **not** model: a real margin rule. Gross short
-notional is simply capped at the portfolio's cash — no maintenance requirement,
-no forced cover.
+Margin is enforced: `[portfolio.Margin]` sets `initial_pct` (default 50%, how
+much equity is needed to open a short) and `maintenance_pct` (default 30%, how
+much to keep it). A maintenance breach **covers your short for you** — the
+`MarginCalls` metric counts the days it happened, and any strategy whose result
+has a non-zero `MarginCalls` contains trades it never asked for.
 
 `num_days()` is what makes "do this once, at the end" expressible — `step` is
 handed `day` with nothing to compare it against:

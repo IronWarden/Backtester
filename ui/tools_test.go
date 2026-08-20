@@ -185,6 +185,7 @@ func TestSystemPromptDocumentsConfigSchema(t *testing.T) {
 	for _, typ := range []reflect.Type{
 		reflect.TypeOf(backtest.PortfolioConfig{}),
 		reflect.TypeOf(backtest.CostConfig{}),
+		reflect.TypeOf(backtest.MarginConfig{}),
 	} {
 		for i := range typ.NumField() {
 			tag := typ.Field(i).Tag.Get("toml")

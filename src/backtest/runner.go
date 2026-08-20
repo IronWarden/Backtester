@@ -346,6 +346,9 @@ func runOne(
 		// overnight, not on what today's orders leave behind.
 		p.chargeBorrow()
 		p.Strategy.Step(p, windowed, day)
+		// After the strategy has acted, so a cover it made itself counts, and
+		// before the day is valued, so a forced cover is in the day's number.
+		p.enforceMaintenanceMargin(windowed, day)
 		curr := p.GetPortfolioValue(p.Tickers, windowed, day)
 		p.AdjustPortfolioParameters(p.Tickers, windowed, day, prev, curr)
 		prev = curr

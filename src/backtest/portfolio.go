@@ -69,6 +69,17 @@ type Portfolio struct {
 	// off every arithmetic path below is exactly what it was before shorting
 	// existed. Configuration, so Clone must carry it across.
 	AllowShort bool
+	// forcedCover is set only while enforceMaintenanceMargin is liquidating.
+	// A margin call is not a discretionary order: the broker buys the shares
+	// back whether or not the account can pay, and the account goes into
+	// debit. Without this, a book whose equity had gone NEGATIVE could not be
+	// covered at all — Buy would refuse to overdraw and the breach would
+	// simply persist, which is the one outcome a maintenance rule must not
+	// produce.
+	forcedCover bool
+	// Margin is what a short must be backed by. Configuration, so Clone
+	// carries it; ignored unless AllowShort is on.
+	Margin MarginConfig
 	// DelistingReturn and DelistingEvents drive the haircut applied to a
 	// holding whose company failed — see delisting.go. Like Costs they are
 	// configuration, so Clone must carry them across.
@@ -206,6 +217,7 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		Fundamentals:         p.Fundamentals,
 		FundamentalData:      p.FundamentalData,
 		AllowShort:           p.AllowShort,
+		Margin:               p.Margin,
 		DelistingReturn:      p.DelistingReturn,
 		DelistingEvents:      p.DelistingEvents,
 		InSampleEnd:          p.InSampleEnd,
@@ -288,10 +300,10 @@ func (p *Portfolio) Buy(
 	// order that arrives here is one the cash can already cover. Do not loosen
 	// this gate to compensate; an order that genuinely overshoots is still an
 	// error and must not fill.
-	if notional > p.BuyingPower*(1.0+1e-9) {
+	if notional > p.BuyingPower*(1.0+1e-9) && !p.forcedCover {
 		return
 	}
-	if cost > p.BuyingPower {
+	if cost > p.BuyingPower && !p.forcedCover {
 		notional = p.Costs.MaxAffordableNotional(p.BuyingPower)
 		if notional <= 0.0 {
 			// The balance cannot even cover the flat fee.
@@ -420,7 +432,7 @@ func (p *Portfolio) Sell(
 	}
 	opening := stockAmount - closing
 
-	if opening > 0 && !p.withinShortCap(ticker, opening, fillPrice) {
+	if opening > 0 && !p.withinInitialMargin(ticker, opening, fillPrice) {
 		return
 	}
 
@@ -483,26 +495,163 @@ func averageShortPrice(
 	return (pos.AveragePrice*existing + fillPrice*opening) / short
 }
 
-// withinShortCap enforces the only leverage limit this increment has: gross
-// short notional may not exceed the portfolio's cash. It is deliberately
-// cruder than a real margin rule — T27c replaces it — but shipping negative
-// positions with NO limit would let a strategy short without bound and report
-// the result as a finding.
-func (p *Portfolio) withinShortCap(
+// withinInitialMargin reports whether the book could still meet its initial
+// requirement with this short opened on top of what it already carries.
+//
+// Equity, not cash, is the backing: shorting is equity-NEUTRAL — the proceeds
+// enter cash exactly as the position's negative value leaves it — so the check
+// is the same before and after the order fills, and can be made here.
+func (p *Portfolio) withinInitialMargin(
 	ticker string, opening, fillPrice float64,
 ) bool {
-	gross := opening * fillPrice
+	gross := opening*fillPrice + p.grossShortValue(ticker)
+	if gross <= 0 {
+		return true
+	}
+	return p.markedEquity() >= p.Margin.Initial()*gross
+}
+
+// grossShortValue is the marked value of every short the book carries, at the
+// price each was last marked at. `excluding` is skipped, so a caller can add
+// its own pending order without double counting.
+func (p *Portfolio) grossShortValue(excluding string) float64 {
+	gross := 0.0
 	for t, pos := range p.Positions {
-		if t == ticker || pos.Amount >= 0 {
+		if t == excluding || pos.Amount >= 0 {
 			continue
 		}
-		price := pos.CurrentPrice
-		if price <= 0 {
-			price = pos.AveragePrice
-		}
-		gross += -pos.Amount * price
+		gross += -pos.Amount * p.markOf(pos)
 	}
-	return gross <= p.BuyingPower
+	return gross
+}
+
+// markedEquity is cash plus every position at its last mark. Used by the margin
+// checks, which run inside the trade path where the day's price series is not
+// in hand; GetPortfolioValue is the version to prefer everywhere else.
+func (p *Portfolio) markedEquity() float64 {
+	equity := p.BuyingPower
+	for _, pos := range p.Positions {
+		equity += pos.Amount * p.markOf(pos)
+	}
+	return equity
+}
+
+// markOf is the price a position was last marked at, falling back to what it
+// was opened at before any mark has been written.
+func (p *Portfolio) markOf(pos *Position) float64 {
+	if pos.CurrentPrice > 0 {
+		return pos.CurrentPrice
+	}
+	return pos.AveragePrice
+}
+
+// enforceMaintenanceMargin covers shorts until the book meets its maintenance
+// requirement again, and is the reason a short can lose more than it made: the
+// position moves against you, the requirement grows against a shrinking equity,
+// and the cover happens whether or not the strategy wanted it.
+//
+// HOW MUCH IS COVERED. Covering is equity-neutral — cash out, position value
+// back — so covering notional x leaves equity E alone and reduces gross short S
+// to S-x. The requirement E >= m*S is therefore met exactly when
+// x >= S - E/m, and that is what this covers rather than liquidating the whole
+// book on a small breach.
+//
+// Costs break the neutrality slightly: slippage and commission come out of
+// equity, so a book that was exactly at the line can still be under it after
+// covering. Rather than iterate to a fixed point, a book still in breach after
+// one pass is covered ENTIRELY. That is blunt, but it terminates, it is
+// deterministic, and leaving a book in breach would be worse than over-covering
+// a rare edge case.
+//
+// Tickers are covered in p.Tickers order, not map order, so the same run always
+// produces the same book.
+func (p *Portfolio) enforceMaintenanceMargin(
+	windowed map[string][]data.AssetData, day int,
+) {
+	if !p.AllowShort {
+		return
+	}
+	gross := p.grossShortValue("")
+	if gross <= 0 {
+		return
+	}
+	m := p.Margin.Maintenance()
+	if !inBreach(p.markedEquity(), m, gross) {
+		return
+	}
+	// The size that breached, kept for the diagnostic: `gross` is recomputed
+	// below and would otherwise report what is LEFT rather than what was
+	// called on.
+	breached := gross
+
+	p.forcedCover = true
+	defer func() { p.forcedCover = false }()
+
+	covered := p.coverShorts(windowed, day, gross-p.markedEquity()/m)
+	// Second pass: costs may have eaten the margin the first cover restored.
+	if gross = p.grossShortValue(""); gross > 0 {
+		if inBreach(p.markedEquity(), m, gross) {
+			covered += p.coverShorts(windowed, day, gross)
+		}
+	}
+	if covered > 0 {
+		p.Metrics.MarginCalls++
+		diagf("warn", p.Pname,
+			"portfolio %q: margin call — equity fell below %.0f%% of a "+
+				"%.2f short book, so %.2f of it was covered whether the "+
+				"strategy wanted it or not",
+			p.Pname, m*100, breached, covered)
+	}
+}
+
+// inBreach compares equity against the requirement with a relative tolerance.
+// Exact comparison is wrong here: covering restores equity to the requirement
+// EXACTLY, so a book that has just been brought back into line lands within a
+// float ulp of the boundary, and a bare `<` reads that as a second breach and
+// liquidates the whole book. The tolerance is what keeps the fallback for real
+// shortfalls — costs — rather than for rounding.
+func inBreach(equity, maintenance, gross float64) bool {
+	return equity < maintenance*gross*(1.0-1e-9)
+}
+
+// coverShorts buys back up to `need` of short notional, in ticker order.
+// Returns the notional actually covered.
+func (p *Portfolio) coverShorts(
+	windowed map[string][]data.AssetData, day int, need float64,
+) float64 {
+	covered := 0.0
+	for _, ticker := range p.Tickers {
+		if need <= 0 {
+			break
+		}
+		pos, ok := p.Positions[ticker]
+		if !ok || pos.Amount >= 0 {
+			continue
+		}
+		bars := windowed[ticker]
+		if day >= len(bars) || bars[day].Close <= 0 {
+			continue
+		}
+		price := bars[day].Close
+		shares := -pos.Amount
+		if want := need / price; want < shares {
+			shares = want
+		}
+		// Measure what the order actually did, not what it was asked to do.
+		// Buy has guards of its own, and counting an attempt as a cover would
+		// report a margin call that never happened.
+		before := pos.Amount
+		p.Buy(ticker, shares, price, bars[day].Date)
+		filled := 0.0
+		if after, ok := p.Positions[ticker]; ok {
+			filled = after.Amount - before
+		} else {
+			filled = -before
+		}
+		covered += filled * price
+		need -= filled * price
+	}
+	return covered
 }
 
 func (p *Portfolio) GetPortfolioValue(

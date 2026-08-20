@@ -1,6 +1,7 @@
 package backtest
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -187,20 +188,170 @@ func TestShorterAveragePriceBlendsAcrossOrders(t *testing.T) {
 	}
 }
 
-// The only leverage limit this increment has. Without it a strategy could short
-// without bound and report the result as a finding.
-func TestShortIsCappedAtCash(t *testing.T) {
+// Supersedes T27a's placeholder cap (gross short <= cash), which this test used
+// to pin. That limit was documented as a stand-in for a real rule and is now
+// Regulation T's: equity must back 50% of the short's value, so a book may
+// carry short notional up to twice its equity.
+func TestInitialMarginLimitsHowMuchCanBeShorted(t *testing.T) {
+	// Equity 100, so 200 of short notional is exactly the Reg T line.
 	p := shortBook(100, true)
-	// 10 shares at 20 is 200 of notional against 100 of cash.
 	p.Sell("X", 10, 20, shortDay("2020-01-02"))
-
-	if len(p.Positions) != 0 {
-		t.Errorf("an over-leveraged short filled: %+v", p.Positions["X"])
+	if pos, ok := p.Positions["X"]; !ok || pos.Amount != -10 {
+		t.Fatalf("a short exactly at the initial requirement was refused: %+v",
+			p.Positions["X"])
 	}
-	// 5 shares at 20 is exactly the cash, and must fill.
+
+	// One more share is over it, and must not fill.
+	over := shortBook(100, true)
+	over.Sell("X", 11, 20, shortDay("2020-01-02"))
+	if len(over.Positions) != 0 {
+		t.Errorf("an over-leveraged short filled: %+v", over.Positions["X"])
+	}
+}
+
+func TestInitialMarginIsConfigurable(t *testing.T) {
+	// 100% initial: the book may carry only as much short as it has equity,
+	// which is exactly T27a's old cap, expressed as a margin rule.
+	p := shortBook(100, true)
+	p.Margin = MarginConfig{InitialPct: 1.0, MaintenancePct: 1.0}
+	p.Sell("X", 10, 20, shortDay("2020-01-02"))
+	if len(p.Positions) != 0 {
+		t.Errorf("200 of short filled against 100 of equity at 100%% initial")
+	}
 	p.Sell("X", 5, 20, shortDay("2020-01-02"))
 	if pos, ok := p.Positions["X"]; !ok || pos.Amount != -5 {
-		t.Errorf("a short exactly at the cap was refused")
+		t.Errorf("a short exactly at a 100%% requirement was refused")
+	}
+}
+
+func TestMarginDefaultsAreRegT(t *testing.T) {
+	var m MarginConfig
+	if m.Initial() != RegTInitialMargin {
+		t.Errorf("Initial() = %.2f, want %.2f", m.Initial(), RegTInitialMargin)
+	}
+	if m.Maintenance() != DefaultMaintenanceMargin {
+		t.Errorf("Maintenance() = %.2f, want %.2f",
+			m.Maintenance(), DefaultMaintenanceMargin)
+	}
+	// An explicit value wins, and zero is "unset" rather than "no requirement" —
+	// which is the one place a zero here is not the inert value.
+	set := MarginConfig{InitialPct: 0.75, MaintenancePct: 0.40}
+	if set.Initial() != 0.75 || set.Maintenance() != 0.40 {
+		t.Errorf("explicit requirements were overridden by the defaults")
+	}
+}
+
+// The point of a maintenance requirement: the short moves against you, the
+// requirement grows while the equity backing it shrinks, and the cover happens
+// whether the strategy wanted it or not.
+func TestMaintenanceBreachForcesACover(t *testing.T) {
+	p := shortBook(1000, true)
+	p.Sell("X", 40, 20, shortDay("2020-01-02")) // 800 short, equity 1000
+
+	// The stock nearly triples. Short is now 40*55 = 2200; equity is
+	// 1800 cash - 2200 = -400... far under the 30% requirement.
+	bars := map[string][]data.AssetData{
+		"X": {{Date: shortDay("2020-02-03"), Close: 55}},
+	}
+	p.Positions["X"].CurrentPrice = 55
+	p.enforceMaintenanceMargin(bars, 0)
+
+	if p.Metrics.MarginCalls != 1 {
+		t.Fatalf("MarginCalls = %d, want 1", p.Metrics.MarginCalls)
+	}
+	// Equity was negative, so nothing partial restores it: the book is fully
+	// covered by the second pass rather than left in breach.
+	if pos, ok := p.Positions["X"]; ok {
+		t.Errorf("a hopeless breach left %.2f shares short", pos.Amount)
+	}
+}
+
+// A partial cover is enough when the breach is small, and covering everything
+// on a small breach would distort the result.
+func TestASmallBreachIsCoveredPartially(t *testing.T) {
+	p := shortBook(1000, true)
+	p.Sell("X", 100, 10, shortDay("2020-01-02")) // 1000 short, equity 1000
+
+	// Up 12%: short is 1120, cash 2000, equity 880. The requirement is
+	// 0.30*1120 = 336, which is still met... so push further.
+	// At 26: short 2600, cash 2000, equity -600. Use a milder move instead.
+	bars := map[string][]data.AssetData{
+		"X": {{Date: shortDay("2020-02-03"), Close: 14}},
+	}
+	p.Positions["X"].CurrentPrice = 14
+	// Short 1400, cash 2000, equity 600. Requirement 0.30*1400 = 420: met.
+	p.enforceMaintenanceMargin(bars, 0)
+	if p.Metrics.MarginCalls != 0 {
+		t.Fatalf("a book still inside its requirement was called")
+	}
+
+	// At 16: short 1600, cash 2000, equity 400, requirement 480. Breached by
+	// 80, and x >= S - E/m = 1600 - 400/0.3 = 266.67 of notional covers it.
+	bars["X"][0].Close = 16
+	p.Positions["X"].CurrentPrice = 16
+	p.enforceMaintenanceMargin(bars, 0)
+
+	if p.Metrics.MarginCalls != 1 {
+		t.Fatalf("MarginCalls = %d, want 1", p.Metrics.MarginCalls)
+	}
+	pos, ok := p.Positions["X"]
+	if !ok {
+		t.Fatal("a small breach liquidated the whole short")
+	}
+	// 266.67/16 = 16.67 shares covered, leaving about 83.3 short.
+	if pos.Amount > -83 || pos.Amount < -84 {
+		t.Errorf("Amount = %.2f, want about -83.3 — the cover should be the "+
+			"minimum that restores the requirement", pos.Amount)
+	}
+	// Landing exactly on the requirement is meeting it — the minimum cover
+	// restores equity to the boundary by construction, so this uses the same
+	// tolerance the engine does rather than a bare <.
+	if equity, gross := p.markedEquity(), -pos.Amount*16; inBreach(equity, 0.30, gross) {
+		t.Errorf("still in breach after covering: equity %.2f vs %.2f required",
+			equity, 0.30*gross)
+	}
+}
+
+func TestNoMarginCallWithoutShorts(t *testing.T) {
+	p := shortBook(1000, true)
+	p.Buy("X", 50, 20, shortDay("2020-01-02"))
+	bars := map[string][]data.AssetData{
+		"X": {{Date: shortDay("2020-02-03"), Close: 1}},
+	}
+	p.Positions["X"].CurrentPrice = 1
+	p.enforceMaintenanceMargin(bars, 0)
+
+	if p.Metrics.MarginCalls != 0 {
+		t.Errorf("a long-only book was margin called %d times",
+			p.Metrics.MarginCalls)
+	}
+}
+
+func TestMaintenanceAboveInitialIsRejected(t *testing.T) {
+	pc := PortfolioConfig{
+		Name: "impossible", BuyingPower: 1000,
+		StartTime: "2020-01-01", EndTime: "2020-12-31",
+		Tickers: []string{"AAPL"}, Strategy: "buyandhold",
+		AllowShort: true,
+		Margin:     MarginConfig{InitialPct: 0.30, MaintenancePct: 0.50},
+	}
+	if _, err := pc.ToPortfolio(); err == nil {
+		t.Error("maintenance above initial was accepted; every short would be " +
+			"called the day it was opened")
+	}
+}
+
+func TestMarginFractionsMustBeFractions(t *testing.T) {
+	for _, m := range []MarginConfig{{InitialPct: 1.5}, {MaintenancePct: -0.2}} {
+		pc := PortfolioConfig{
+			Name: "bad", BuyingPower: 1000,
+			StartTime: "2020-01-01", EndTime: "2020-12-31",
+			Tickers: []string{"AAPL"}, Strategy: "buyandhold",
+			AllowShort: true, Margin: m,
+		}
+		if _, err := pc.ToPortfolio(); err == nil {
+			t.Errorf("%+v was accepted; requirements are fractions in [0, 1]", m)
+		}
 	}
 }
 
@@ -373,4 +524,36 @@ func nearly(a, b float64) bool {
 		d = -d
 	}
 	return d < 1e-9
+}
+
+// Both found by reading the diagnostic a mutant printed: it reported covering
+// 4400 of a 2200 book, and described the book as 0.00 in size. The first came
+// from counting an order that never filled, the second from reporting the
+// post-cover size as the one that breached.
+func TestMarginCallReportsWhatActuallyHappened(t *testing.T) {
+	var lines []string
+	prev := Diagnostics
+	Diagnostics = func(d Diagnostic) { lines = append(lines, d.Message) }
+	defer func() { Diagnostics = prev }()
+
+	p := shortBook(1000, true)
+	p.Sell("X", 40, 20, shortDay("2020-01-02"))
+	bars := map[string][]data.AssetData{
+		"X": {{Date: shortDay("2020-02-03"), Close: 55}},
+	}
+	p.Positions["X"].CurrentPrice = 55
+	p.enforceMaintenanceMargin(bars, 0)
+
+	if len(lines) != 1 {
+		t.Fatalf("got %d diagnostics, want 1: %v", len(lines), lines)
+	}
+	// The book that breached was 40 x 55 = 2200, and 2200 of it was covered.
+	// Neither figure may be the post-cover state, and the covered amount may
+	// never exceed the book.
+	if !strings.Contains(lines[0], "2200.00 short book") {
+		t.Errorf("the message does not name the size that breached: %q", lines[0])
+	}
+	if !strings.Contains(lines[0], "so 2200.00 of it was covered") {
+		t.Errorf("the message does not name what was covered: %q", lines[0])
+	}
 }

@@ -432,10 +432,46 @@ moves daily — general collateral is a few tens of basis points, a hard-to-borr
 name can be hundreds or thousands — so a strategy shorting crowded or small
 names is under-charged here, possibly by an order of magnitude.
 
-**What is still not built.** There is no real margin model: gross short notional
-is capped at the portfolio's cash, which exists to stop unbounded leverage
-rather than to model a broker. No initial or maintenance requirement, and no
-forced cover.
+#### Margin
+
+A short must be backed by equity, checked once to open the position and every
+day to keep it.
+
+```toml
+[[portfolio]]
+AllowShort = true
+
+  [portfolio.Margin]
+  initial_pct     = 0.50
+  maintenance_pct = 0.30
+```
+
+Both are fractions of the short's **current marked value**, not of the price it
+was opened at — which is what makes a breach possible with the strategy doing
+nothing at all: the short moves against you, so the requirement grows while the
+equity backing it shrinks.
+
+**Zero means "use the default", not "no requirement."** This is the one knob in
+this config where an unset value is not the inert value, because a zero margin
+requirement is unbounded leverage. The defaults are Regulation T's 50% initial
+(`backtest.RegTInitialMargin`) and 30% maintenance
+(`backtest.DefaultMaintenanceMargin`) — exchange minimums are nearer 25–30% and
+brokers commonly set 30–35%, so 30 is a conservative middle and a *default*, not
+a fact about any broker. A maintenance requirement above the initial one is
+rejected: every short would be called the day it was opened.
+
+A breach **forces a cover** whether the strategy wanted it or not, and covers the
+minimum that restores the requirement rather than liquidating the book. Covering
+is equity-neutral, so covering notional `x` leaves equity `E` alone and cuts
+gross short `S` to `S - x`; the requirement `E ≥ m·S` is met exactly when
+`x ≥ S − E/m`. If the book is *still* in breach afterwards — costs come out of
+equity — it is covered entirely. A forced cover may overdraw the account: a
+margin call is not a discretionary order, and a book whose equity has gone
+negative goes into debit rather than staying in breach.
+
+The `MarginCalls` metric counts the days this fired. **A non-zero value means
+the result contains trades the strategy never chose**, which is usually the most
+important thing about it.
 
 ### What a holding is worth when the company dies
 

@@ -102,6 +102,59 @@ func (c CostConfig) MaxAffordableNotional(cash float64) float64 {
 	return n
 }
 
+// MarginConfig is the equity a short position must be backed by. It replaces
+// the placeholder cap T27a shipped with — gross short notional limited to cash
+// — with the rule brokers actually apply.
+//
+// Both fields are fractions of the short's CURRENT marked value, not of the
+// price it was opened at, which is what makes a maintenance breach possible
+// without the strategy doing anything: the short moves against you and the
+// requirement grows while the equity backing it shrinks.
+//
+// Zero means "use the default below", NOT "no requirement". That is the one
+// place in this config where a zero value is not the inert value, and it is
+// deliberate: a zero margin requirement is unbounded leverage, which is never
+// what an unset field should mean. Shorting is itself opt-in, so no config
+// written before this exists is affected either way.
+type MarginConfig struct {
+	// InitialPct is the equity required to OPEN a short, as a fraction of the
+	// position's value. Defaults to RegTInitialMargin.
+	InitialPct float64 `toml:"initial_pct"`
+	// MaintenancePct is the equity required to KEEP one, checked every day
+	// after the strategy acts. Defaults to DefaultMaintenanceMargin. A breach
+	// forces a cover — see enforceMaintenanceMargin.
+	MaintenancePct float64 `toml:"maintenance_pct"`
+}
+
+// Margin requirements, as fractions of a short position's marked value.
+const (
+	// RegTInitialMargin is Regulation T's initial requirement for a short:
+	// 50% of the position's value must be backed by equity, i.e. a book may
+	// carry short notional up to twice its equity.
+	RegTInitialMargin = 0.50
+
+	// DefaultMaintenanceMargin is the ongoing requirement. Exchange minimums
+	// are nearer 25-30% and brokers commonly set 30-35%; 30% is the
+	// conservative middle and is a default, not a fact about any broker.
+	DefaultMaintenanceMargin = 0.30
+)
+
+// Initial returns the initial requirement with the default filled in.
+func (m MarginConfig) Initial() float64 {
+	if m.InitialPct <= 0 {
+		return RegTInitialMargin
+	}
+	return m.InitialPct
+}
+
+// Maintenance returns the maintenance requirement with the default filled in.
+func (m MarginConfig) Maintenance() float64 {
+	if m.MaintenancePct <= 0 {
+		return DefaultMaintenanceMargin
+	}
+	return m.MaintenancePct
+}
+
 type PortfolioConfig struct {
 	Name        string         `toml:"Name"`
 	BuyingPower float64        `toml:"BuyingPower"`
@@ -145,6 +198,9 @@ type PortfolioConfig struct {
 	// this is on, gross short notional is capped at the portfolio's cash; that
 	// is a placeholder for a real margin rule, not a model of one.
 	AllowShort bool `toml:"AllowShort"`
+	// Margin is what a short position must be backed by. Ignored entirely
+	// unless AllowShort is on.
+	Margin MarginConfig `toml:"Margin"`
 	// Sweep turns one config block into many runs: every key maps to a LIST
 	// of values, and the block expands to the cartesian product of them. Each
 	// resulting portfolio takes Params with its own sweep values written over
@@ -524,7 +580,24 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 			pc.Name, pc.DelistingReturn)
 	}
 	p.Costs = pc.Costs
+	if pc.Margin.InitialPct < 0 || pc.Margin.InitialPct > 1 ||
+		pc.Margin.MaintenancePct < 0 || pc.Margin.MaintenancePct > 1 {
+		return nil, fmt.Errorf(
+			"portfolio %q: margin requirements are fractions of a position's "+
+				"value and must be in [0, 1]; got initial_pct %.4f, "+
+				"maintenance_pct %.4f", pc.Name,
+			pc.Margin.InitialPct, pc.Margin.MaintenancePct)
+	}
+	// A maintenance requirement above the initial one would margin-call a
+	// position the instant it was opened.
+	if pc.Margin.Maintenance() > pc.Margin.Initial() {
+		return nil, fmt.Errorf(
+			"portfolio %q: maintenance_pct %.4f exceeds initial_pct %.4f, so "+
+				"every short would be called the day it was opened",
+			pc.Name, pc.Margin.Maintenance(), pc.Margin.Initial())
+	}
 	p.AllowShort = pc.AllowShort
+	p.Margin = pc.Margin
 	p.DelistingReturn = pc.DelistingReturn
 	p.Benchmark = pc.Benchmark
 	p.Fundamentals = pc.Fundamentals
