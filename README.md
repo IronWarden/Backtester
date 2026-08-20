@@ -303,9 +303,62 @@ a verdict per ticker, based on how far the bars run past the delisting date:
 | `recycled` | > 730 days — two companies in one series | **no** |
 | `unknown` | no registry entry | yes |
 
+A series that **begins after** its delisting date is `clean` whatever its last
+bar says: the price table simply has no bars for the dead company, so there is
+nothing spliced to worry about. That rule alone reclassifies 149 of the symbols
+a last-bar-only test called `recycled`.
+
 `Coverage.Trustworthy()` collapses that to a boolean, and
 `UntrustworthyTickers` names the offenders. `unknown` is the absence of
 evidence, not a clean bill of health — see the coverage limit below.
+
+### Splitting a recycled series
+
+A recycled series is repaired by separating the companies that actually traded
+under the symbol. The convention: **the company trading today keeps the bare
+symbol, and the previous occupant takes a generation suffix**, numbering from
+the oldest. `COR` keeps meaning Cencora, which is what every existing config
+already meant by it, and CoreSite Realty becomes addressable as `COR.1` rather
+than deleted.
+
+`src/data.ParseGeneration` splits `COR.1` into (`COR`, 1) and leaves a bare
+symbol at generation 0; `GenerationSymbol` is its inverse. A suffix that is not
+a positive integer is not a generation, so `BRK.B` is never mangled into `BRK`.
+The separator is the single constant `src/data.GenerationSeparator`.
+`DelistingCoverage` resolves a generation symbol to its base company's death
+date, so both halves of a split pair read `clean` while the unsplit series
+still reads `recycled`.
+
+```bash
+python3 split_recycled.py            # dry run: classify and print, write nothing
+python3 split_recycled.py --apply    # rewrite the bars
+```
+
+**The join is the hard part, not the split.** A delisting date alone does not
+prove the later bars are a different company — a symbol can be delisted from one
+exchange and relisted as the same company, and a company can simply change its
+name. So every candidate is corroborated against `company_profile` before
+anything is rewritten, into three buckets:
+
+| Bucket | Meaning | Action |
+| ------ | ------- | ------ |
+| `split` | the delisted name matches neither the current filer's name nor any former name | rewritten |
+| `same_company` | it matches one of them — a rename or a relisting | left alone |
+| `review` | no `company_profile` row, so nothing to corroborate against | left alone |
+
+As of 2026-08-20 that is 48 / 57 / 15 of the 120 genuinely spliced symbols.
+`DD` is in `same_company`, not `split`: "DowDuPont Inc" is a *former name* of
+the filer now called DuPont de Nemours, so DD is one company that renamed
+itself, not two companies sharing a symbol.
+
+The matching errs toward `same_company` on purpose, because under-splitting is
+recoverable and wrongly splitting a continuous company is not. Its known cost:
+when an acquirer takes its target's name the two names match and the series is
+left spliced — `COHR` is the live example. The `same_company` list is evidence,
+not proof; read it.
+
+The script rewrites `stock_data_optimized`, the only price table the engine
+reads. The legacy `stock_data` table is deliberately left untouched.
 
 ### What this does *not* fix
 

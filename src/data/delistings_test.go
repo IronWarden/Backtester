@@ -28,10 +28,11 @@ func TestClassifyCoverageBuckets(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ClassifyCoverage(tc.lastBar, Delisting{
-				Symbol:        "TEST",
-				DelistingDate: delisted,
-			})
+			got := ClassifyCoverage(
+				DateRange{Min: day("2010-01-04"), Max: tc.lastBar}, Delisting{
+					Symbol:        "TEST",
+					DelistingDate: delisted,
+				})
 			if got.Verdict != tc.want {
 				t.Errorf("last bar %s: got %q, want %q (%d days past)",
 					tc.lastBar.Format("2006-01-02"), got.Verdict, tc.want,
@@ -59,10 +60,12 @@ func TestClassifyCoverageCatchesRealSplicedSeries(t *testing.T) {
 	}
 
 	for _, s := range spliced {
-		got := ClassifyCoverage(day(s.lastBar), Delisting{
-			Symbol:        s.ticker,
-			DelistingDate: day(s.delisted),
-		})
+		got := ClassifyCoverage(
+			DateRange{Min: day("2005-01-03"), Max: day(s.lastBar)},
+			Delisting{
+				Symbol:        s.ticker,
+				DelistingDate: day(s.delisted),
+			})
 		if got.Verdict != CoverageRecycled {
 			t.Errorf("%s (%s): got %q, want %q",
 				s.ticker, s.what, got.Verdict, CoverageRecycled)
@@ -75,7 +78,9 @@ func TestClassifyCoverageCatchesRealSplicedSeries(t *testing.T) {
 }
 
 func TestClassifyCoverageWithoutDelistingDate(t *testing.T) {
-	got := ClassifyCoverage(day("2026-07-02"), Delisting{Symbol: "AAPL"})
+	got := ClassifyCoverage(
+		DateRange{Min: day("1980-12-12"), Max: day("2026-07-02")},
+		Delisting{Symbol: "AAPL"})
 	if got.Verdict != CoverageUnknown {
 		t.Errorf("no delisting date: got %q, want %q", got.Verdict, CoverageUnknown)
 	}
@@ -156,6 +161,77 @@ func TestUntrustworthyTickersSorted(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v (sorted)", got, want)
+		}
+	}
+}
+
+// The audit that found the defect is the test that it is fixed. `DD` unsplit is
+// two companies in one series and must stay condemned; `DD` and `DD.1` after
+// the split are one company each and must both read clean, without the registry
+// ever having heard of `DD.1`.
+func TestClassifySplitPairIsClean(t *testing.T) {
+	registry := map[string]Delisting{
+		"DD": {Symbol: "DD", Name: "DowDuPont Inc", DelistingDate: day("2019-05-31")},
+	}
+
+	unsplit := ClassifyTickers(map[string]DateRange{
+		"DD": {Min: day("1972-06-01"), Max: day("2026-07-02")},
+	}, registry)
+	if got := unsplit["DD"].Verdict; got != CoverageRecycled {
+		t.Fatalf("unsplit DD: got %q, want %q — the regression guard for the "+
+			"whole feature", got, CoverageRecycled)
+	}
+
+	split := ClassifyTickers(map[string]DateRange{
+		// What is left under the live symbol begins after the death.
+		"DD": {Min: day("2019-06-03"), Max: day("2026-07-02")},
+		// The dead occupant ends at it.
+		"DD.1": {Min: day("1972-06-01"), Max: day("2019-05-31")},
+	}, registry)
+
+	for _, ticker := range []string{"DD", "DD.1"} {
+		tc := split[ticker]
+		if tc.Verdict != CoverageClean {
+			t.Errorf("split %s: got %q, want %q", ticker, tc.Verdict, CoverageClean)
+		}
+		if !tc.Verdict.Trustworthy() {
+			t.Errorf("split %s: a split half must be tradable", ticker)
+		}
+	}
+	// The generation half must be judged against its base company's death
+	// date, not reported as an unknown symbol.
+	if split["DD.1"].Delisting.DelistingDate.IsZero() {
+		t.Error("DD.1 was classified without resolving DD's delisting date")
+	}
+}
+
+func TestParseGenerationRoundTrips(t *testing.T) {
+	cases := []struct {
+		symbol string
+		base   string
+		gen    int
+	}{
+		{"DD.1", "DD", 1},
+		{"DD.12", "DD", 12},
+		{"DD", "DD", 0},
+		{"$SP500", "$SP500", 0},
+		// A class share is not a generation and must not be mangled into BRK.
+		{"BRK.B", "BRK.B", 0},
+		{"DD.", "DD.", 0},
+		{".1", ".1", 0},
+		{"DD.01", "DD.01", 0},
+		{"DD.0", "DD.0", 0},
+		{"DD.1.2", "DD.1", 2},
+	}
+
+	for _, tc := range cases {
+		base, gen := ParseGeneration(tc.symbol)
+		if base != tc.base || gen != tc.gen {
+			t.Errorf("ParseGeneration(%q) = (%q, %d), want (%q, %d)",
+				tc.symbol, base, gen, tc.base, tc.gen)
+		}
+		if round := GenerationSymbol(base, gen); round != tc.symbol {
+			t.Errorf("round trip of %q produced %q", tc.symbol, round)
 		}
 	}
 }

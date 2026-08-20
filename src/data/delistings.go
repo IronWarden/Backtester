@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,6 +50,49 @@ const (
 	// than two years past a delisting cannot belong to the delisted company.
 	RecycledStartDays = 730
 )
+
+// GenerationSeparator joins a base symbol to its generation number when a
+// recycled series is split into the companies that actually traded under it:
+// `DD` stays the company trading today and the previous occupant becomes
+// `DD.1`, numbering from the oldest. Every existing config keeps meaning the
+// company it means now, and the dead one becomes addressable rather than
+// deleted.
+//
+// It is one constant on purpose. `.` collides with the class-share convention
+// (`BRK.B`), which ParseGeneration handles by requiring the suffix to be a
+// number — but if that collision is unwanted, changing this character is the
+// whole change.
+const GenerationSeparator = "."
+
+// ParseGeneration splits a symbol into its base and its generation: `DD.1` is
+// generation 1 of `DD`, and a bare `DD` is generation 0, the company trading
+// under the symbol today.
+//
+// A suffix that is not a positive integer is not a generation, so `BRK.B` comes
+// back unchanged as generation 0 rather than being mangled into `BRK`.
+func ParseGeneration(symbol string) (base string, generation int) {
+	i := strings.LastIndex(symbol, GenerationSeparator)
+	if i <= 0 || i == len(symbol)-len(GenerationSeparator) {
+		return symbol, 0
+	}
+	suffix := symbol[i+len(GenerationSeparator):]
+	n, err := strconv.Atoi(suffix)
+	// A leading zero is not how these are written, so `DD.01` is somebody
+	// else's convention and is left alone rather than guessed at.
+	if err != nil || n < 1 || strings.HasPrefix(suffix, "0") {
+		return symbol, 0
+	}
+	return symbol[:i], n
+}
+
+// GenerationSymbol is ParseGeneration's inverse. Generation 0 is the bare
+// symbol, so round-tripping a live company changes nothing.
+func GenerationSymbol(base string, generation int) string {
+	if generation < 1 {
+		return base
+	}
+	return base + GenerationSeparator + strconv.Itoa(generation)
+}
 
 // Coverage is the verdict on one ticker's price series.
 type Coverage string
@@ -107,21 +152,33 @@ type TickerCoverage struct {
 	DaysPastDelisting int
 }
 
-// ClassifyCoverage buckets one ticker by how far its last bar runs past its
-// delisting date. Pure, so the thresholds that decide whether a series is
-// tradable can be tested without a database.
+// ClassifyCoverage buckets one ticker by how its bars sit against its delisting
+// date. Pure, so the thresholds that decide whether a series is tradable can be
+// tested without a database.
 //
 // A zero delisting date yields CoverageUnknown. Bars that stop well BEFORE the
 // delisting date still read as clean: that is a gap in the price table, not a
 // splice, and a strategy simply has nothing to trade over the gap.
-func ClassifyCoverage(lastBar time.Time, d Delisting) TickerCoverage {
-	tc := TickerCoverage{Ticker: d.Symbol, LastBar: lastBar, Delisting: d}
+//
+// A series that BEGINS after the delisting date is also clean, and that is what
+// makes a split verifiable: once `split_recycled.py` has moved the dead
+// company's bars to `DD.1`, what is left under `DD` starts after the death and
+// cannot contain it, while `DD.1` ends at it. Both halves come back clean; the
+// unsplit series still comes back recycled.
+func ClassifyCoverage(r DateRange, d Delisting) TickerCoverage {
+	tc := TickerCoverage{Ticker: d.Symbol, LastBar: r.Max, Delisting: d}
 	if d.DelistingDate.IsZero() {
 		tc.Verdict = CoverageUnknown
 		return tc
 	}
 
-	past := int(lastBar.Sub(d.DelistingDate).Hours() / 24)
+	past := int(r.Max.Sub(d.DelistingDate).Hours() / 24)
+	if r.Min.After(d.DelistingDate) {
+		tc.Verdict = CoverageClean
+		tc.DaysPastDelisting = past
+		return tc
+	}
+
 	tc.DaysPastDelisting = past
 	switch {
 	case past <= StaleTailDays:
@@ -147,6 +204,14 @@ func ClassifyTickers(
 	for ticker, r := range ranges {
 		d, ok := delistings[ticker]
 		if !ok {
+			// A generation symbol carries the base company's death date: the
+			// registry never heard of `DD.1`, but `DD.1` is exactly the series
+			// that ended when `DD` died.
+			if base, gen := ParseGeneration(ticker); gen > 0 {
+				d, ok = delistings[base]
+			}
+		}
+		if !ok {
 			out[ticker] = TickerCoverage{
 				Ticker:  ticker,
 				Verdict: CoverageUnknown,
@@ -157,7 +222,7 @@ func ClassifyTickers(
 		// The registry keys on its own symbol column; make sure the verdict is
 		// labelled with the ticker actually asked about.
 		d.Symbol = ticker
-		out[ticker] = ClassifyCoverage(r.Max, d)
+		out[ticker] = ClassifyCoverage(r, d)
 	}
 	return out
 }

@@ -658,10 +658,13 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   re-issue the symbols of dead companies. stock_data_optimized is keyed on
   the symbol alone, so where a symbol was re-used it holds TWO companies
   spliced into one unbroken series with no marker at the seam. Confirmed
-  examples: DD runs 1972-2026 although DowDuPont was delisted 2019-05-31
-  and today's DD is DuPont de Nemours; SUNE runs to 2026 although SunEdison
-  went bankrupt in 2016; COR splices CoreSite Realty onto Cencora; DRS
-  splices DRS Technologies onto Leonardo DRS. 269 tickers are affected.
+  examples: SUNE runs to 2026 although SunEdison went bankrupt in 2016;
+  COR splices CoreSite Realty onto Cencora; DRS splices DRS Technologies
+  onto Leonardo DRS; ACI splices Arch Coal onto Albertsons. 120 operating
+  symbols are genuinely affected (146 counting ETFs and derivatives).
+  DO NOT cite DD as an example: "DowDuPont Inc" is a FORMER NAME of the
+  filer now called DuPont de Nemours, so DD is one company that renamed
+  itself, not two companies sharing a symbol.
   This is not survivorship bias and it is worse — survivorship makes a
   result optimistic, a spliced series makes it arbitrary, because the
   strategy holds one company and is paid by another.
@@ -673,12 +676,33 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   FROM stock_data_optimized s JOIN delistings d ON d.symbol = s."Ticker"
   WHERE d.security_class = 'operating'
   GROUP BY 1, 3
-  HAVING date_diff('day', d.delisting_date::DATE, MAX(s."Date")::DATE) > 730;
+  HAVING date_diff('day', d.delisting_date::DATE, MAX(s."Date")::DATE) > 730
+     AND MIN(s."Date")::DATE <= d.delisting_date::DATE;
+
+  That second condition is not optional. A series that BEGINS after its
+  delisting date holds only the later company — there is nothing spliced
+  in it. Omitting the condition overstates the problem by 149 symbols.
 
   Engine-side this is src/data.DelistingCoverage, which returns a per-ticker
   verdict: clean, stale_tail, suspect, recycled, or unknown. Suspect and
   recycled series must not be traded. unknown means the registry has no
   death date — absence of evidence, never a clean bill of health.
+
+- REPAIRING A RECYCLED SERIES. python3 split_recycled.py separates the
+  companies: the one trading today keeps the bare symbol and the previous
+  occupant takes a generation suffix numbering from the oldest, so CoreSite
+  Realty becomes COR.1 while COR still means Cencora. It is a dry run unless
+  given --apply, and it corroborates every candidate against company_profile
+  first — a symbol whose delisted name matches the current filer's name or
+  any of its former names is a RENAME, not a recycling, and is left alone.
+  Go side: src/data.ParseGeneration("COR.1") returns ("COR", 1), a bare
+  symbol is generation 0, and a suffix that is not a positive integer is not
+  a generation, so BRK.B is never mangled into BRK. GenerationSymbol is the
+  inverse and src/data.GenerationSeparator is the single constant holding
+  the "." character. DelistingCoverage resolves a generation symbol to its
+  base company's death date, so both halves of a split pair read clean.
+  Generation symbols exist in the price table ONLY after the user has run
+  the script with --apply; do not assume COR.1 is queryable.
 
 - The delistings table is OPTIONAL and may not exist; it is loaded by
   python3 add_delistings.py from Alpha Vantage's free LISTING_STATUS feed
