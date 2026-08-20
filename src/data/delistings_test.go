@@ -42,10 +42,11 @@ func TestClassifyCoverageBuckets(t *testing.T) {
 	}
 }
 
-// The four tickers below are real findings from the 2026-08-16 registry pull.
-// Each is one price series in stock_data_optimized carrying two different
-// companies. If a change ever lets one of these read as tradable, the engine
-// is back to paying a strategy for holding a company it does not hold.
+// The four tickers below are real findings from the 2026-08-16 registry pull,
+// each corroborated against company_profile in 2026-08-20: one price series in
+// stock_data_optimized carrying two genuinely different companies. If a change
+// ever lets one of these read as tradable while unsplit, the engine is back to
+// paying a strategy for holding a company it does not hold.
 func TestClassifyCoverageCatchesRealSplicedSeries(t *testing.T) {
 	spliced := []struct {
 		ticker   string
@@ -53,7 +54,7 @@ func TestClassifyCoverageCatchesRealSplicedSeries(t *testing.T) {
 		lastBar  string
 		what     string
 	}{
-		{"DD", "2019-05-31", "2026-07-02", "DowDuPont, then DuPont de Nemours"},
+		{"ACI", "2020-09-15", "2026-07-02", "Arch Coal, then Albertsons"},
 		{"SUNE", "2016-04-21", "2026-07-02", "SunEdison went bankrupt in 2016"},
 		{"COR", "2021-12-28", "2026-07-02", "CoreSite Realty, then Cencora"},
 		{"DRS", "2009-10-30", "2026-07-02", "DRS Technologies, then Leonardo DRS"},
@@ -233,5 +234,31 @@ func TestParseGenerationRoundTrips(t *testing.T) {
 		if round := GenerationSymbol(base, gen); round != tc.symbol {
 			t.Errorf("round trip of %q produced %q", tc.symbol, round)
 		}
+	}
+}
+
+// DD used to head the list above, and it does not belong there. "DowDuPont Inc"
+// is a FORMER NAME of the filer now called DuPont de Nemours -- the same CIK,
+// renamed, not a symbol re-issued to somebody else. The registry records the
+// rename as a delisting, so the date-based classifier still condemns the series,
+// and split_recycled.py's corroboration step is the only thing that knows
+// better.
+//
+// This test pins that gap rather than papering over it: the verdict IS recycled
+// today, and a reader who assumes a recycled verdict means two companies will be
+// wrong about 57 symbols. Closing it needs the corroboration fed back into the
+// classifier, which is filed as its own task.
+func TestRenameIsStillReportedRecycled(t *testing.T) {
+	got := ClassifyCoverage(
+		DateRange{Min: day("1972-06-01"), Max: day("2026-07-02")},
+		Delisting{
+			Symbol:        "DD",
+			Name:          "DowDuPont Inc",
+			DelistingDate: day("2019-05-31"),
+		})
+	if got.Verdict != CoverageRecycled {
+		t.Fatalf("DD: got %q, want %q — if this now passes, the classifier "+
+			"learned about renames and this test should become the assertion "+
+			"that DD reads clean", got.Verdict, CoverageRecycled)
 	}
 }
