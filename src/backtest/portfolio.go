@@ -743,12 +743,7 @@ func (p *Portfolio) chargeBorrow() {
 		if pos.Amount >= 0 {
 			continue
 		}
-		price := pos.CurrentPrice
-		if price <= 0 {
-			// First day of a short, before any mark has been written.
-			price = pos.AveragePrice
-		}
-		gross += -pos.Amount * price
+		gross += -pos.Amount * p.markOf(pos)
 	}
 	if gross <= 0 {
 		return
