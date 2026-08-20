@@ -32,6 +32,31 @@ function seriesColor(s: PlotSeries, i: number): string {
   return s.benchmark ? BENCHMARK_COLOR : COLORS[i % COLORS.length];
 }
 
+// A portfolio's colour chip. Every panel that names a portfolio shows one, so
+// this is the single place the palette lookup and the two spacing variants
+// live: `inline` is the form that sits before a name inside a table cell.
+function Swatch({
+  index,
+  color,
+  inline,
+}: {
+  index?: number;
+  color?: string;
+  inline?: boolean;
+}) {
+  const background = color ?? COLORS[(index ?? 0) % COLORS.length];
+  return (
+    <span
+      className="swatch"
+      style={
+        inline
+          ? { background, display: "inline-block", marginRight: "0.5em" }
+          : { background }
+      }
+    />
+  );
+}
+
 // Compact money label, e.g. 1234567 -> "$1.2M", 12345 -> "$12.3k".
 function fmtMoney(v: number): string {
   const abs = Math.abs(v);
@@ -522,10 +547,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
           return (
             <div className="stat-card" key={i}>
               <div className="stat-name" title={r.portfolioName}>
-                <span
-                  className="swatch"
-                  style={{ background: COLORS[i % COLORS.length] }}
-                />
+                <Swatch index={i} />
                 {r.portfolioName}
               </div>
               <div className="stat-value">{fmtDollars(r.finalValue)}</div>
@@ -573,10 +595,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                     key={i}
                     title={r.portfolioName}
                   >
-                    <span
-                      className="swatch"
-                      style={{ background: COLORS[i % COLORS.length] }}
-                    />
+                    <Swatch index={i} />
                     {r.portfolioName}
                   </span>
                 ))}
@@ -696,7 +715,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                 <div className="tip-date">{hover.date}</div>
                 {hover.rows.map((r, i) => (
                   <div className="tip-row" key={i}>
-                    <span className="swatch" style={{ background: r.color }} />
+                    <Swatch color={r.color} />
                     <span className="tip-name">{r.name}</span>
                     <span className="tip-val">{fmtDollars(r.v)}</span>
                   </div>
@@ -776,14 +795,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                 return (
                   <tr key={i}>
                     <td>
-                      <span
-                        className="swatch"
-                        style={{
-                          background: COLORS[i % COLORS.length],
-                          display: "inline-block",
-                          marginRight: "0.5em",
-                        }}
-                      />
+                      <Swatch index={i} inline />
                       {r.portfolioName}
                     </td>
                     <td className="strategy" title={r.strategy}>
@@ -851,14 +863,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
               {benchmarkRows.map((b) => (
                 <tr key={`bench-${b.ticker}`} className="benchmark-row">
                   <td>
-                    <span
-                      className="swatch"
-                      style={{
-                        background: BENCHMARK_COLOR,
-                        display: "inline-block",
-                        marginRight: "0.5em",
-                      }}
-                    />
+                    <Swatch color={BENCHMARK_COLOR} inline />
                     {b.ticker}
                   </td>
                   <td className="strategy">benchmark</td>
@@ -921,14 +926,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   (r.walkForward?.windows ?? []).map((w, j) => (
                     <tr key={`${i}-wf-${j}`}>
                       <td>
-                        <span
-                          className="swatch"
-                          style={{
-                            background: COLORS[i % COLORS.length],
-                            display: "inline-block",
-                            marginRight: "0.5em",
-                          }}
-                        />
+                        <Swatch index={i} inline />
                         {j === 0 ? r.portfolioName : ""}
                       </td>
                       <td className="mono">
@@ -992,14 +990,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                       }
                     >
                       <td>
-                        <span
-                          className="swatch"
-                          style={{
-                            background: COLORS[i % COLORS.length],
-                            display: "inline-block",
-                            marginRight: "0.5em",
-                          }}
-                        />
+                        <Swatch index={i} inline />
                         {r.portfolioName}
                       </td>
                       <td className="strategy">{s.label}</td>
@@ -1047,14 +1038,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   (r.drawdowns ?? []).slice(0, 5).map((d, j) => (
                     <tr key={`${i}-${j}`}>
                       <td>
-                        <span
-                          className="swatch"
-                          style={{
-                            background: COLORS[i % COLORS.length],
-                            display: "inline-block",
-                            marginRight: "0.5em",
-                          }}
-                        />
+                        <Swatch index={i} inline />
                         {r.portfolioName}
                       </td>
                       <td className="num neg">{d.depthPct.toFixed(2)}</td>
@@ -1102,14 +1086,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   return (
                     <tr key={i}>
                       <td>
-                        <span
-                          className="swatch"
-                          style={{
-                            background: COLORS[i % COLORS.length],
-                            display: "inline-block",
-                            marginRight: "0.5em",
-                          }}
-                        />
+                        <Swatch index={i} inline />
                         {r.portfolioName}
                       </td>
                       <td className="num">{t.trades}</td>
@@ -1172,14 +1149,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                       return (
                         <tr key={`${i}-${j}`}>
                           <td>
-                            <span
-                              className="swatch"
-                              style={{
-                                background: COLORS[i % COLORS.length],
-                                display: "inline-block",
-                                marginRight: "0.5em",
-                              }}
-                            />
+                            <Swatch index={i} inline />
                             {r.portfolioName}
                           </td>
                           <td>{t.ticker}</td>
@@ -1215,14 +1185,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   <th>Year</th>
                   {results.map((r, i) => (
                     <th className="num" key={i} title={r.portfolioName}>
-                      <span
-                        className="swatch"
-                        style={{
-                          background: COLORS[i % COLORS.length],
-                          display: "inline-block",
-                          marginRight: "0.5em",
-                        }}
-                      />
+                      <Swatch index={i} inline />
                       {r.portfolioName}
                     </th>
                   ))}
@@ -1320,10 +1283,7 @@ function MonthGrid({
     <div className="table-scroll">
       {showName && (
         <div className="month-owner">
-          <span
-            className="swatch"
-            style={{ background: color, display: "inline-block", marginRight: "0.5em" }}
-          />
+          <Swatch color={color} inline />
           {result.portfolioName}
         </div>
       )}
