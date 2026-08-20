@@ -173,13 +173,12 @@ func ClassifyCoverage(r DateRange, d Delisting) TickerCoverage {
 	}
 
 	past := int(r.Max.Sub(d.DelistingDate).Hours() / 24)
+	tc.DaysPastDelisting = past
 	if r.Min.After(d.DelistingDate) {
 		tc.Verdict = CoverageClean
-		tc.DaysPastDelisting = past
 		return tc
 	}
 
-	tc.DaysPastDelisting = past
 	switch {
 	case past <= StaleTailDays:
 		tc.Verdict = CoverageClean
