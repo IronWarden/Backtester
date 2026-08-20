@@ -64,6 +64,11 @@ type Portfolio struct {
 	// would change what the portfolio actually does. Like Costs it is
 	// configuration, so Clone must carry it across.
 	Benchmark string
+	// DelistingReturn and DelistingEvents drive the haircut applied to a
+	// holding whose company failed — see delisting.go. Like Costs they are
+	// configuration, so Clone must carry them across.
+	DelistingReturn float64
+	DelistingEvents map[string]delistingEvent
 	// tradedNotional accumulates the gross value of every filled order and
 	// feeds the Turnover metric. Unlike Costs this is per-run state, so
 	// Clone deliberately leaves it at zero, exactly as it does for
@@ -195,6 +200,8 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		Benchmark:            p.Benchmark,
 		Fundamentals:         p.Fundamentals,
 		FundamentalData:      p.FundamentalData,
+		DelistingReturn:      p.DelistingReturn,
+		DelistingEvents:      p.DelistingEvents,
 		InSampleEnd:          p.InSampleEnd,
 		Trials:               p.Trials,
 		TrialGroup:           p.TrialGroup,

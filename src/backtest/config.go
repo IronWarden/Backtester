@@ -113,6 +113,17 @@ type PortfolioConfig struct {
 	// strategy actually reads. Absent or empty, nothing is fetched and nothing
 	// about the run changes, which is why every existing config is unaffected.
 	Fundamentals []string `toml:"Fundamentals"`
+	// DelistingReturn is the fraction of a position's value lost on the day
+	// the company delists, applied only when the delisting was
+	// performance-related (bankruptcy or a compliance removal) and only to a
+	// holding still open when the run ends. Acquisitions keep their last
+	// close, and a delisting whose reason could not be identified is NOT
+	// haircut — it is counted and reported instead.
+	//
+	// Zero, the default, applies nothing at all and reproduces every previous
+	// result exactly. Researched values are ShumwayNYSEReturn (-0.30) and
+	// ShumwayNasdaqReturn (-0.55). Must be in [-1, 0].
+	DelistingReturn float64 `toml:"DelistingReturn"`
 	// Sweep turns one config block into many runs: every key maps to a LIST
 	// of values, and the block expands to the cartesian product of them. Each
 	// resulting portfolio takes Params with its own sweep values written over
@@ -475,7 +486,18 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 	// Set after construction rather than as an eighth positional argument to
 	// InitializePortfolio, which is already at the limit of what a positional
 	// signature carries readably.
+	// A positive delisting return would pay a holder for a bankruptcy, and
+	// below -1 would take more than the position is worth. Rejected by name
+	// rather than clamped: a config asking for either meant something else.
+	if pc.DelistingReturn > 0 || pc.DelistingReturn < -1 {
+		return nil, fmt.Errorf(
+			"portfolio %q: DelistingReturn is %.4f; it is the fraction of a "+
+				"position LOST on delisting and must be in [-1, 0] "+
+				"(e.g. -0.30 for Shumway's NYSE figure)",
+			pc.Name, pc.DelistingReturn)
+	}
 	p.Costs = pc.Costs
+	p.DelistingReturn = pc.DelistingReturn
 	p.Benchmark = pc.Benchmark
 	p.Fundamentals = pc.Fundamentals
 

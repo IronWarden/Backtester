@@ -347,6 +347,8 @@ func runOne(
 		p.AdjustPortfolioParameters(p.Tickers, windowed, day, prev, curr)
 		prev = curr
 	}
+	// Before the metrics are computed, since it changes the final equity value.
+	p.applyDelistingReturns(windowed, dataLen)
 	p.GetBacktestingData(riskFreeRates, windowed, dataLen)
 	// The benchmark is scored against the portfolio's own trading days, taken
 	// from the aligned window. It is read from the unaligned prefetch, never
@@ -496,6 +498,47 @@ func prefetchFundamentals(
 	}
 }
 
+// prefetchDelistings loads the registry once, before the worker pool, for the
+// portfolios that asked for a delisting return. Same reasoning as
+// prefetchFundamentals: one query beats N, and it runs single-threaded before
+// any goroutine exists so it adds nothing to the pool's concurrency surface.
+func prefetchDelistings(portfolios []*Portfolio) {
+	tickerSet := make(map[string]bool)
+	for _, p := range portfolios {
+		if p.DelistingReturn == 0 {
+			continue
+		}
+		for _, t := range p.Tickers {
+			tickerSet[t] = true
+			// A generation symbol's death is recorded under its base company.
+			if base, gen := data.ParseGeneration(t); gen > 0 {
+				tickerSet[base] = true
+			}
+		}
+	}
+	if len(tickerSet) == 0 {
+		return
+	}
+	tickers := make([]string, 0, len(tickerSet))
+	for t := range tickerSet {
+		tickers = append(tickers, t)
+	}
+
+	events := loadDelistingEvents(tickers)
+	if len(events) == 0 {
+		diagf("warn", "",
+			"DelistingReturn is set but no delisting registry was found, so "+
+				"no holding can be identified as dead and nothing is haircut; "+
+				"run add_delistings.py to enable it")
+		return
+	}
+	for _, p := range portfolios {
+		if p.DelistingReturn != 0 {
+			p.DelistingEvents = events
+		}
+	}
+}
+
 func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 	if len(portfolios) == 0 {
 		return nil, fmt.Errorf("no portfolios to run")
@@ -533,6 +576,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 		allTickers, startTime, endTime,
 	)
 	prefetchFundamentals(portfolios, startTime, endTime)
+	prefetchDelistings(portfolios)
 
 	numWorkers := runtime.NumCPU()
 	totalJobs := len(portfolios)

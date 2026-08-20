@@ -1019,6 +1019,44 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   dash in that case rather than 0.0. A low coverage figure alongside a good
   Sharpe is the single most important thing to point out about such a run.
 
+- WHAT A HOLDING IS WORTH WHEN THE COMPANY DIES. The engine marks every
+  position at its last printed close. For an acquisition that is about right;
+  for a bankruptcy it is fiction, because the last trade before a Chapter 11
+  delisting is not what the shareholder got, which was usually nothing.
+
+      [[portfolio]]
+      DelistingReturn = -0.30
+
+  DelistingReturn is the fraction of a position LOST on the delisting day.
+  It must be in [-1, 0] and a config outside that range is REJECTED by name.
+  Zero is the default and applies nothing at all, so every config written
+  before this produces identical numbers. Researched values, exported in Go as
+  backtest.ShumwayNYSEReturn and backtest.ShumwayNasdaqReturn: -0.30 for
+  NYSE/AMEX (Shumway 1997) and -0.55 for Nasdaq (Shumway & Warther 1999).
+
+  IT APPLIES ONLY TO PERFORMANCE-RELATED DELISTINGS -- bankruptcy, or a
+  compliance removal by the exchange. An acquisition keeps its last close,
+  because the tape's final price is roughly what the holder was paid, and
+  haircutting acquisitions would be the larger error: of the delistings whose
+  reason is known, the MAJORITY are acquisitions. The reason comes from
+  delisting_reasons joined to the registry by src/data.MatchDelistingSymbols,
+  which resolves about a quarter of symbols.
+
+  A delisting whose reason could NOT be identified is deliberately not haircut.
+  The metric UnclassifiedDelistings counts those positions, and a non-zero
+  value means the result is optimistic by however many of them were failures
+  rather than acquisitions -- say so when you see one. DelistedHoldings counts
+  the positions that WERE liquidated at the haircut. Both are 0 for any run
+  that leaves DelistingReturn at its default.
+
+  The liquidation runs through the normal sell path, so it appears in the
+  blotter, the realised P&L and the per-ticker attribution rather than being a
+  silent mark-down. It fires only on the final simulated day: validateCoverage
+  refuses a portfolio whose window runs past a ticker's last bar, so a holding
+  cannot die mid-run -- it can only still be held when the run ends on or after
+  the day it died. If DelistingReturn is set and no delistings table exists,
+  nothing can be identified as dead and the run says so.
+
 - THE VERDICT STRIP IN THE APP. The results view shows a panel titled "Does
   this survive the obvious objections?" directly under the portfolio cards,
   carrying the same three cards as the -pages export: did it beat the baseline

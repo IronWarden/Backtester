@@ -379,6 +379,47 @@ not proof; read it.
 The script rewrites `stock_data_optimized`, the only price table the engine
 reads. The legacy `stock_data` table is deliberately left untouched.
 
+### What a holding is worth when the company dies
+
+The engine marks every position at its last printed close. For an acquisition
+that is about right — the tape's final price is roughly what the holder was
+paid. For a bankruptcy it is fiction: the last trade before a Chapter 11
+delisting is not what the shareholder got, which was usually nothing.
+
+```toml
+[[portfolio]]
+DelistingReturn = -0.30
+```
+
+`DelistingReturn` is the fraction of a position **lost** on the delisting day.
+It must be in `[-1, 0]`; anything else is rejected by name rather than clamped.
+**Zero is the default and applies nothing at all**, so every config written
+before this produces identical numbers. The researched values are exported as
+`backtest.ShumwayNYSEReturn` (−0.30, Shumway 1997) and
+`backtest.ShumwayNasdaqReturn` (−0.55, Shumway & Warther 1999).
+
+**It applies only to performance-related delistings** — a bankruptcy, or a
+compliance removal by the exchange. An acquisition keeps its last close, because
+haircutting acquisitions would be the larger error: of the delistings whose
+reason is known, the majority *are* acquisitions. The reason comes from
+`delisting_reasons` joined to the registry by `src/data.MatchDelistingSymbols`,
+which resolves about a quarter of symbols.
+
+A delisting whose reason could **not** be identified is deliberately left alone
+and counted instead:
+
+| Metric | Meaning |
+| ------ | ------- |
+| `DelistedHoldings` | positions liquidated at the haircut because the company failed |
+| `UnclassifiedDelistings` | positions still open at a delisting whose reason is unknown — **not** haircut, so a non-zero value means the result is optimistic by however many of them were failures |
+
+The liquidation runs through the normal sell path, so it lands in the blotter,
+the realised P&L and the per-ticker attribution rather than being a silent
+mark-down. It fires only on the final simulated day, because that is the only
+reachable case: `validateCoverage` refuses a portfolio whose window runs past a
+ticker's last bar, so a holding cannot die mid-run — it can only still be held
+when the run ends on or after the day it died.
+
 ### What this does *not* fix
 
 The registry's coverage effectively **begins in 2013** and is only dense from

@@ -51,6 +51,16 @@ type Metrics struct {
 	// begins in 2020, so a fundamental strategy run from 2010 sees nothing for
 	// the first decade and can look like it found an edge in the back half.
 	FundamentalCoverage float64
+	// DelistedHoldings is how many positions were liquidated at
+	// DelistingReturn because the company failed. Zero for every run that does
+	// not set DelistingReturn, which is every run written before it existed.
+	DelistedHoldings int
+	// UnclassifiedDelistings is how many positions were still open at a
+	// delisting whose reason could not be identified. They were NOT haircut,
+	// so a non-zero count means the result is optimistic by however many of
+	// them were failures rather than acquisitions. Reported rather than
+	// guessed at — see delisting.go.
+	UnclassifiedDelistings int
 
 	AvgExposure  float64 // mean invested fraction of the book, %
 	TimeInMarket float64 // % of simulated days holding anything at all
