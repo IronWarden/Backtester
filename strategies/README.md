@@ -193,14 +193,32 @@ accident.
 | `position(t)` | `{amount, avg_price, current_price}`, or `nil` when flat. |
 | `buy(t, shares, price, day)` | Buy an exact share count. Fractional shares are allowed. |
 | `buy_max(t, price, buyType, day)` | Size the order automatically; `buyType` is `"equalWeights"` or `"greedy"`. |
-| `sell(t, shares, price, day)` | Sell an exact share count. |
-| `sell_all(t, price, day)` | Close the whole position. |
+| `sell(t, shares, price, day)` | Sell an exact share count. With `AllowShort`, a sell past the holding closes the long and **shorts the remainder**; without it, such an order is refused. |
+| `sell_all(t, price, day)` | Close the whole position, whichever way it points — a short is closed by buying the shares back. |
 | `equity(day)` | Cash plus every position marked at that day's close. |
 | `weight_of(t, day)` | The fraction of equity a position currently represents, for checking drift. |
 | `target_weights(day, {T = fraction, …})` | Move the whole book to those fractions of equity: sells run first so the proceeds fund the buys, and buys are clamped to available cash. A ticker absent from the table is a target of **zero**, so `target_weights(day, {})` goes to cash. |
 | `rank(day, fn)` | Score every ticker with `fn(ticker, day)` and return `{ {ticker=…, value=…}, … }` **sorted strongest first**. Tickers whose `fn` returns `nil` are left out rather than ranked last. |
 | `log(...)` | Say something the run console will show. Any number of values, rendered as `tostring` would and joined with spaces, like `print`. |
 | `num_days()` | Trading days in this run. `day` is 0-based, so **the last day is `num_days() - 1`**. |
+
+### Shorting
+
+There is no `short()` function. With `AllowShort = true` on the portfolio,
+`sell` past the holding *is* the short:
+
+```lua
+sell(t, 100, price(t, day), day)   -- flat before this: now short 100
+```
+
+`position(t).amount` is **negative** for a short and `avg_price` is the price it
+was shorted at. Buying covers it, and the gain is `avg_price - fill` — the
+mirror of a long. Without `AllowShort` the engine is long-only and the same call
+is refused, so a strategy that shorts must say so in its config.
+
+Two things the engine does **not** model yet: there is no borrow cost, and no
+real margin rule — gross short notional is simply capped at the portfolio's
+cash. A short-side result is optimistic by the borrow it never paid.
 
 `num_days()` is what makes "do this once, at the end" expressible — `step` is
 handed `day` with nothing to compare it against:

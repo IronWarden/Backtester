@@ -379,6 +379,36 @@ not proof; read it.
 The script rewrites `stock_data_optimized`, the only price table the engine
 reads. The legacy `stock_data` table is deliberately left untouched.
 
+### Shorting
+
+Off by default. With `AllowShort` absent the engine is long-only exactly as it
+was, and every config written before shorting existed produces identical
+numbers.
+
+```toml
+[[portfolio]]
+AllowShort = true
+```
+
+With it on, `sell(ticker, n, price)` past the holding closes the long first and
+shorts the remainder — there is no separate `short()` global, the existing
+`sell` *is* the short, and `sell_all` closes a position whichever way it points.
+A short's `Amount` is negative and its `AveragePrice` is the price it was
+shorted at; valuation adds `Amount * close`, which subtracts the cost of buying
+back, while the proceeds sit in cash. Covering realises `AveragePrice - fill`,
+the mirror of a long, and only the closing portion of an oversized sell realises
+anything.
+
+Exposure becomes **gross** — long plus short, absolute — rather than
+everything-that-is-not-cash, because a short raises cash while adding exposure.
+A market-neutral book reports its real exposure instead of zero.
+
+**What is not built yet.** There is no borrow cost and no real margin model.
+Gross short notional is capped at the portfolio's cash, which exists to stop
+unbounded leverage rather than to model a broker. **A short-side result is
+therefore optimistic by the borrow it never paid**, and assumes a margin regime
+nobody has implemented. Borrow cost and margin are the next two increments.
+
 ### What a holding is worth when the company dies
 
 The engine marks every position at its last printed close. For an acquisition

@@ -124,6 +124,15 @@ type PortfolioConfig struct {
 	// result exactly. Researched values are ShumwayNYSEReturn (-0.30) and
 	// ShumwayNasdaqReturn (-0.55). Must be in [-1, 0].
 	DelistingReturn float64 `toml:"DelistingReturn"`
+	// AllowShort permits a position to go negative: a sell past the holding
+	// opens a short instead of being refused, and the engine values it,
+	// realises it and reports its exposure as gross rather than net.
+	//
+	// False, the default, is the long-only engine exactly as it was — every
+	// config written before shorting existed produces identical numbers. While
+	// this is on, gross short notional is capped at the portfolio's cash; that
+	// is a placeholder for a real margin rule, not a model of one.
+	AllowShort bool `toml:"AllowShort"`
 	// Sweep turns one config block into many runs: every key maps to a LIST
 	// of values, and the block expands to the cartesian product of them. Each
 	// resulting portfolio takes Params with its own sweep values written over
@@ -497,6 +506,7 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 			pc.Name, pc.DelistingReturn)
 	}
 	p.Costs = pc.Costs
+	p.AllowShort = pc.AllowShort
 	p.DelistingReturn = pc.DelistingReturn
 	p.Benchmark = pc.Benchmark
 	p.Fundamentals = pc.Fundamentals

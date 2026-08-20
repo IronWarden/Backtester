@@ -1019,6 +1019,38 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   dash in that case rather than 0.0. A low coverage figure alongside a good
   Sharpe is the single most important thing to point out about such a run.
 
+- SHORTING IS OPT-IN AND PARTLY BUILT. Say so plainly rather than implying
+  either that the engine is long-only or that it models shorting fully.
+
+      [[portfolio]]
+      AllowShort = true
+
+  With AllowShort off -- the default, and every config written before it -- the
+  engine is long-only exactly as it was: a sell past the holding is refused and
+  numbers are identical.
+
+  With it on:
+   * sell(ticker, n, price) past the holding closes the long first and shorts
+     the remainder. There is no separate short() global; the existing sell IS
+     the short. sell_all closes a position whichever way it points, buying the
+     shares back when it is short.
+   * A short's Position.Amount is NEGATIVE and AveragePrice is the price it was
+     shorted AT. Valuation adds Amount*close, which subtracts what it would
+     cost to buy back, while the proceeds sit in cash -- the pair marks the
+     short to market.
+   * Covering realises AveragePrice - fill, the mirror of a long. Only the
+     closing portion of an oversized sell realises anything.
+   * Exposure becomes GROSS (long plus short, absolute) rather than
+     everything-that-is-not-cash, because a short RAISES cash while adding
+     exposure. A market-neutral book reports its real exposure, not zero.
+
+  WHAT IS NOT BUILT YET, and this is the important part: there is NO borrow
+  cost, and NO real margin model. Gross short notional is capped at the
+  portfolio's cash, which is a placeholder to stop unbounded leverage, not a
+  model of a broker. So a short-side result is optimistic by the borrow it
+  never paid and assumes a margin regime nobody implemented. Do not present
+  short-side backtests as costed. Borrow cost is T27b and margin is T27c.
+
 - WHAT A HOLDING IS WORTH WHEN THE COMPANY DIES. The engine marks every
   position at its last printed close. For an acquisition that is about right;
   for a bankruptcy it is fiction, because the last trade before a Chapter 11

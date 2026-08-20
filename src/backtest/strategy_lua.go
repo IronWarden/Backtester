@@ -524,7 +524,13 @@ func registerTrading(
 		price := float64(L.ToNumber(2))
 		day := L.OptInt(3, -1)
 		if pos, _ := p.FindPosition(ticker); pos != nil {
-			p.Sell(ticker, pos.Amount, price, dateOf(ticker, day))
+			// "Close the position", whichever way it points: a short is closed
+			// by buying the shares back, not by selling more of them.
+			if pos.Amount < 0 {
+				p.Buy(ticker, -pos.Amount, price, dateOf(ticker, day))
+			} else {
+				p.Sell(ticker, pos.Amount, price, dateOf(ticker, day))
+			}
 		}
 		return 0
 	}))

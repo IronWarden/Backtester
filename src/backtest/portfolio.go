@@ -64,6 +64,11 @@ type Portfolio struct {
 	// would change what the portfolio actually does. Like Costs it is
 	// configuration, so Clone must carry it across.
 	Benchmark string
+	// AllowShort permits a position to go negative: a sell past the holding
+	// opens a short instead of being refused. Off by default, and while it is
+	// off every arithmetic path below is exactly what it was before shorting
+	// existed. Configuration, so Clone must carry it across.
+	AllowShort bool
 	// DelistingReturn and DelistingEvents drive the haircut applied to a
 	// holding whose company failed — see delisting.go. Like Costs they are
 	// configuration, so Clone must carry them across.
@@ -200,6 +205,7 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		Benchmark:            p.Benchmark,
 		Fundamentals:         p.Fundamentals,
 		FundamentalData:      p.FundamentalData,
+		AllowShort:           p.AllowShort,
 		DelistingReturn:      p.DelistingReturn,
 		DelistingEvents:      p.DelistingEvents,
 		InSampleEnd:          p.InSampleEnd,
@@ -298,6 +304,39 @@ func (p *Portfolio) Buy(
 		cost = p.BuyingPower
 	}
 	pos, ok := p.FindPosition(ticker)
+	// Covering: a buy against a negative position buys the shares back, and
+	// the gain is what the short was opened at LESS what it cost to close —
+	// the mirror of a long, which is why it cannot share the arithmetic below.
+	if ok && pos.Amount < 0 {
+		covering := amount
+		if short := -pos.Amount; covering > short {
+			covering = short
+		}
+		fee := cost - notional
+		realized := covering*(pos.AveragePrice-fillPrice) - fee
+		p.record(Trade{
+			Ticker: ticker, Date: time, Side: "buy", Shares: amount,
+			Price: fillPrice, Notional: notional, Fee: fee,
+			RealizedPnL: realized,
+		})
+		pos.Amount += amount
+		switch {
+		case pos.Amount == 0:
+			delete(p.Positions, ticker)
+		case pos.Amount > 0:
+			// Covered the short and went long in one order; the surplus is a
+			// fresh long at this fill.
+			pos.AveragePrice = fillPrice
+			if p.openLots == nil {
+				p.openLots = make(map[string][]lot)
+			}
+			p.openLots[ticker] = append(p.openLots[ticker],
+				lot{shares: pos.Amount, bought: time})
+		}
+		p.BuyingPower -= cost
+		p.tradedNotional += notional
+		return
+	}
 	if !ok {
 		// Position does not exist, create a new one
 		p.Positions[ticker] = &Position{
@@ -341,8 +380,14 @@ func (p *Portfolio) Sell(
 	currentPrice float64,
 	time time.Time,
 ) {
+	if stockAmount <= 0 {
+		return
+	}
 	pos, ok := p.FindPosition(ticker)
-	if !ok || pos.Amount < stockAmount || pos.Amount <= 0 {
+	// Long-only: a sell may not exceed the holding, and there must be one.
+	// This is the whole of the pre-shorting behaviour and is what runs whenever
+	// AllowShort is off.
+	if !p.AllowShort && (!ok || pos.Amount < stockAmount || pos.Amount <= 0) {
 		return
 	}
 	// Slippage moves the fill against the seller; the commission comes out of
@@ -361,26 +406,103 @@ func (p *Portfolio) Sell(
 		"SELL: %s, Amount: %.2f, Price: %.2f, Fee: %.2f, Date: %s\n",
 		ticker, stockAmount, fillPrice, notional-proceeds, time,
 	)
-	// Realised against the average cost the engine already keeps, net of this
-	// trade's fee, and read BEFORE the position is decremented.
 	fee := notional - proceeds
-	realized := stockAmount*(fillPrice-pos.AveragePrice) - fee
+
+	// How much of this order closes an existing long, and how much of it opens
+	// or extends a short. Long-only, the second is always zero.
+	held := 0.0
+	if ok && pos.Amount > 0 {
+		held = pos.Amount
+	}
+	closing := stockAmount
+	if closing > held {
+		closing = held
+	}
+	opening := stockAmount - closing
+
+	if opening > 0 && !p.withinShortCap(ticker, opening, fillPrice) {
+		return
+	}
+
+	// Realised against the average cost the engine already keeps, net of this
+	// trade's fee, and read BEFORE the position is decremented. Only the
+	// closing portion realises anything: opening a short realises nothing, the
+	// same way opening a long does not.
+	var realized float64
+	if closing > 0 {
+		realized = closing*(fillPrice-pos.AveragePrice) - fee
+	}
 	var heldDays float64
-	if p.openLots != nil {
+	if p.openLots != nil && closing > 0 {
 		p.openLots[ticker], heldDays = fifoHoldingDays(
-			p.openLots[ticker], stockAmount, time)
+			p.openLots[ticker], closing, time)
 	}
 	p.record(Trade{
 		Ticker: ticker, Date: time, Side: "sell", Shares: stockAmount,
 		Price: fillPrice, Notional: notional, Fee: fee,
 		RealizedPnL: realized, HoldingDays: heldDays,
 	})
-	pos.Amount -= stockAmount
-	if pos.Amount == 0 {
-		delete(p.Positions, ticker)
+
+	switch {
+	case opening == 0:
+		pos.Amount -= stockAmount
+		if pos.Amount == 0 {
+			delete(p.Positions, ticker)
+		}
+	case !ok || pos.Amount == 0 || closing == held:
+		// The long (if any) is gone and a short of `opening` shares stands in
+		// its place. AveragePrice becomes the average price SHORTED at, which
+		// is what a cover is measured against.
+		if !ok {
+			p.Positions[ticker] = &Position{
+				Amount: -opening, AveragePrice: fillPrice,
+			}
+		} else if pos.Amount-stockAmount == 0 {
+			delete(p.Positions, ticker)
+		} else {
+			short := -(pos.Amount - stockAmount)
+			pos.AveragePrice = averageShortPrice(pos, short, opening, fillPrice)
+			pos.Amount -= stockAmount
+		}
 	}
 	p.Deposit(proceeds)
 	p.tradedNotional += notional
+}
+
+// averageShortPrice blends an existing short's entry price with new shares
+// shorted. Split out because the sign conventions make it easy to get wrong
+// inline: `existing` is the magnitude of the short BEFORE this order, which is
+// `short - opening`.
+func averageShortPrice(
+	pos *Position, short, opening, fillPrice float64,
+) float64 {
+	existing := short - opening
+	if existing <= 0 {
+		return fillPrice
+	}
+	return (pos.AveragePrice*existing + fillPrice*opening) / short
+}
+
+// withinShortCap enforces the only leverage limit this increment has: gross
+// short notional may not exceed the portfolio's cash. It is deliberately
+// cruder than a real margin rule — T27c replaces it — but shipping negative
+// positions with NO limit would let a strategy short without bound and report
+// the result as a finding.
+func (p *Portfolio) withinShortCap(
+	ticker string, opening, fillPrice float64,
+) bool {
+	gross := opening * fillPrice
+	for t, pos := range p.Positions {
+		if t == ticker || pos.Amount >= 0 {
+			continue
+		}
+		price := pos.CurrentPrice
+		if price <= 0 {
+			price = pos.AveragePrice
+		}
+		gross += -pos.Amount * price
+	}
+	return gross <= p.BuyingPower
 }
 
 func (p *Portfolio) GetPortfolioValue(
@@ -394,7 +516,11 @@ func (p *Portfolio) GetPortfolioValue(
 		if day >= len(tickerData) {
 			continue
 		}
-		if position, ok := p.Positions[ticker]; ok && position.Amount > 0 {
+		// != 0 rather than > 0: a short's Amount is negative, so this same
+		// line subtracts what it would cost to buy the shares back. The
+		// proceeds are already in BuyingPower, so the pair marks the short to
+		// market correctly.
+		if position, ok := p.Positions[ticker]; ok && position.Amount != 0 {
 			value += position.Amount * tickerData[day].Close
 		}
 	}
@@ -425,16 +551,50 @@ func (p *Portfolio) AdjustPortfolioParameters(
 	// the time was this strategy actually in the market".
 	invested := 0.0
 	if endingValue > 0 {
-		invested = (endingValue - p.BuyingPower) / endingValue
+		// Long-only, the invested fraction is everything that is not cash.
+		// That identity breaks with shorts — a short RAISES cash while adding
+		// exposure — so shorting portfolios measure gross exposure instead.
+		// The two agree exactly for a long-only book, but the long-only branch
+		// is kept so those results stay bit-identical rather than merely equal.
+		if p.AllowShort {
+			invested = p.grossExposure(tickers, currentDayData, day) / endingValue
+		} else {
+			invested = (endingValue - p.BuyingPower) / endingValue
+		}
 	}
 	p.Exposure = append(p.Exposure, invested)
 
 	for _, ticker := range tickers {
-		if pos, ok := p.Positions[ticker]; ok && pos.Amount > 0 {
+		if pos, ok := p.Positions[ticker]; ok && pos.Amount != 0 {
 			tickerData := currentDayData[ticker]
 			if day < len(tickerData) {
 				pos.CurrentPrice = tickerData[day].Close
 			}
 		}
 	}
+}
+
+// grossExposure is the absolute notional at risk, long and short alike. A
+// market-neutral book nets to nothing and is not thereby unexposed, which is
+// the whole reason this is not a signed sum.
+func (p *Portfolio) grossExposure(
+	tickers []string, currentDayData map[string][]data.AssetData, day int,
+) float64 {
+	gross := 0.0
+	for _, ticker := range tickers {
+		pos, ok := p.Positions[ticker]
+		if !ok || pos.Amount == 0 {
+			continue
+		}
+		bars := currentDayData[ticker]
+		if day >= len(bars) {
+			continue
+		}
+		notional := pos.Amount * bars[day].Close
+		if notional < 0 {
+			notional = -notional
+		}
+		gross += notional
+	}
+	return gross
 }
