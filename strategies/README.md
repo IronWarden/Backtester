@@ -4,6 +4,14 @@ Ready-to-run Lua strategies, plus the API for writing your own. Run them
 all side by side with `strategy_library.toml` in the project root: open it
 in Advanced mode and hit **Run backtest**.
 
+**This is the only strategies directory.** A `Strategy = "lua:strategies/x.lua"`
+spec is resolved by walking up from the working directory, so it finds this one
+whether the process started at the repo root (CLI) or in `ui/` (the desktop
+app). There used to be a second copy under `ui/`, and because the walk checks
+the working directory first, the two files it held **shadowed** the library —
+including an older `buy_and_hold_weighted.lua` that floored to whole shares.
+Do not recreate it: a script placed there silently wins over the one here.
+
 ## Using one
 
 Point a portfolio's `Strategy` at the file and pass its parameters in a
@@ -49,6 +57,7 @@ of examples usually omits.
 | `buy_and_hold.lua` | the asset rises over your window — the default answer, and the one most strategies fail to beat | you cannot sit through the drawdown it takes on the way; it has no exit and never goes to cash | `nothing numeric to sweep; vary the UNIVERSE instead, which is what actually decides this one` |
 | `buy_and_hold_weighted.lua` | you have a real view on relative sizing and want to hold it without rebalancing | one name runs away and quietly becomes the whole book, so the weights you chose stop being the weights you hold | `weights are a table, not a number, so sweep by writing several [[portfolio]] blocks; rebalance.lua is the sweepable version` |
 | `dca.lua` | the market falls before it recovers, so the later buys land cheaper | the market rises in a straight line: every day held in cash is a day of lost return, and it will lose to lump-sum roughly two thirds of the time | `every_days = [5, 21, 63], amount = [2500.0, 5000.0, 10000.0]` |
+| `example.lua` | whenever `buy_and_hold.lua` does — it is the same code, kept as the app's editable starter | as a strategy, whenever buy-and-hold fails; as a starting point, never | `nothing numeric to sweep; vary the UNIVERSE instead` |
 | `donchian_breakout.lua` | trends run far beyond the point they look extended — it takes many small losses for a few large winners | range-bound markets: every breakout fails back into the range, and the win rate is low by design even when it works | `entry_period = [20, 55, 100], exit_period = [10, 20, 40]` |
 | `momentum_rotation.lua` | leadership persists for months at a time, which is the historically documented effect | a sharp reversal: momentum crashes are its signature failure, and it is fully invested in last quarter's winners when one arrives | `lookback = [63, 126, 252], top_n = [1, 2, 3], rebalance_days = [21, 63]` |
 | `rebalance.lua` | the holdings are volatile and take turns leading, so trimming the winner funds the laggard before it recovers | one asset trends far ahead of the rest: rebalancing sells the winner all the way up, which is the classic drag against a runaway leader | `rebalance_days = [21, 63, 126, 252]` |
@@ -72,6 +81,7 @@ that is the intended way to build something custom.
 | `buy_and_hold.lua` | Buy on day 0, hold to the end. | `buyType` |
 | `buy_and_hold_weighted.lua` | Buy a fixed weighted allocation on day 0, never rebalance. | `weights` |
 | `dca.lua` | Invest a fixed dollar amount on a cadence, never sell. | `amount`, `every_days` |
+| `example.lua` | The Lua tab's starter file: buy on day 0, hold to the end. Edit it freely. | `buyType` |
 | `rebalance.lua` | Hold target weights, rebalance on a cadence — trims winners, tops up losers. | `rebalance_days`, `weights` |
 | `risk_parity.lua` | Weight by 1/volatility so each holding contributes similar risk. | `lookback`, `rebalance_days` |
 | `momentum_rotation.lua` | Hold the top N by trailing return, rotate on a cadence, cash out when nothing has positive momentum. | `lookback`, `top_n`, `rebalance_days`, `skip_days` |

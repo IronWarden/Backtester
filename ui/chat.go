@@ -499,6 +499,10 @@ under "Lua strategy library". Prefer pointing a config at one of these
 over writing a script from scratch; write new Lua only when the user wants
 behavior none of them cover, and start from the closest file.
 - Baselines: buy_and_hold, buy_and_hold_weighted, dca
+  (example.lua is also in the directory: it is the app's Lua tab starter
+  and a copy of buy_and_hold, not a separate idea — do not offer it as
+  one, and do not suggest editing buy_and_hold.lua when a user wants a
+  scratch script, since example.lua is the one meant to be overwritten.)
 - Allocation: rebalance, risk_parity, momentum_rotation
 - Trend: trend_following, sma_cross, donchian_breakout
 - Mean reversion: rsi, bollinger_reversion
@@ -1590,7 +1594,9 @@ Shipped library (prefer these over new scripts; Strategy =
 "lua:strategies/<file>.lua", parameters in [portfolio.Params]):
 buy_and_hold, buy_and_hold_weighted, dca, rebalance, risk_parity,
 momentum_rotation, trend_following, sma_cross, donchian_breakout, rsi,
-bollinger_reversion. Per-ticker signal strategies want a basket of
+bollinger_reversion. example.lua is in the same directory but is the Lua
+tab's starter copy of buy_and_hold, not a separate idea — do not offer it as
+one. Per-ticker signal strategies want a basket of
 individual stocks; allocation strategies are most meaningful across asset
 classes (e.g. ["$SP500", "$CASH"]).
 

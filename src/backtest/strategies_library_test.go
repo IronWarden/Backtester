@@ -112,7 +112,10 @@ func runStrategyScript(
 // history would never trigger in 400 days).
 func shippedStrategies() map[string]map[string]any {
 	return map[string]map[string]any{
-		"buy_and_hold.lua":          nil,
+		"buy_and_hold.lua": nil,
+		// The Lua tab's starter file. Same code as buy_and_hold.lua, and it
+		// lives in the library so there is exactly one strategies directory.
+		"example.lua":               nil,
 		"buy_and_hold_weighted.lua": {"weights": map[string]any{"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}},
 		"rsi.lua":                   {"period": int64(14)},
 		"sma_cross.lua":             {"short": int64(20), "long": int64(50)},

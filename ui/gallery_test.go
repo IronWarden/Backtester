@@ -64,3 +64,25 @@ func TestShippedGalleryLoads(t *testing.T) {
 		}
 	}
 }
+
+// The frontend hardcodes two script paths — DEFAULT_LUA_PATH in App.tsx and
+// WEIGHTED_LUA_PATH in buildToml.ts — as "strategies/<name>", resolved by
+// the engine's parent-walk. They used to be satisfied by a second copy in
+// ui/strategies/, which SHADOWED the library: the copy of
+// buy_and_hold_weighted.lua there was an older one that floored to whole
+// shares. With that directory gone these must resolve to the library, and
+// this test is what says so — the go tests run with cwd=ui, exactly where
+// the desktop app runs.
+func TestUIDefaultScriptsResolveToTheLibrary(t *testing.T) {
+	for _, name := range []string{"example.lua", "buy_and_hold_weighted.lua"} {
+		path := filepath.Join(repoRoot(), "strategies", name)
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s is referenced by the frontend but not in the "+
+				"library: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join("strategies")); err == nil {
+		t.Error("ui/strategies exists again — it shadows the root library " +
+			"for any filename it holds, which is the bug T86 removed")
+	}
+}
