@@ -1993,6 +1993,19 @@ backtest unjudged — different from judging it against a default nobody chose.
 editable starter and a copy of `buy_and_hold.lua`, so listing it would offer
 the same idea twice.
 
+### Reading the results
+
+The results view leads with what decides whether to keep looking: the
+hypothesis verdict, the "does this survive the obvious objections?" strip, the
+equity curve, and the metrics table. Everything below those — walk-forward
+windows, in-sample vs out-of-sample, the ten deepest drawdowns, trading,
+attribution, calendar-year and monthly returns — is **collapsed behind its own
+title** and opens on click, with the choice remembered across runs.
+
+A panel that has nothing to report is hidden rather than collapsed, so an
+absent title means absent data (no `[portfolio.Sweep]`, no
+`[portfolio.Validation]`, no trades) rather than a closed section.
+
 ## AI assistant (UI) — Claude or local Ollama models
 
 The Wails UI has a built-in AI chat, toggled with the **✦ Assistant**

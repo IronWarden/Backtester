@@ -547,6 +547,38 @@ button.primary:hover:not(:disabled),
 /* Pre-registration. The criterion is a metric/operator/number triple, which
    is the entire grammar ParseCriterion accepts, laid out on one line so it
    reads as the sentence it is. */
+/* Collapsible result panels. The header is a button so the whole strip is
+   the hit target and the keyboard reaches it; it must not look like one. */
+.panel-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+}
+
+.panel-toggle:hover .panel-title {
+  color: var(--text-1, var(--text-2));
+}
+
+.panel-chevron {
+  color: var(--text-3);
+  font-size: 0.8em;
+  line-height: 1;
+  width: 0.9em;
+}
+
+.panel.collapsible.closed {
+  padding-bottom: 0.6em;
+}
+
 .simple-form .criterion-row {
   display: flex;
   align-items: center;

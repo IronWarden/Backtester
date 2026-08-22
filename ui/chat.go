@@ -954,6 +954,16 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Computed=false means no baseline could be built (no tickers, under two days),
   which is NOT the same as the strategy having matched it.
 
+- THE RESULTS VIEW OPENS SHOWING THE HEADLINES ONLY. The verdict panels, the
+  equity curve and the metrics table render expanded; walk-forward windows,
+  in-sample vs out-of-sample, deepest drawdowns, trading, attribution, calendar
+  year returns and monthly returns are COLLAPSED behind their own titles and
+  open on click, remembering the choice. So a user saying a panel is "missing"
+  usually has it collapsed -- tell them to click its title before concluding
+  the run did not produce it. A panel with nothing to show is hidden entirely
+  rather than collapsed, so an absent title genuinely means absent data (no
+  Sweep, no Validation block, no trades).
+
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
   answers "was this a good year"; this answers whether the year was steady or
@@ -1715,6 +1725,11 @@ total US market.
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
   fetch_history when something is missing or stale.
+- The results view opens with the verdicts, equity curve and metrics
+  expanded; the other panels (walk-forward, in/out-of-sample, drawdowns,
+  trading, attribution, calendar and monthly returns) are collapsed and open
+  on click. A panel that is missing entirely had no data — a collapsed one is
+  just closed.
 - Simple mode can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

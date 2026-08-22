@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { backtest, main } from "../wailsjs/go/models";
 
 // Categorical palette (dark-surface steps), assigned by portfolio index in
@@ -330,6 +331,69 @@ type Props = {
   fontSize: number;
   verdicts?: backtest.VerdictReport[];
 };
+
+// Panels below the headline ones open on click and remember it. Eleven panels
+// rendering expanded at once is most of what "overwhelmed on first open"
+// means, and the ones worth reading first — the verdicts, the curve, the
+// metrics — are not the ones that take the most room.
+//
+// Presentation only: nothing here changes a number, and every panel that
+// takes this treatment already hides itself when it has nothing to show, so a
+// collapsed header never stands for an empty body.
+const PANEL_STATE_KEY = "backtester-results-panels";
+
+function readPanelState(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(PANEL_STATE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePanelOpen(id: string, open: boolean) {
+  try {
+    const next = { ...readPanelState(), [id]: open };
+    localStorage.setItem(PANEL_STATE_KEY, JSON.stringify(next));
+  } catch {
+    // A browser that refuses storage still gets a working panel; it just
+    // forgets the choice, which is the right way to degrade.
+  }
+}
+
+function Collapsible({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(() => readPanelState()[id] ?? false);
+  function toggle() {
+    setOpen((prev) => {
+      writePanelOpen(id, !prev);
+      return !prev;
+    });
+  }
+  return (
+    <div className={`panel collapsible ${open ? "open" : "closed"}`}>
+      <button
+        type="button"
+        className="panel-head panel-toggle"
+        aria-expanded={open}
+        onClick={toggle}
+      >
+        <span className="panel-chevron" aria-hidden="true">
+          {open ? "\u25be" : "\u25b8"}
+        </span>
+        <span className="panel-title">{title}</span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 export default function ResultsView({ results, fontSize, verdicts }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -904,10 +968,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
       </div>
 
       {results.some((r) => (r.walkForward?.windows ?? []).length > 0) && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Walk-forward windows</span>
-          </div>
+        <Collapsible id="walk-forward" title="Walk-forward windows">
           <div className="table-scroll">
             <table>
               <thead>
@@ -952,14 +1013,11 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </div>
+        </Collapsible>
       )}
 
       {results.some((r) => (r.splits ?? []).length > 0) && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">In-sample vs out-of-sample</span>
-          </div>
+        <Collapsible id="splits" title="In-sample vs out-of-sample">
           <div className="table-scroll">
             <table>
               <thead>
@@ -1012,14 +1070,11 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </div>
+        </Collapsible>
       )}
 
       {results.some((r) => (r.drawdowns ?? []).length > 0) && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Deepest drawdowns</span>
-          </div>
+        <Collapsible id="drawdowns" title="Deepest drawdowns">
           <div className="table-scroll">
             <table>
               <thead>
@@ -1055,14 +1110,11 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </div>
+        </Collapsible>
       )}
 
       {results.some((r) => (r.tradeStats?.trades ?? 0) > 0) && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Trading</span>
-          </div>
+        <Collapsible id="trading" title="Trading">
           <div className="table-scroll">
             <table>
               <thead>
@@ -1112,14 +1164,11 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </div>
+        </Collapsible>
       )}
 
       {results.some((r) => (r.tradeStats?.perTicker ?? []).length > 0) && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Attribution — which position made the money</span>
-          </div>
+        <Collapsible id="attribution" title="Attribution — which position made the money">
           <div className="table-scroll">
             <table>
               <thead>
@@ -1170,14 +1219,11 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </div>
+        </Collapsible>
       )}
 
       {results.some((r) => (r.yearlyReturns ?? []).length > 0) && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Calendar year returns</span>
-          </div>
+        <Collapsible id="yearly" title="Calendar year returns">
           <div className="table-scroll">
             <table>
               <thead>
@@ -1228,14 +1274,11 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
             * partial period — the run does not span the whole year. Shown as
             the plain return over the days present, not annualized.
           </div>
-        </div>
+        </Collapsible>
       )}
 
       {results.some((r) => (r.monthlyReturns ?? []).length > 0) && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Monthly returns</span>
-          </div>
+        <Collapsible id="monthly" title="Monthly returns">
           {results.map((r, i) =>
             (r.monthlyReturns ?? []).length === 0 ? null : (
               <MonthGrid key={i} result={r} color={COLORS[i % COLORS.length]} showName={results.length > 1} />
@@ -1245,7 +1288,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
             * partial month — the run does not span the whole month. Shown as
             the plain return over the days present.
           </div>
-        </div>
+        </Collapsible>
       )}
     </div>
   );
