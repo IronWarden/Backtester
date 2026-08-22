@@ -264,6 +264,28 @@ export namespace backtest {
 	        this.computed = source["computed"];
 	    }
 	}
+	export class StrategyCard {
+	    File: string;
+	    Idea: string;
+	    Works: string;
+	    Fails: string;
+	    Sweep: string;
+	    Baseline: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new StrategyCard(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.File = source["File"];
+	        this.Idea = source["Idea"];
+	        this.Works = source["Works"];
+	        this.Fails = source["Fails"];
+	        this.Sweep = source["Sweep"];
+	        this.Baseline = source["Baseline"];
+	    }
+	}
 	export class TickerPnL {
 	    ticker: string;
 	    realized: number;

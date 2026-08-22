@@ -26,6 +26,10 @@ export function ListChatModels() {
   return window['go']['main']['App']['ListChatModels']();
 }
 
+export function ListStrategies() {
+  return window['go']['main']['App']['ListStrategies']();
+}
+
 export function ListTickers(arg1) {
   return window['go']['main']['App']['ListTickers'](arg1);
 }

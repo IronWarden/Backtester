@@ -305,6 +305,37 @@ func (a *App) RunBacktest(
 	return out, nil
 }
 
+// loadStrategyGallery parses the shipped Lua library's header cards from
+// dir. A missing directory is an EMPTY gallery, not an error: a packaged
+// install may ship without the library, and a UI that fails to start
+// because it cannot list strategies is worse than one that lists none.
+// Split from the bound method so the resolution and the parsing can be
+// tested without a repo layout around them.
+func loadStrategyGallery(dir string) []backtest.StrategyCard {
+	if _, err := os.Stat(dir); err != nil {
+		return []backtest.StrategyCard{}
+	}
+	cards, err := backtest.LoadGallery(dir)
+	if err != nil || cards == nil {
+		return []backtest.StrategyCard{}
+	}
+	return cards
+}
+
+// ListStrategies returns the shipped Lua library as gallery cards — what
+// each script is for, and the conditions it works and fails under. The CLI
+// has had this as -list-strategies since the gallery landed; binding it
+// here is what lets the UI name a strategy in the user's language instead
+// of making them read Lua.
+//
+// NOTE: this reads the library at repoRoot(), which is NOT the directory
+// the engine opens a "lua:strategies/..." spec from — that resolution is
+// relative to the process working directory. See T86 in TASKS.md; a picker
+// built on these cards would emit specs the engine cannot load.
+func (a *App) ListStrategies() []backtest.StrategyCard {
+	return loadStrategyGallery(filepath.Join(repoRoot(), "strategies"))
+}
+
 // PickConfigFile opens a native file picker for TOML configs.
 func (a *App) PickConfigFile() (string, error) {
 	return wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
