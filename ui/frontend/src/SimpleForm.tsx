@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ListTickers, TickerDateRanges } from "../wailsjs/go/main/App";
+import {
+    ListStrategies,
+    ListTickers,
+    TickerDateRanges,
+} from "../wailsjs/go/main/App";
+import { backtest } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
-import { buildToml, SimpleForm as Form } from "./buildToml";
+import {
+    buildToml,
+    STARTER_SCRIPT,
+    SimpleForm as Form,
+    usesAllocations,
+} from "./buildToml";
 
 type Props = {
     dbPath: string;
@@ -48,6 +58,13 @@ function formatMoney(n: number): string {
     return n > 0 ? n.toLocaleString("en-US") : "";
 }
 
+// "momentum_rotation.lua" -> "Momentum rotation". The file name is the
+// identity the config uses; this is only what the user reads.
+function strategyLabel(file: string): string {
+    const bare = file.replace(/\.lua$/, "").replace(/_/g, " ");
+    return bare.charAt(0).toUpperCase() + bare.slice(1);
+}
+
 // A YYYY-MM-DD string that names a real calendar date. ISO dates also sort
 // lexically, so plain string comparison orders them correctly elsewhere.
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -82,11 +99,30 @@ export default function SimpleForm({
     // Bumped when the assistant's fetch_history tool writes new bars, so
     // the ticker list and coverage ranges reload without switching DBs.
     const [dbVersion, setDbVersion] = useState(0);
+    // The shipped library's gallery cards, for the strategy picker.
+    const [gallery, setGallery] = useState<backtest.StrategyCard[]>([]);
 
     useEffect(
         () => EventsOn("chat:db-changed", () => setDbVersion((v) => v + 1)),
         [],
     );
+
+    // The library is on disk, not in the database, so this runs once. An
+    // empty gallery (no strategies/ directory) simply leaves buy-and-hold as
+    // the only option rather than breaking the form.
+    useEffect(() => {
+        let cancelled = false;
+        ListStrategies()
+            .then((cards) => {
+                if (!cancelled) setGallery(cards ?? []);
+            })
+            .catch(() => {
+                if (!cancelled) setGallery([]);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     // Shallow-merge a patch into the form data owned by App.
     const patch = (p: Partial<Form>) => onChange({ ...form, ...p });
@@ -173,6 +209,18 @@ export default function SimpleForm({
         patch({ startDate: start, endDate: end });
     }
 
+    // example.lua is the Lua tab's starter and a copy of buy_and_hold, so
+    // listing it would offer the same idea twice.
+    const pickable = useMemo(
+        () => gallery.filter((c) => c.File !== STARTER_SCRIPT),
+        [gallery],
+    );
+    const chosen = useMemo(
+        () => pickable.find((c) => c.File === form.strategy) ?? null,
+        [pickable, form.strategy],
+    );
+    const allocationsApply = usesAllocations(form);
+
     const total = form.tickers.reduce(
         (sum, t) => sum + (form.allocations[t] ?? 0),
         0,
@@ -228,7 +276,9 @@ export default function SimpleForm({
         form.tickers.length > 0 &&
         !!dbPath &&
         !running &&
-        total > 0 &&
+        // A library strategy sizes its own positions, so an all-zero
+        // allocation table is not a reason to refuse the run.
+        (!allocationsApply || total > 0) &&
         !dateError;
 
     // Preset chips need a known data window (i.e. at least one ticker chosen
@@ -317,6 +367,63 @@ export default function SimpleForm({
             </section>
 
             <section className="form-card wide">
+                <h3 className="form-card-title">Strategy</h3>
+                <label className="strategy-pick">
+                    What should it do?
+                    <select
+                        value={form.strategy}
+                        onChange={(e) => patch({ strategy: e.target.value })}
+                    >
+                        <option value="">
+                            Buy and hold — buy on day 1, never sell
+                        </option>
+                        {pickable.map((c) => (
+                            <option key={c.File} value={c.File}>
+                                {strategyLabel(c.File)}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+
+                {/* The failure mode is the most useful sentence here, and it
+                    has to be readable BEFORE the run, not explained after a
+                    bad result. */}
+                {chosen ? (
+                    <div className="strategy-card">
+                        <p className="strategy-idea">{chosen.Idea}</p>
+                        <dl className="strategy-when">
+                            <dt className="works">Works when</dt>
+                            <dd>{chosen.Works}</dd>
+                            <dt className="fails">Fails when</dt>
+                            <dd>{chosen.Fails}</dd>
+                        </dl>
+                        <p className="strategy-baseline">
+                            Compare it against: {chosen.Baseline}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="strategy-card">
+                        <p className="strategy-idea">
+                            Open a position in every holding on the first day and
+                            keep it to the end.
+                        </p>
+                        <dl className="strategy-when">
+                            <dt className="works">Works when</dt>
+                            <dd>
+                                the holdings rise over your window — the default
+                                answer, and the one most strategies fail to beat.
+                            </dd>
+                            <dt className="fails">Fails when</dt>
+                            <dd>
+                                you cannot sit through the drawdown it takes on the
+                                way; it has no exit and never goes to cash.
+                            </dd>
+                        </dl>
+                    </div>
+                )}
+            </section>
+
+            <section className="form-card wide">
                 <h3 className="form-card-title">Holdings &amp; allocation</h3>
 
                 <div className="ticker-add">
@@ -342,6 +449,13 @@ export default function SimpleForm({
                     <button onClick={() => addTicker(tickerInput)}>Add</button>
                 </div>
 
+                {!allocationsApply && form.tickers.length > 0 && (
+                    <div className="hint">
+                        {strategyLabel(form.strategy)} sizes its own positions, so
+                        these percentages are not used — they apply to buy and
+                        hold. The symbols below are still the universe it trades.
+                    </div>
+                )}
                 {form.tickers.length === 0 ? (
                     <div className="empty">
                         No holdings yet — add a ticker to allocate to it.
@@ -384,7 +498,7 @@ export default function SimpleForm({
                         </div>
                     </div>
                 )}
-                {form.tickers.length > 0 && !totalsTo100 && (
+                {allocationsApply && form.tickers.length > 0 && !totalsTo100 && (
                     <div className="hint">
                         Allocations add up to {formatPct(total)}%. They're relative, so the
                         backtest still splits your capital by these shares — but they

@@ -136,6 +136,9 @@ function App() {
         tickers: [],
         evenSplit: true,
         allocations: {},
+        // Empty is buy-and-hold, so an untouched form behaves exactly as it
+        // did before the picker existed.
+        strategy: "",
     });
 
     // Drag the handle between editor and results to resize. The pointer moves in

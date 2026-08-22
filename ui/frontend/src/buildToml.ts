@@ -1,10 +1,18 @@
-// buildToml turns the simple buy-and-hold form into a TOML config string
-// the existing runner already understands. Equal-weight runs use the
-// built-in strategy; custom weights reference the weighted Lua script.
+// buildToml turns the simple-mode form into a TOML config string the
+// existing runner already understands. With no strategy chosen it stays
+// buy-and-hold: equal weights use the built-in strategy, custom weights
+// reference the weighted Lua script. A library pick emits a lua: spec.
 
-// Path is relative to the app's working directory (ui/), matching the
-// existing strategies/example.lua convention.
-export const WEIGHTED_LUA_PATH = "strategies/buy_and_hold_weighted.lua";
+// Script paths are written the way a config writes them. The engine
+// resolves them by walking up from the working directory, so the same
+// spec works from the repo root (CLI) and from ui/ (the desktop app).
+export const STRATEGY_DIR = "strategies";
+export const WEIGHTED_LUA_PATH = `${STRATEGY_DIR}/buy_and_hold_weighted.lua`;
+
+// The Lua tab's starter file. It is a copy of buy_and_hold.lua and lives in
+// the library so there is one strategies directory, but offering it in the
+// picker would list the same idea twice.
+export const STARTER_SCRIPT = "example.lua";
 
 export type SimpleForm = {
   name: string;
@@ -20,7 +28,18 @@ export type SimpleForm = {
   // relative, so the strategy normalizes by their sum — they need not add up
   // to exactly 100.
   allocations: Record<string, number>;
+  // A script from the shipped library, as its bare file name ("rsi.lua").
+  // EMPTY MEANS BUY-AND-HOLD — the original behaviour, and the reason an
+  // untouched form still generates byte-identical TOML.
+  strategy: string;
 };
+
+// Strategies that size their own positions read no weights, so the
+// allocation percentages do not reach them. Only the buy-and-hold path
+// (strategy === "") uses them.
+export function usesAllocations(form: SimpleForm): boolean {
+  return form.strategy === "";
+}
 
 // TOML floats must carry a decimal point, so 100000 -> "100000.0".
 function toFloat(n: number): string {
@@ -35,17 +54,35 @@ function tomlKey(k: string): string {
 
 export function buildToml(form: SimpleForm): string {
   const tickerList = form.tickers.map((t) => JSON.stringify(t)).join(", ");
+  // The buy-and-hold wording is load-bearing: an untouched form has to
+  // generate exactly the config it generated before the picker existed.
+  const heading = form.strategy
+    ? "# Generated from simple mode. Switch to Advanced to edit this config"
+    : "# Generated from simple buy-and-hold mode. Switch to Advanced to edit";
+  const heading2 = form.strategy
+    ? "# directly, tune the strategy's parameters, or add more blocks."
+    : "# this config directly or add more [[Portfolio]] blocks.";
+  const fallbackName = form.strategy
+    ? form.strategy.replace(/\.lua$/, "")
+    : "Buy and Hold";
   const lines: string[] = [
-    "# Generated from simple buy-and-hold mode. Switch to Advanced to edit",
-    "# this config directly or add more [[Portfolio]] blocks.",
+    heading,
+    heading2,
     "",
     "[[Portfolio]]",
-    `Name = ${JSON.stringify(form.name || "Buy and Hold")}`,
+    `Name = ${JSON.stringify(form.name || fallbackName)}`,
     `BuyingPower = ${toFloat(form.buyingPower)}`,
     `StartDate = ${JSON.stringify(form.startDate)}`,
     `EndDate = ${JSON.stringify(form.endDate)}`,
     `Tickers = [${tickerList}]`,
   ];
+
+  // A library pick sizes itself and reads its own defaults, so no Params
+  // block is emitted and the allocation percentages are not consulted.
+  if (form.strategy) {
+    lines.push(`Strategy = "lua:${STRATEGY_DIR}/${form.strategy}"`);
+    return lines.join("\n") + "\n";
+  }
 
   if (form.evenSplit) {
     lines.push('Strategy = "buyAndHold:equalWeights"');

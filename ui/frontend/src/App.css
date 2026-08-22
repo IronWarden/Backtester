@@ -484,6 +484,66 @@ button.primary:hover:not(:disabled),
   font-style: italic;
 }
 
+/* Strategy picker. The works/fails pair is the point of the card: a user
+   should be able to read how a strategy fails before running it, not after
+   a bad result. */
+.simple-form .strategy-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.simple-form .strategy-pick select {
+  width: 100%;
+}
+
+.simple-form .strategy-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 0.7em 0.9em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  font-size: 0.85em;
+}
+
+.simple-form .strategy-idea {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.simple-form .strategy-when {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3em 0.7em;
+  align-items: baseline;
+}
+
+.simple-form .strategy-when dt {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.simple-form .strategy-when dt.works {
+  color: var(--pos);
+}
+
+.simple-form .strategy-when dt.fails {
+  color: var(--neg);
+}
+
+.simple-form .strategy-when dd {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.simple-form .strategy-baseline {
+  margin: 0;
+  color: var(--text-3);
+  font-style: italic;
+}
+
 .simple-form .coverage-msg {
   font-size: 0.85em;
   border-radius: var(--radius-s);

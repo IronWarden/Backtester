@@ -1924,6 +1924,35 @@ At most 200 diagnostics are kept per run; beyond that the console says how many
 it suppressed rather than truncating silently. A strategy that raises on every
 trading day is the case this bounds.
 
+## Simple mode (UI)
+
+The desktop app opens in **Simple** mode: a form for the things every
+backtest needs — name, starting capital, a date window with `Max`/`YTD`/`1Y`/`5Y`
+presets, and a list of tickers with allocation percentages. It generates the
+TOML for you, and **Edit as TOML →** hands that config to the Advanced editor
+when you want the full schema.
+
+**Strategy** is a picker fed by the shipped library's gallery headers
+(`App.ListStrategies` over `backtest.LoadGallery`). Choosing one shows what it
+does, what it needs to work, and — the useful part — how it fails, before the
+run rather than after a bad result:
+
+> **Works when** trends run far beyond the point they look extended.
+> **Fails when** range-bound markets: every breakout fails back into the
+> range, and the win rate is low by design even when it works.
+
+The default is buy-and-hold, which is the mode's original behaviour: equal
+weights use the built-in `buyAndHold:equalWeights`, and custom percentages use
+`strategies/buy_and_hold_weighted.lua`. Picking a library strategy emits
+`Strategy = "lua:strategies/<file>"` and runs it on its own defaults —
+the strategy sizes its own positions, so the allocation percentages are not
+consulted and the form says so. To tune its parameters, switch to Advanced and
+add a `[portfolio.Params]` block.
+
+`example.lua` is deliberately absent from the picker: it is the Lua tab's
+editable starter and a copy of `buy_and_hold.lua`, so listing it would offer
+the same idea twice.
+
 ## AI assistant (UI) — Claude or local Ollama models
 
 The Wails UI has a built-in AI chat, toggled with the **✦ Assistant**

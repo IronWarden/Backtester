@@ -375,6 +375,16 @@ Strategy spec strings:
 Sizing: "greedy" pours all remaining cash into each ticker in order;
 "equalWeights" splits cash evenly across the portfolio's tickers.
 
+SIMPLE MODE HAS A STRATEGY PICKER. The app's Simple mode is not buy-and-hold
+only any more: a dropdown lists the shipped library from its gallery headers
+and shows the chosen script's idea, what it works on and how it FAILS before
+the run. Picking one writes Strategy = "lua:strategies/<file>" and runs it on
+its script defaults, so the allocation percentages -- which only the
+buy-and-hold path reads -- are ignored and the form says so. Point a user at
+Simple mode when they want to try a library strategy without writing TOML, and
+at Advanced (or offer them a config) when they want to tune its Params or sweep
+it. example.lua is not offered there; it is the Lua tab's starter.
+
 The UI has a "✓ Check" button next to Run that validates the config in the
 editor without running it, reporting into the same console. Suggest it before
 a long run or a big sweep, and whenever you have just written a config for the
@@ -1678,6 +1688,10 @@ total US market.
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
   fetch_history when something is missing or stale.
+- Simple mode has a strategy picker: it lists the shipped library with each
+  script's works/fails notes and writes Strategy = "lua:strategies/<file>"
+  on its defaults. Send users there to try a strategy without writing TOML;
+  they need Advanced (or a config from you) to tune Params or sweep it.
 - Suggest the "✓ Check" button next to Run whenever you have just written a
   config: it validates without running and reports to the same console.
 - Keep SQL result sets small; never SELECT * over the whole bar table.
