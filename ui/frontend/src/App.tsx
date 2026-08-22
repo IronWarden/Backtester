@@ -143,6 +143,9 @@ function App() {
         // beat the market?" unanswerable, which is the question simple mode
         // exists to answer.
         benchmark: "$SP500",
+        // Empty claim = not pre-registered = the run is not judged. A
+        // default criterion would be judging against a bar nobody chose.
+        hypothesis: { claim: "", metric: "sharpe", op: ">=", value: "" },
     });
 
     // Drag the handle between editor and results to resize. The pointer moves in
@@ -336,7 +339,14 @@ function App() {
     // since the Lua strategy reads its script off disk at runtime. Simple mode
     // passes its generated config and skips persistence — its weighted strategy
     // ships on disk and equal-weight uses a built-in strategy.
-    async function runConfig(cfgText: string, persist: boolean) {
+    // hypothesisText overrides the Advanced-mode box, so simple mode can
+    // register the question its own form built without the two modes fighting
+    // over one piece of state.
+    async function runConfig(
+        cfgText: string,
+        persist: boolean,
+        hypothesisText?: string,
+    ) {
         setErrorMsg("");
         setResults([]);
         setDiagnostics([]);
@@ -356,7 +366,12 @@ function App() {
         setRunning(true);
         setStatusMsg("Running…");
         try {
-            const res = await RunBacktest(cfgText, dbPath, luaPath, hypothesis);
+            const res = await RunBacktest(
+                cfgText,
+                dbPath,
+                luaPath,
+                hypothesisText ?? hypothesis,
+            );
             setResults(res.results ?? []);
             setDiagnostics(res.diagnostics ?? []);
             setVerdicts(res.verdicts ?? []);
@@ -488,8 +503,11 @@ function App() {
                         running={running}
                         form={simpleForm}
                         onChange={setSimpleForm}
-                        onRun={(cfg) => runConfig(cfg, false)}
-                        onEditAsToml={editAsToml}
+                        onRun={(cfg, hyp) => runConfig(cfg, false, hyp)}
+                        onEditAsToml={(cfg, hyp) => {
+                            if (hyp) setHypothesis(hyp);
+                            editAsToml(cfg);
+                        }}
                     />
                 </div>
             ) : mode === "data" ? (

@@ -10,6 +10,10 @@ export function CheckConfig(arg1, arg2) {
   return window['go']['main']['App']['CheckConfig'](arg1, arg2);
 }
 
+export function CriterionMetrics() {
+  return window['go']['main']['App']['CriterionMetrics']();
+}
+
 export function FileExists(arg1) {
   return window['go']['main']['App']['FileExists'](arg1);
 }

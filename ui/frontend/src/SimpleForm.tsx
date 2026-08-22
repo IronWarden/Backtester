@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+    CriterionMetrics,
     ListStrategies,
     ListTickers,
     TickerDateRanges,
@@ -8,7 +9,10 @@ import { backtest } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import {
     BENCHMARKS,
+    buildHypothesis,
     buildToml,
+    CRITERION_OPS,
+    criterionLabel,
     STARTER_SCRIPT,
     SimpleForm as Form,
     usesAllocations,
@@ -20,10 +24,13 @@ type Props = {
     // Form data is owned by App so it persists across runs and mode switches.
     form: Form;
     onChange: (next: Form) => void;
-    // Persist + run the generated config (App owns the run pipeline).
-    onRun: (toml: string) => void;
-    // Hand the generated config off to the Advanced TOML editor.
-    onEditAsToml: (toml: string) => void;
+    // Persist + run the generated config (App owns the run pipeline). The
+    // hypothesis rides along rather than living in App's raw box: registering
+    // it is part of starting THIS run, not a mode-wide setting.
+    onRun: (toml: string, hypothesis: string) => void;
+    // Hand the generated config off to the Advanced TOML editor, with the
+    // registered question, so switching modes does not quietly drop it.
+    onEditAsToml: (toml: string, hypothesis: string) => void;
 };
 
 // Split 100% across the tickers as whole percentages that sum to exactly
@@ -102,6 +109,9 @@ export default function SimpleForm({
     const [dbVersion, setDbVersion] = useState(0);
     // The shipped library's gallery cards, for the strategy picker.
     const [gallery, setGallery] = useState<backtest.StrategyCard[]>([]);
+    // Criterion metrics, served by the engine so the picker cannot offer one
+    // ParseCriterion would reject.
+    const [metrics, setMetrics] = useState<string[]>([]);
 
     useEffect(
         () => EventsOn("chat:db-changed", () => setDbVersion((v) => v + 1)),
@@ -119,6 +129,13 @@ export default function SimpleForm({
             })
             .catch(() => {
                 if (!cancelled) setGallery([]);
+            });
+        CriterionMetrics()
+            .then((ms) => {
+                if (!cancelled) setMetrics(ms ?? []);
+            })
+            .catch(() => {
+                if (!cancelled) setMetrics([]);
             });
         return () => {
             cancelled = true;
@@ -227,6 +244,14 @@ export default function SimpleForm({
         [pickable, form.strategy],
     );
     const allocationsApply = usesAllocations(form);
+    const hypothesisToml = buildHypothesis(form.hypothesis);
+    // A claim typed with no threshold is a half-registration: say so rather
+    // than running unjudged and letting the user believe it was tested.
+    const hypothesisIncomplete =
+        form.hypothesis.claim.trim() !== "" && hypothesisToml === "";
+
+    const patchHypothesis = (p: Partial<Form["hypothesis"]>) =>
+        patch({ hypothesis: { ...form.hypothesis, ...p } });
 
 
     const total = form.tickers.reduce(
@@ -586,17 +611,78 @@ export default function SimpleForm({
                     </div>
                 ))}
 
+            {/* Above the run button on purpose: a criterion is a
+                pre-registration, and one written after seeing a result is not
+                one. Advanced mode places its raw box the same way. */}
+            <section className="form-card wide">
+                <h3 className="form-card-title">
+                    Before you run <span className="optional">(optional)</span>
+                </h3>
+                <label className="strategy-pick">
+                    What do you think is true?
+                    <input
+                        placeholder="e.g. momentum beats buying and holding these names"
+                        value={form.hypothesis.claim}
+                        onChange={(e) => patchHypothesis({ claim: e.target.value })}
+                    />
+                </label>
+
+                <div className="criterion-row">
+                    <span className="criterion-lead">Call it a success if</span>
+                    <select
+                        value={form.hypothesis.metric}
+                        onChange={(e) => patchHypothesis({ metric: e.target.value })}
+                    >
+                        {metrics.map((m) => (
+                            <option key={m} value={m}>
+                                {criterionLabel(m)}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        value={form.hypothesis.op}
+                        onChange={(e) => patchHypothesis({ op: e.target.value })}
+                    >
+                        {CRITERION_OPS.map((o) => (
+                            <option key={o} value={o}>
+                                {o}
+                            </option>
+                        ))}
+                    </select>
+                    <input
+                        className="criterion-value"
+                        inputMode="decimal"
+                        placeholder="1.2"
+                        value={form.hypothesis.value}
+                        onChange={(e) => patchHypothesis({ value: e.target.value })}
+                    />
+                </div>
+
+                {hypothesisIncomplete ? (
+                    <div className="coverage-msg err">
+                        Add a number to finish the criterion, or clear the claim.
+                        As it stands the run will not be judged.
+                    </div>
+                ) : (
+                    <div className="hint">
+                        {hypothesisToml
+                            ? "Registered before the run and judged mechanically afterwards. Change the question and it becomes a new one — never edit it after seeing a result."
+                            : "Leave this empty to run without a verdict. Writing it down first is what stops a result being explained after the fact."}
+                    </div>
+                )}
+            </section>
+
             <div className="field-row actions">
                 <button
                     className="run"
                     disabled={!canRun}
-                    onClick={() => onRun(buildToml(form))}
+                    onClick={() => onRun(buildToml(form), hypothesisToml)}
                 >
                     {running ? "Running…" : "Run backtest"}
                 </button>
                 <button
                     disabled={form.tickers.length === 0}
-                    onClick={() => onEditAsToml(buildToml(form))}
+                    onClick={() => onEditAsToml(buildToml(form), hypothesisToml)}
                 >
                     Edit as TOML →
                 </button>

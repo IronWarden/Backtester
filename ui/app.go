@@ -336,6 +336,14 @@ func (a *App) ListStrategies() []backtest.StrategyCard {
 	return loadStrategyGallery(filepath.Join(repoRoot(), "strategies"))
 }
 
+// CriterionMetrics returns the metric names a pre-registered hypothesis may
+// test, straight from the engine's own table. Bound rather than mirrored in
+// the frontend on purpose: a hand-copied list is how the UI ends up offering
+// a criterion ParseCriterion rejects, or hiding one it accepts.
+func (a *App) CriterionMetrics() []string {
+	return backtest.CriterionMetricNames()
+}
+
 // PickConfigFile opens a native file picker for TOML configs.
 func (a *App) PickConfigFile() (string, error) {
 	return wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{

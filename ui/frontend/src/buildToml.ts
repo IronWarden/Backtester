@@ -42,6 +42,10 @@ export type SimpleForm = {
   // "did this beat just buying the market?" is the one a user actually has,
   // and leaving Benchmark unset makes it unanswerable. "" is no benchmark.
   benchmark: string;
+  // The pre-registered question, or an empty claim for "do not judge this
+  // run". Kept in the form so it survives a run and a mode switch, like
+  // everything else here.
+  hypothesis: HypothesisForm;
   // A script from the shipped library, as its bare file name ("rsi.lua").
   // EMPTY MEANS BUY-AND-HOLD — the original behaviour, and the reason an
   // untouched form still generates byte-identical TOML.
@@ -115,4 +119,79 @@ export function buildToml(form: SimpleForm): string {
   }
 
   return lines.join("\n") + "\n";
+}
+
+// ---------------------------------------------------------------------------
+// Pre-registration
+//
+// The engine already parses a hypothesis from TOML and judges it mechanically;
+// what stopped anyone using it was having to hand-write that TOML. These build
+// the same document from a claim and a metric/operator/number triple, which is
+// the whole grammar ParseCriterion accepts.
+
+export type HypothesisForm = {
+  // Plain English: what you think is true. Empty means no pre-registration,
+  // and the run is simply not judged — which is different from judging it
+  // against a default nobody chose.
+  claim: string;
+  metric: string;
+  op: string;
+  value: string;
+};
+
+export const CRITERION_OPS = [">=", ">", "<=", "<"];
+
+// Friendly names for the engine's metric vocabulary. Any metric NOT listed
+// here still works and shows under its own name — the list of valid metrics
+// comes from Go (App.CriterionMetrics), so this map may only ever lag in
+// prettiness, never in correctness.
+export const CRITERION_LABELS: Record<string, string> = {
+  sharpe: "Sharpe ratio",
+  sortino: "Sortino ratio",
+  calmar: "Calmar ratio",
+  annual_return: "Annual return (%)",
+  max_drawdown: "Max drawdown (%)",
+  total_return: "Total profit ($)",
+  turnover: "Turnover",
+  exposure: "Average exposure (%)",
+  time_in_market: "Time in market (%)",
+  p_value: "p-value",
+};
+
+export function criterionLabel(metric: string): string {
+  return CRITERION_LABELS[metric] ?? metric;
+}
+
+// A short, stable id derived from the question itself, so "a changed question
+// is a new ID" is structural rather than a rule the user has to remember.
+// Editing the claim or the criterion produces a different id on the next run;
+// re-running the same question keeps it, which is what makes the research log
+// able to group them.
+function questionID(claim: string, criterion: string): string {
+  let h = 5381;
+  const s = `${claim.trim()}|${criterion}`;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  }
+  // The WHOLE hash, not a prefix: base36 puts the fastest-changing digits
+  // last, so truncating the front gave "sharpe >= 1.2" and "sharpe >= 1.3"
+  // the same id — silently merging two different questions in the log.
+  return `H-${h.toString(36).padStart(7, "0")}`;
+}
+
+// buildHypothesis renders the form as the TOML the engine registers, or ""
+// when there is nothing to register. An incomplete form is "" rather than a
+// partial document: half a hypothesis judged is worse than none.
+export function buildHypothesis(h: HypothesisForm): string {
+  const claim = h.claim.trim();
+  const value = h.value.trim();
+  if (!claim || !h.metric || !h.op || !value) return "";
+  if (!Number.isFinite(Number(value))) return "";
+  const criterion = `${h.metric} ${h.op} ${value}`;
+  return [
+    `ID          = ${JSON.stringify(questionID(claim, criterion))}`,
+    `Claim       = ${JSON.stringify(claim)}`,
+    `Criterion   = ${JSON.stringify(criterion)}`,
+    "",
+  ].join("\n");
 }

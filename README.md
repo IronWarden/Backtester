@@ -1966,6 +1966,29 @@ earlier than the priced tickers (`$SP500` to 2026-07-02 against 2026-08-07 for
 real symbols), so the date presets snap to the earlier of the two ends, and a
 hand-typed end date past it gets a warning with a one-click fix.
 
+**Before you run** is pre-registration, and it is the reason the mode exists in
+this order: you say what you think is true, and what would count as being
+right, *before* seeing a number. The engine has judged hypotheses mechanically
+for a while, but it wanted hand-written TOML, so nobody in simple mode ever saw
+a verdict. The card builds the same document from a claim and a
+metric/operator/number triple — which is the whole grammar `ParseCriterion`
+accepts:
+
+```toml
+ID          = "H-11eyu7q"
+Claim       = "12-1 momentum beats buy-and-hold"
+Criterion   = "sharpe >= 1.2"
+```
+
+The metric list is served by the engine (`App.CriterionMetrics` over
+`backtest.CriterionMetricNames`), so the picker cannot offer a criterion the
+parser would reject. The `ID` is derived from the question itself, which makes
+*"a changed question is a new ID"* structural rather than a rule to remember:
+edit the claim or the threshold and the next run registers a new id, while
+re-running the same question keeps it. Leaving the claim empty runs the
+backtest unjudged — different from judging it against a default nobody chose.
+**Edit as TOML →** carries the question across to Advanced mode's raw box.
+
 `example.lua` is deliberately absent from the picker: it is the Lua tab's
 editable starter and a copy of `buy_and_hold.lua`, so listing it would offer
 the same idea twice.

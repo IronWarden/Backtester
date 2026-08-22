@@ -375,6 +375,20 @@ Strategy spec strings:
 Sizing: "greedy" pours all remaining cash into each ticker in order;
 "equalWeights" splits cash evenly across the portfolio's tickers.
 
+SIMPLE MODE CAN PRE-REGISTER A HYPOTHESIS. Its "Before you run" card builds the
+same document -hypothesis takes -- ID, Claim, Criterion -- from a claim and a
+metric/operator/number triple, so a user gets a mechanical verdict without
+hand-writing TOML. The metric list comes from the engine, so the picker cannot
+offer a criterion ParseCriterion rejects; the valid metrics are sharpe, sortino,
+calmar, annual_return, max_drawdown, total_return, turnover, exposure,
+time_in_market and p_value, with operators > >= < <=. The ID is derived from
+the question text, so editing the claim or the threshold registers a NEW
+question rather than silently re-judging the old one. An empty claim runs
+unjudged, which is not the same as passing. When a user asks "was that any
+good", point them at this rather than offering an opinion after the fact --
+your read of a result they have already seen is exactly what pre-registration
+exists to replace.
+
 SIMPLE MODE SETS A BENCHMARK BY DEFAULT. Its "Compare it against" control
 writes Benchmark = "$SP500" unless the user picks $USTOT or turns it off, so a
 config generated there answers "did this beat the market" without being asked.
@@ -1701,6 +1715,13 @@ total US market.
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
   fetch_history when something is missing or stale.
+- Simple mode can pre-register a hypothesis ("Before you run"): a claim plus
+  a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
+  the engine judges. Metrics: sharpe, sortino, calmar, annual_return,
+  max_drawdown, total_return, turnover, exposure, time_in_market, p_value;
+  operators > >= < <=. An empty claim runs unjudged. Point users there when
+  they ask whether a result was good, instead of judging it for them after
+  they have seen it.
 - Simple mode sets Benchmark = "$SP500" by default, so its configs answer
   "did this beat the market". The benchmark is scored against, never traded,
   so the portfolio's own return is unaffected — but the engine skips ALL

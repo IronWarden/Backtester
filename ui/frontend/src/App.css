@@ -544,6 +544,35 @@ button.primary:hover:not(:disabled),
   font-style: italic;
 }
 
+/* Pre-registration. The criterion is a metric/operator/number triple, which
+   is the entire grammar ParseCriterion accepts, laid out on one line so it
+   reads as the sentence it is. */
+.simple-form .criterion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+
+.simple-form .criterion-lead {
+  font-size: 0.85em;
+  color: var(--text-3);
+}
+
+.simple-form .criterion-row select {
+  min-width: 0;
+}
+
+.simple-form .criterion-value {
+  width: 6em;
+}
+
+.simple-form .optional {
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: 0.85em;
+}
+
 .simple-form .coverage-msg {
   font-size: 0.85em;
   border-radius: var(--radius-s);
