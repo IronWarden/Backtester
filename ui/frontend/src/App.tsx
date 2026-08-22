@@ -139,6 +139,10 @@ function App() {
         // Empty is buy-and-hold, so an untouched form behaves exactly as it
         // did before the picker existed.
         strategy: "",
+        // Deliberately NOT a zero value: an unset Benchmark leaves "did this
+        // beat the market?" unanswerable, which is the question simple mode
+        // exists to answer.
+        benchmark: "$SP500",
     });
 
     // Drag the handle between editor and results to resize. The pointer moves in

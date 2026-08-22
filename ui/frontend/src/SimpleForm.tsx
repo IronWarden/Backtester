@@ -7,6 +7,7 @@ import {
 import { backtest } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import {
+    BENCHMARKS,
     buildToml,
     STARTER_SCRIPT,
     SimpleForm as Form,
@@ -199,7 +200,13 @@ export default function SimpleForm({
     // selected tickers cover and starting no earlier than the first they cover.
     function applyPreset(kind: "max" | "ytd" | "1y" | "5y") {
         if (!coverage || !coverage.start || !coverage.end) return;
-        const end = coverage.end;
+        // The $-benchmark series currently end weeks earlier than the priced
+        // tickers, and a window past that end silently costs every
+        // benchmark-relative metric. Snapping to the earlier of the two keeps
+        // the comparison the presets promise.
+        const benchEnd = form.benchmark ? ranges[form.benchmark]?.[1] : "";
+        const end =
+            benchEnd && benchEnd < coverage.end ? benchEnd : coverage.end;
         const start =
             kind === "max"
                 ? coverage.start
@@ -220,6 +227,7 @@ export default function SimpleForm({
         [pickable, form.strategy],
     );
     const allocationsApply = usesAllocations(form);
+
 
     const total = form.tickers.reduce(
         (sum, t) => sum + (form.allocations[t] ?? 0),
@@ -271,6 +279,39 @@ export default function SimpleForm({
             return "Start date is after the end date.";
         return "";
     }, [coverage, form.startDate, form.endDate]);
+    // The engine skips every benchmark-relative metric unless the benchmark
+    // has a bar for EVERY trading day in the window, and says so only in the
+    // run console. Catching it here means the user reads it while the dates
+    // are still in front of them. The benchmark series currently end earlier
+    // than the priced tickers do, so the end date is the edge that bites.
+    const benchmarkEnd = form.benchmark
+        ? (ranges[form.benchmark]?.[1] ?? "")
+        : "";
+
+    const benchmarkWarning = useMemo(() => {
+        // Nothing to warn about before there is anything to run: an empty
+        // form should not greet a new user with a date complaint.
+        if (form.tickers.length === 0) return "";
+        if (!form.benchmark || !rangesLoaded) return "";
+        const r = ranges[form.benchmark];
+        if (!r) {
+            return `${form.benchmark} is not in this database, so Alpha, Beta and the rest of the comparison will be empty.`;
+        }
+        if (form.startDate && form.startDate < r[0]) {
+            return `${form.benchmark} starts ${r[0]} — the comparison needs a start date on or after that, or it is skipped entirely.`;
+        }
+        if (form.endDate && form.endDate > r[1]) {
+            return `${form.benchmark} ends ${r[1]} — move the end date on or before that, or the comparison is skipped entirely.`;
+        }
+        return "";
+    }, [
+        form.benchmark,
+        form.startDate,
+        form.endDate,
+        form.tickers,
+        ranges,
+        rangesLoaded,
+    ]);
 
     const canRun =
         form.tickers.length > 0 &&
@@ -384,6 +425,34 @@ export default function SimpleForm({
                         ))}
                     </select>
                 </label>
+
+                <label className="strategy-pick">
+                    Compare it against
+                    <select
+                        value={form.benchmark}
+                        onChange={(e) => patch({ benchmark: e.target.value })}
+                    >
+                        {BENCHMARKS.map((b) => (
+                            <option key={b.value} value={b.value}>
+                                {b.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                {benchmarkWarning && (
+                    <div className="coverage-msg err">
+                        {benchmarkWarning}
+                        {benchmarkEnd && form.endDate > benchmarkEnd && (
+                            <button
+                                type="button"
+                                className="preset-chip"
+                                onClick={() => patch({ endDate: benchmarkEnd })}
+                            >
+                                End on {benchmarkEnd}
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* The failure mode is the most useful sentence here, and it
                     has to be readable BEFORE the run, not explained after a

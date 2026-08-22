@@ -375,6 +375,19 @@ Strategy spec strings:
 Sizing: "greedy" pours all remaining cash into each ticker in order;
 "equalWeights" splits cash evenly across the portfolio's tickers.
 
+SIMPLE MODE SETS A BENCHMARK BY DEFAULT. Its "Compare it against" control
+writes Benchmark = "$SP500" unless the user picks $USTOT or turns it off, so a
+config generated there answers "did this beat the market" without being asked.
+Two consequences worth stating when they come up: the benchmark-relative
+metrics are populated where an older simple-mode config had zeros, and the
+portfolio's OWN return is unchanged, because a benchmark is scored against and
+never traded. The $-series currently end earlier than the priced tickers, and
+the engine skips every benchmark metric unless the benchmark covers EVERY
+trading day in the window -- so an end date past the series' last bar costs the
+whole comparison. Simple mode's presets snap to the earlier end and warn about a
+hand-typed one; a config you write by hand has no such guard, so check the
+benchmark's coverage with query_db before proposing a window.
+
 SIMPLE MODE HAS A STRATEGY PICKER. The app's Simple mode is not buy-and-hold
 only any more: a dropdown lists the shipped library from its gallery headers
 and shows the chosen script's idea, what it works on and how it FAILS before
@@ -1688,6 +1701,12 @@ total US market.
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
   fetch_history when something is missing or stale.
+- Simple mode sets Benchmark = "$SP500" by default, so its configs answer
+  "did this beat the market". The benchmark is scored against, never traded,
+  so the portfolio's own return is unaffected — but the engine skips ALL
+  benchmark metrics unless it covers every trading day in the window, and the
+  $-series end earlier than the priced tickers. Check coverage before
+  proposing a window with a Benchmark in it.
 - Simple mode has a strategy picker: it lists the shipped library with each
   script's works/fails notes and writes Strategy = "lua:strategies/<file>"
   on its defaults. Send users there to try a strategy without writing TOML;

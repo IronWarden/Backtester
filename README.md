@@ -1949,6 +1949,23 @@ the strategy sizes its own positions, so the allocation percentages are not
 consulted and the form says so. To tune its parameters, switch to Advanced and
 add a `[portfolio.Params]` block.
 
+**Compare it against** sets `Benchmark`, defaulting to `$SP500`. This is the
+one simple-mode default that is *not* a zero value, and it is deliberate: with
+`Benchmark` unset, Alpha, Beta, TrackingError, InformationRatio and
+Up/DownCapture are all zero and "did this beat just buying the market?" — the
+question a user actually has — is unanswerable. The portfolio's own numbers do
+not change; the benchmark is scored against, never traded, and stays out of
+`Tickers` so it receives no capital and does not constrain the trading
+calendar. Choose *Nothing — skip the comparison* to get the previous output
+back exactly.
+
+The engine skips every benchmark-relative metric unless the benchmark has a bar
+for **every trading day in the window**, and says so only in the run console.
+Simple mode checks it up front instead: the `$`-series currently end weeks
+earlier than the priced tickers (`$SP500` to 2026-07-02 against 2026-08-07 for
+real symbols), so the date presets snap to the earlier of the two ends, and a
+hand-typed end date past it gets a warning with a one-click fix.
+
 `example.lua` is deliberately absent from the picker: it is the Lua tab's
 editable starter and a copy of `buy_and_hold.lua`, so listing it would offer
 the same idea twice.
