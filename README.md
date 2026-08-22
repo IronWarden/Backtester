@@ -1953,9 +1953,18 @@ open (even unsaved) in the editors.
   paste it into the panel's first-run form, which writes that `.env`
   entry for you. Local Ollama models need no key at all.
 - Local-model notes: the request pins `num_ctx` to 16384 (Ollama's default
-  is too small for the embedded context) and sends a leaner system prompt
-  (the saved-config dump is skipped); "thinking" models have thinking
-  disabled for snappier replies.
+  is too small for the embedded context) and sends a leaner system prompt;
+  "thinking" models have thinking disabled for snappier replies.
+  The lean prompt is a *different, condensed reference* (`leanReference` in
+  `ui/chat.go`), not the full one with the saved-config dump removed: the
+  full reference is ~19k tokens on its own and does not fit `num_ctx` with
+  a conversation and tool results on top, so a local model was silently
+  losing the tail of its own prompt — which is where the tool routing
+  lived. The lean one runs ~4.5k tokens with the live database context
+  included, and keeps the config schema, the Lua surface, every metric
+  name, the tool routing and the data traps; it drops narrative the model
+  can recover with `query_db`. `TestLeanPromptFitsOllamaContext` budgets it
+  at a third of the window so it cannot drift back over.
 
 Backend: `ui/chat.go` (shared prompt/tool/dispatch), `ui/claude.go`
 (streaming Anthropic client), `ui/ollama.go` (streaming Ollama client),

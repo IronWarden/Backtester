@@ -148,6 +148,17 @@ func TestSystemPromptRoutesAllTools(t *testing.T) {
 			t.Errorf("appReference lost the %q guidance", want)
 		}
 	}
+	// Shorting shipped, but the Lua section went on flatly denying it while
+	// the same prompt documented AllowShort further down — the transaction-
+	// cost failure repeating itself. Pin the retraction, not just the
+	// feature: the config keys alone are already covered by reflection, and
+	// they were present the whole time this claim was wrong.
+	for _, gone := range []string{"There is no shorting", "no shorting and no"} {
+		if strings.Contains(appReference, gone) {
+			t.Errorf("appReference still claims %q — shorting is opt-in, and "+
+				"the same prompt documents AllowShort", gone)
+		}
+	}
 	// The tool description is what a model sees when deciding whether to
 	// reach for query_db at all, so the same caveat has to survive there.
 	for _, want := range []string{"FISCAL PERIOD END", "look-ahead"} {
@@ -198,5 +209,63 @@ func TestSystemPromptDocumentsConfigSchema(t *testing.T) {
 					typ.Name(), tag)
 			}
 		}
+	}
+}
+
+// The lean reference is what a local model actually receives, so it drifts
+// exactly like appReference does — and it is the one a small model has no
+// spare context to recover from. Same reflection checks, same reason.
+func TestLeanReferenceDocumentsEngine(t *testing.T) {
+	for name := range anthropicByName(t) {
+		if !strings.Contains(leanReference, name) {
+			t.Errorf("leanReference never mentions tool %q — a local model "+
+				"gets no routing guidance for it", name)
+		}
+	}
+	mt := reflect.TypeOf(backtest.Metrics{})
+	for i := range mt.NumField() {
+		if name := mt.Field(i).Name; !strings.Contains(leanReference, name) {
+			t.Errorf("leanReference never mentions the %q metric", name)
+		}
+	}
+	for _, typ := range []reflect.Type{
+		reflect.TypeOf(backtest.PortfolioConfig{}),
+		reflect.TypeOf(backtest.CostConfig{}),
+		reflect.TypeOf(backtest.MarginConfig{}),
+	} {
+		for i := range typ.NumField() {
+			tag := typ.Field(i).Tag.Get("toml")
+			if tag == "" {
+				continue
+			}
+			if !strings.Contains(leanReference, tag) {
+				t.Errorf("leanReference never mentions the %s config key %q",
+					typ.Name(), tag)
+			}
+		}
+	}
+	// The traps that make a wrong answer rather than a vague one survive
+	// the condensing, or the condensing is what broke the assistant.
+	for _, want := range []string{
+		"FISCAL PERIOD END", "look-ahead", "Pathward", "$CASH",
+		"company_info is EMPTY",
+	} {
+		if !strings.Contains(leanReference, want) {
+			t.Errorf("leanReference lost the %q guidance", want)
+		}
+	}
+}
+
+// The whole point of the lean reference is fitting ollamaNumCtx with room
+// left for the live context, the tool schemas and an actual conversation.
+// Budget it at a third of the window (~4 chars per token) so that headroom
+// is enforced rather than hoped for: appReference failed this by 3x, which
+// is how a local model lost the tail of its own prompt.
+func TestLeanPromptFitsOllamaContext(t *testing.T) {
+	const budget = ollamaNumCtx / 3 * 4
+	if n := len(buildSystemPrompt("", "", "", true)); n > budget {
+		t.Errorf("lean system prompt is %d chars, over the %d-char budget "+
+			"for num_ctx %d — a local model will silently lose the tail",
+			n, budget, ollamaNumCtx)
 	}
 }

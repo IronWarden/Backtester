@@ -346,8 +346,12 @@ left alone for now so there is an example of the long-hand form to copy from.
 
 ### Gotchas
 
-- **No shorting and no leverage.** A buy larger than `cash()` is clamped;
-  size against `cash()` or `equity()` rather than assuming credit.
+- **Shorting is opt-in; there is no leverage on the long side.** A buy larger
+  than `cash()` is clamped, so size against `cash()` or `equity()` rather than
+  assuming credit. Selling past the holding is refused unless the portfolio
+  sets `AllowShort = true`, which also enables `short()` (a *target*, not a
+  delta), `cover()`, and negative legs in `target_weights`. See the main
+  README's shorting section for borrow cost and margin.
 - **Transaction costs are off by default.** Set `[portfolio.Costs]` in the
   config (`commission_per_trade`, `commission_bps`, `slippage_bps`) to charge
   them; omitting the block keeps trading frictionless, so high-turnover
