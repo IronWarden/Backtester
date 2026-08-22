@@ -1924,12 +1924,16 @@ At most 200 diagnostics are kept per run; beyond that the console says how many
 it suppressed rather than truncating silently. A strategy that raises on every
 trading day is the case this bounds.
 
-## Simple mode (UI)
+## The Backtest tab (UI)
 
-The desktop app opens in **Simple** mode: a form for the things every
+The topbar has three tabs, named for what they operate on rather than for how
+advanced they are: **Backtest** (the form below), **Config** (the raw TOML and
+Lua editors) and **Data** (a SQL console over the database).
+
+The desktop app opens on the **Backtest** tab: a form for the things every
 backtest needs — name, starting capital, a date window with `Max`/`YTD`/`1Y`/`5Y`
 presets, and a list of tickers with allocation percentages. It generates the
-TOML for you, and **Edit as TOML →** hands that config to the Advanced editor
+TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
 **Strategy** is a picker fed by the shipped library's gallery headers
@@ -1961,7 +1965,7 @@ back exactly.
 
 The engine skips every benchmark-relative metric unless the benchmark has a bar
 for **every trading day in the window**, and says so only in the run console.
-Simple mode checks it up front instead: the `$`-series currently end weeks
+The Backtest tab checks it up front instead: the `$`-series currently end weeks
 earlier than the priced tickers (`$SP500` to 2026-07-02 against 2026-08-07 for
 real symbols), so the date presets snap to the earlier of the two ends, and a
 hand-typed end date past it gets a warning with a one-click fix.
@@ -1969,7 +1973,7 @@ hand-typed end date past it gets a warning with a one-click fix.
 **Before you run** is pre-registration, and it is the reason the mode exists in
 this order: you say what you think is true, and what would count as being
 right, *before* seeing a number. The engine has judged hypotheses mechanically
-for a while, but it wanted hand-written TOML, so nobody in simple mode ever saw
+for a while, but it wanted hand-written TOML, so nobody on the Backtest tab ever saw
 a verdict. The card builds the same document from a claim and a
 metric/operator/number triple — which is the whole grammar `ParseCriterion`
 accepts:
@@ -1987,7 +1991,7 @@ parser would reject. The `ID` is derived from the question itself, which makes
 edit the claim or the threshold and the next run registers a new id, while
 re-running the same question keeps it. Leaving the claim empty runs the
 backtest unjudged — different from judging it against a default nobody chose.
-**Edit as TOML →** carries the question across to Advanced mode's raw box.
+**Edit as TOML →** carries the question across to the Config tab's raw box.
 
 `example.lua` is deliberately absent from the picker: it is the Lua tab's
 editable starter and a copy of `buy_and_hold.lua`, so listing it would offer

@@ -74,12 +74,16 @@ export function buildToml(form: SimpleForm): string {
   const tickerList = form.tickers.map((t) => JSON.stringify(t)).join(", ");
   // The buy-and-hold wording is load-bearing: an untouched form has to
   // generate exactly the config it generated before the picker existed.
+  // These name the Config tab, which T84 renamed from "Advanced". They are
+  // TOML COMMENTS, so nothing parses them and no number moves — but a
+  // generated file telling the user to click a button that no longer exists
+  // is worse than the byte-identity this line previously had.
   const heading = form.strategy
-    ? "# Generated from simple mode. Switch to Advanced to edit this config"
-    : "# Generated from simple buy-and-hold mode. Switch to Advanced to edit";
+    ? "# Generated from the Backtest form. Switch to Config to edit this"
+    : "# Generated from the Backtest form. Switch to Config to edit this";
   const heading2 = form.strategy
-    ? "# directly, tune the strategy's parameters, or add more blocks."
-    : "# this config directly or add more [[Portfolio]] blocks.";
+    ? "# config directly, tune the strategy's parameters, or add more blocks."
+    : "# config directly or add more [[Portfolio]] blocks.";
   const fallbackName = form.strategy
     ? form.strategy.replace(/\.lua$/, "")
     : "Buy and Hold";

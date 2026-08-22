@@ -484,6 +484,44 @@ button.primary:hover:not(:disabled),
   font-style: italic;
 }
 
+/* First-run card. Sits above the form, blocks nothing, and never returns
+   once dismissed — an onboarding step you have to dismiss before every run
+   is a tax, not an explanation. */
+.simple-form .first-run {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.simple-form .first-run-steps {
+  margin: 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  font-size: 0.88em;
+  color: var(--text-2);
+}
+
+.simple-form .first-run-steps b {
+  color: var(--text-1, var(--text-2));
+}
+
+.simple-form .first-run-aside {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--text-3);
+}
+
+.simple-form .first-run-actions {
+  display: flex;
+  gap: 0.5em;
+}
+
+.simple-form .first-run-actions .ghost {
+  background: none;
+  border: 1px solid var(--border);
+}
+
 /* Strategy picker. The works/fails pair is the point of the card: a user
    should be able to read how a strategy fails before running it, not after
    a bad result. */

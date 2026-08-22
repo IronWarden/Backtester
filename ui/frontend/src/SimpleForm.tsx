@@ -21,6 +21,10 @@ import {
 type Props = {
     dbPath: string;
     running: boolean;
+    // Opens the assistant panel. A new user has no way to know it can write
+    // the whole config from one sentence, which makes it the fastest path
+    // through this form and the least discoverable thing in the app.
+    onOpenAssistant: () => void;
     // Form data is owned by App so it persists across runs and mode switches.
     form: Form;
     onChange: (next: Form) => void;
@@ -28,7 +32,7 @@ type Props = {
     // hypothesis rides along rather than living in App's raw box: registering
     // it is part of starting THIS run, not a mode-wide setting.
     onRun: (toml: string, hypothesis: string) => void;
-    // Hand the generated config off to the Advanced TOML editor, with the
+    // Hand the generated config off to the Config tab's TOML editor, with the
     // registered question, so switching modes does not quietly drop it.
     onEditAsToml: (toml: string, hypothesis: string) => void;
 };
@@ -92,9 +96,70 @@ function minusYears(date: string, years: number): string {
     return new Date(Date.UTC(y - years, m - 1, d)).toISOString().slice(0, 10);
 }
 
+// The first run explains itself, once. Named for the workflow rather than the
+// UI: a backtest is a question you ask, a run you make, and a verdict you read
+// — and the app previously opened on a form that said none of that.
+//
+// Dismissed for good on click. NOT a modal: it sits above the form, blocks
+// nothing, and never reappears once the user has said they have it.
+const ONBOARDED_KEY = "backtester-onboarded";
+
+function readOnboarded(): boolean {
+    try {
+        return localStorage.getItem(ONBOARDED_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+
+function FirstRun({
+    onOpenAssistant,
+    onDismiss,
+}: {
+    onOpenAssistant: () => void;
+    onDismiss: () => void;
+}) {
+    return (
+        <section className="form-card wide first-run">
+            <h3 className="form-card-title">
+                Three steps, and the third is the one that matters
+            </h3>
+            <ol className="first-run-steps">
+                <li>
+                    <b>Ask something.</b> Add the holdings you want to trade and
+                    pick a strategy. Each one says what it works on and how it
+                    fails before you run it.
+                </li>
+                <li>
+                    <b>Test it.</b> Write down what would count as success —
+                    "Sharpe at least 1.2" — then hit Run. Writing it first is
+                    what stops a result being explained after the fact.
+                </li>
+                <li>
+                    <b>See if it held.</b> The verdict at the top of the results
+                    answers the question you registered, mechanically, against
+                    the market and against plain buy-and-hold.
+                </li>
+            </ol>
+            <p className="first-run-aside">
+                In a hurry? The assistant can write the whole thing from one
+                sentence — "test momentum on the big five tech names since
+                2015" — and check the data covers it.
+            </p>
+            <div className="first-run-actions">
+                <button onClick={onOpenAssistant}>✦ Ask the assistant</button>
+                <button className="ghost" onClick={onDismiss}>
+                    Got it
+                </button>
+            </div>
+        </section>
+    );
+}
+
 export default function SimpleForm({
     dbPath,
     running,
+    onOpenAssistant,
     form,
     onChange,
     onRun,
@@ -112,6 +177,7 @@ export default function SimpleForm({
     // Criterion metrics, served by the engine so the picker cannot offer one
     // ParseCriterion would reject.
     const [metrics, setMetrics] = useState<string[]>([]);
+    const [onboarded, setOnboarded] = useState(readOnboarded);
 
     useEffect(
         () => EventsOn("chat:db-changed", () => setDbVersion((v) => v + 1)),
@@ -355,8 +421,27 @@ export default function SimpleForm({
         !!coverage.end &&
         coverage.start <= coverage.end;
 
+    function dismissFirstRun() {
+        setOnboarded(true);
+        try {
+            localStorage.setItem(ONBOARDED_KEY, "1");
+        } catch {
+            // Storage refused: the card reappears next launch, which is a
+            // better failure than the form refusing to render.
+        }
+    }
+
     return (
         <div className="simple-form">
+            {!onboarded && (
+                <FirstRun
+                    onOpenAssistant={() => {
+                        onOpenAssistant();
+                        dismissFirstRun();
+                    }}
+                    onDismiss={dismissFirstRun}
+                />
+            )}
             <section className="form-card">
                 <h3 className="form-card-title">Portfolio</h3>
                 <div className="field-row">
@@ -613,7 +698,7 @@ export default function SimpleForm({
 
             {/* Above the run button on purpose: a criterion is a
                 pre-registration, and one written after seeing a result is not
-                one. Advanced mode places its raw box the same way. */}
+                one. The Config tab places its raw box the same way. */}
             <section className="form-card wide">
                 <h3 className="form-card-title">
                     Before you run <span className="optional">(optional)</span>

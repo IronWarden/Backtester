@@ -455,22 +455,30 @@ function App() {
                     </svg>
                     <span className="brand-name">Backtester</span>
                 </div>
+                {/* Named for what each mode operates on, not for how hard it
+                    is: "Simple/Advanced" reads as a hierarchy, and a user who
+                    needs the TOML editor is not thereby an advanced user. The
+                    internal Mode values are unchanged — they key persisted
+                    state and every conditional below. */}
                 <div className="mode-toggle">
                     <button
                         className={mode === "simple" ? "active" : ""}
                         onClick={() => setMode("simple")}
+                        title="Build a portfolio from a form and run it"
                     >
-                        Simple
+                        Backtest
                     </button>
                     <button
                         className={mode === "advanced" ? "active" : ""}
                         onClick={() => setMode("advanced")}
+                        title="Edit the TOML config and Lua strategy directly"
                     >
-                        Advanced
+                        Config
                     </button>
                     <button
                         className={mode === "data" ? "active" : ""}
                         onClick={() => setMode("data")}
+                        title="Query the database with SQL"
                     >
                         Data
                     </button>
@@ -504,6 +512,7 @@ function App() {
                         form={simpleForm}
                         onChange={setSimpleForm}
                         onRun={(cfg, hyp) => runConfig(cfg, false, hyp)}
+                        onOpenAssistant={() => setChatOpen(true)}
                         onEditAsToml={(cfg, hyp) => {
                             if (hyp) setHypothesis(hyp);
                             editAsToml(cfg);
