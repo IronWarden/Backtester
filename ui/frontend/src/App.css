@@ -87,6 +87,26 @@ body {
   border-radius: var(--radius-s);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
+  /* The base is a full appearance, not just a font and a corner radius.
+     It used to set neither background nor border, so a button that forgot its
+     role class did not fall back to a plain-looking button — it fell out of
+     the design system entirely and rendered as the native GTK control, light
+     grey on a dark UI. That is how "✦ Ask the assistant" ended up as the one
+     pale rectangle on the screen.
+     Defaulting to the ghost appearance means the worst case for a missing
+     class is now "correct but unemphasised". `.primary` and the others below
+     still win on source order. */
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  padding: 0.4em 0.9em;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.app button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
 }
 
 .app button:disabled {
@@ -405,6 +425,59 @@ button.primary:hover:not(:disabled),
 .simple-form input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Selects get the same box as inputs.
+   Without this they fall back to the native GTK widget — a light-grey control
+   with its own font and a chunky arrow — which on a dark UI is the single most
+   visible inconsistency in the app. It went unnoticed because it is an
+   ABSENCE, not a wrong value: nothing in the stylesheet was incorrect, the rule
+   simply was not there. No amount of reading App.css finds that; a screenshot
+   finds it instantly.
+
+   Scoped to `.app select` rather than to each place a select appears, for the
+   same reason the ghost button is a role: the next component to add a dropdown
+   should not have to know this rule exists. */
+.app select {
+  background-color: var(--bg-inset);
+  color: var(--text-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  /* Right padding leaves room for the chevron below. */
+  padding: 0.45em 1.9em 0.45em 0.6em;
+  font-size: 1em;
+  font-family: inherit;
+  line-height: 1.3;
+  appearance: none;
+  -webkit-appearance: none;
+  /* Drawn here because the native arrow only comes with the native widget.
+     Stroke is --text-3's value: a data URI cannot read a custom property, so
+     this is the one place a token has to be repeated. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23898781' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6em center;
+  background-size: 0.62em;
+  transition: border-color 0.12s;
+}
+
+.app select:hover:not(:disabled) {
+  border-color: var(--text-3);
+}
+
+.app select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.app select:disabled {
+  opacity: 0.55;
+}
+
+/* The popup list is drawn by the platform and is mostly beyond reach, but GTK
+   honours these, which is the difference between a white flash and a menu. */
+.app select option {
+  background-color: var(--bg-raised);
+  color: var(--text-1);
 }
 
 /* Dollar amount: a "$" adornment sits inside the field box and the input fills

@@ -62,6 +62,37 @@ Strategy = "buyAndHold:equalWeights"
 				"columns must be filled in together or neither is comparable")
 		}
 	}
+	// The cashflow schedule went through the same clone, and was dropped by
+	// it in exactly the same way. Checked here rather than only in the unit
+	// tests, because the unit tests call runOne directly and never clone.
+	withFlows := `
+[[Portfolio]]
+Name = "contributing"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-06-01"
+Tickers = ["AAPL", "MSFT"]
+Strategy = "buyAndHold:equalWeights"
+
+  [Portfolio.Cashflow]
+  Amount = 1000.0
+  Frequency = "monthly"
+`
+	flowOut, err := a.RunBacktest(withFlows, "../stock_data.db", "", "")
+	if err != nil {
+		t.Fatalf("cashflow run: %v", err)
+	}
+	for _, r := range flowOut.Results {
+		t.Logf("%s: contributed %.0f, final %.0f, profit %.0f",
+			r.PortfolioName, r.NetContributions, r.FinalValue,
+			r.FinalValue-r.InitialCapital-r.NetContributions)
+		if r.NetContributions == 0 {
+			t.Error("a monthly schedule contributed nothing on the real run " +
+				"path — the portfolio is cloned before simulation and the " +
+				"schedule is not surviving the clone")
+		}
+	}
+
 	for _, d := range out.Diagnostics {
 		if strings.Contains(d.Message, "real return") {
 			t.Logf("diagnostic: %s", d.Message)

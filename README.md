@@ -880,7 +880,7 @@ Costs make high-turnover strategies look worse, which is the point — the
 `Turnover` metric reports how much trading each strategy is doing, so the two
 can be read together.
 
-### `[portfolio.Cashflow]` — recurring deposits and withdrawals
+### `[Portfolio.Cashflow]` — recurring deposits and withdrawals
 
 Contributing on payday, or drawing down in retirement. Optional; **absent means
 no flows and byte-identical results**, so nothing written before this existed
@@ -894,11 +894,19 @@ StartDate   = "2015-01-01"
 EndDate     = "2025-01-01"
 Tickers     = ["AAPL", "MSFT"]
 
-  [portfolio.Cashflow]
+  [Portfolio.Cashflow]
   Amount    = 500.0          # SIGNED: negative withdraws
   Frequency = "monthly"      # monthly | quarterly | annually
   Start     = "2015-06-01"   # optional; defaults to StartDate
 ```
+
+**The sub-table name must match the array header's case.** TOML paths are
+case-sensitive, so `[[Portfolio]]` pairs with `[Portfolio.Cashflow]` and
+`[[portfolio]]` with `[portfolio.Cashflow]`. Mixing the two makes the decoder
+see two different top-level keys and fail with *"incompatible types: TOML value
+has type map; destination has type slice"* — which names neither the line nor
+the real problem. The same applies to `[portfolio.Costs]` and
+`[portfolio.Margin]`.
 
 **The first flow lands one whole period after `Start`, never on it.** The
 opening capital is already in the book, so contributing on day one would

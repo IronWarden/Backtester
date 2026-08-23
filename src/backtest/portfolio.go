@@ -251,6 +251,17 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		InSampleEnd:          p.InSampleEnd,
 		Trials:               p.Trials,
 		TrialGroup:           p.TrialGroup,
+		// Configuration, like Costs and Margin above. Omitting these was a
+		// real bug twice over: the runner clones every portfolio before
+		// handing it to a worker, so a field missing here is a field that
+		// works in every direct-call test and does nothing whatsoever in the
+		// actual app. TestCloneHandlesEveryPortfolioField exists to stop a
+		// third time.
+		Cashflow:       p.Cashflow,
+		cashflowStep:   p.cashflowStep,
+		nextCashflow:   p.nextCashflow,
+		cashflowAnchor: p.cashflowAnchor,
+		CPI:            p.CPI,
 	}, nil
 }
 

@@ -108,7 +108,9 @@ function FirstRun({
                 2015" — and check the data covers it.
             </p>
             <div className="first-run-actions">
-                <button onClick={onOpenAssistant}>✦ Ask the assistant</button>
+                <button className="primary" onClick={onOpenAssistant}>
+                    ✦ Ask the assistant
+                </button>
                 <button className="ghost" onClick={onDismiss}>
                     Got it
                 </button>
