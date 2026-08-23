@@ -136,6 +136,53 @@ check("every collapsible panel renders when opened", () => {
     }
 });
 
+// Every row in a table must have exactly as many cells as the table has
+// columns. Obvious, unenforceable by tsc, and it silently shipped: the
+// benchmark row emitted twelve cells against a seventeen-column header, so max
+// drawdown was printed under CALMAR, annual return under MAX DD %, and std dev
+// under UNDERWATER. Every number in that row was real and every label was
+// wrong, which is worse than a blank row.
+function tableCellCounts(html: string): { headers: number; rows: number[] }[] {
+    const tables: { headers: number; rows: number[] }[] = [];
+    for (const table of html.split("<table").slice(1)) {
+        const headers = (table.match(/<th[\s>]/g) ?? []).length;
+        const rows: number[] = [];
+        // Body rows only: the header row's <th>s are counted separately.
+        for (const row of table.split("<tr").slice(1)) {
+            const cells = (row.match(/<td[\s>]/g) ?? []).length;
+            if (cells > 0) rows.push(cells);
+        }
+        tables.push({ headers, rows });
+    }
+    return tables;
+}
+
+// Across every fixture, because the metrics table's column count is
+// conditional: the sweep columns and the benchmark columns each appear only
+// when some result carries them, and a row that is right in one combination
+// can be wrong in another.
+for (const name of ["full", "plain", "no-curve"]) {
+    check(`every table row matches its header — ${name}`, () => {
+        const { results, verdicts } = load(name);
+        const html = withPanelsOpen(() =>
+            renderToString(<ResultsView results={results} fontSize={16} verdicts={verdicts} />),
+        );
+        const tables = tableCellCounts(html);
+        if (tables.length === 0) throw new Error("no tables rendered");
+        tables.forEach((t, i) => {
+            for (const cells of t.rows) {
+                if (cells !== t.headers) {
+                    throw new Error(
+                        `table ${i}: a row has ${cells} cells but the header has ` +
+                            `${t.headers} columns — every value after the short row's ` +
+                            "first gap is printed under the wrong label",
+                    );
+                }
+            }
+        });
+    });
+}
+
 // The seven time.Time fields cross the wire as `any` -- wails has no
 // TypeScript mapping for them and says so on every binding regeneration (T96).
 // `any` means tsc cannot catch a raw RFC3339 string being rendered, so assert

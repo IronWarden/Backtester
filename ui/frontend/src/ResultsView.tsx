@@ -935,14 +935,30 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   <td className={`num ${b.profit < 0 ? "neg" : "pos"}`}>
                     {`${b.profit >= 0 ? "+" : "−"}${fmtDollars(Math.abs(b.profit))}`}
                   </td>
+                  {/* Cell for cell against the header, in header order. The
+                      four BenchmarkStats carries land in their own columns and
+                      everything else is an em dash. This row used to emit five
+                      cells too few, which did not leave the row short — it
+                      slid every value left, printing max drawdown under Calmar
+                      and annual return under Max DD %. A number under the
+                      wrong label is worse than no number. */}
                   <td className="num">{b.stats.sharpeRatio.toFixed(2)}</td>
-                  <td className="num">—</td>
+                  <td className="num">—</td>{/* Sortino */}
+                  {/* Calmar is annual return over worst decline, and the
+                      engine has a rule for the zero-drawdown case. Deriving it
+                      here would risk printing a figure that disagrees with the
+                      column it sits in. */}
+                  <td className="num">—</td>{/* Calmar */}
                   <td className="num">{b.stats.maxDrawdown.toFixed(2)}</td>
+                  <td className="num">—</td>{/* Underwater */}
                   <td className="num">{b.stats.annualReturn.toFixed(2)}</td>
                   <td className="num">{b.stats.standardDev.toFixed(4)}</td>
-                  <td className="num">—</td>
-                  <td className="num">—</td>
-                  <td className="num">—</td>
+                  <td className="num">—</td>{/* Turnover */}
+                  <td className="num">—</td>{/* Exposure % */}
+                  <td className="num">—</td>{/* Fund Cov % */}
+                  <td className="num">—</td>{/* In Market % */}
+                  <td className="num">—</td>{/* Avg Corr */}
+                  <td className="num">—</td>{/* Coint Pairs */}
                   {swept && (
                     <>
                       <td className="num">—</td>
