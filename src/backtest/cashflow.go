@@ -40,6 +40,10 @@ import (
 func (p *Portfolio) applyCashflow(
 	date time.Time, hist map[string][]data.AssetData, day int,
 ) float64 {
+	// Recorded every day, including the days nothing is due, so it is a
+	// statement about TODAY rather than a stale flag a strategy could act on
+	// twice. Strategies read it through PendingCashflow.
+	p.pendingCashflow = 0
 	if p.cashflowStep == 0 || date.Before(p.nextCashflow) {
 		return 0
 	}
@@ -54,6 +58,7 @@ func (p *Portfolio) applyCashflow(
 	if amount > 0 {
 		p.Deposit(amount)
 		p.Metrics.NetContributions += amount
+		p.pendingCashflow = amount
 		return amount
 	}
 
@@ -80,6 +85,7 @@ func (p *Portfolio) applyCashflow(
 	}
 	p.Withdraw(got)
 	p.Metrics.NetContributions -= got
+	p.pendingCashflow = -got
 	return -got
 }
 

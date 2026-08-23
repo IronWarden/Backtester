@@ -66,6 +66,10 @@ type Portfolio struct {
 	// walked past the end of the window — copying it would leave the clone
 	// never paying anything.
 	cashflowAnchor time.Time
+	// pendingCashflow is the signed amount the schedule moved TODAY, 0 on
+	// every other day. It exists so a strategy can put a contribution to work
+	// on the day it arrives; see Portfolio.PendingCashflow.
+	pendingCashflow float64
 
 	// CPI is the monthly deflator covering this run, loaded once by the runner
 	// and shared read-only across the worker pool. Nil when the database has
@@ -400,6 +404,18 @@ func (p *Portfolio) Buy(
 		lot{shares: amount, bought: time})
 	p.BuyingPower -= cost
 	p.tradedNotional += notional
+}
+
+// PendingCashflow is the signed amount a [portfolio.Cashflow] schedule moved
+// at the top of today, and 0 on any day it moved nothing.
+//
+// A strategy that wants to put contributions to work reads this rather than
+// watching the cash balance: a balance can be high for reasons that have
+// nothing to do with a deposit — a sale, a dividend, a strategy that
+// deliberately holds cash — and buying on that would be a different strategy
+// from the one the user asked for.
+func (p *Portfolio) PendingCashflow() float64 {
+	return p.pendingCashflow
 }
 
 // DrawdownSeries is the value series drawdowns should be measured on.

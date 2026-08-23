@@ -957,12 +957,26 @@ withdrawals negative. **It is not profit.** Contributing £500 a month for ten
 years grows the account by £60,000 that was never a gain, so profit is
 `FinalValue − BuyingPower − NetContributions`.
 
-#### Buy-and-hold will not spend the money
+#### Contributions are invested on the day they arrive
 
-`buyAndHold` buys once, on the first day, and never acts again. With a
-contribution schedule and no strategy that reinvests, **the deposits accumulate
-as cash** and drag the return down. Use a strategy that trades on an ongoing
-basis, or expect the cash to sit there.
+`buyAndHold` normally buys once on the first day and never acts again, which
+would have left every deposit sitting as idle cash — 37.5% of the book, in a
+six-deposit test — and made the feature useless in the strategy the Backtest
+tab generates by default. It now puts each contribution to work on the day it
+lands, at the same weights the opening purchase used.
+
+Only the **new** money is spent. A cash balance can be high for reasons that
+have nothing to do with a contribution — a forced sale to fund a withdrawal, a
+strategy deliberately holding cash — and sweeping all of it into the market
+would be a different strategy from the one you configured. Withdrawals are
+ignored here too: the pro-rata sale has already happened, and buying back into
+the position it just sold would defeat the point.
+
+Without a schedule nothing changes: buy-and-hold buys once and holds, exactly as
+before.
+
+Other built-ins deploy new cash whenever their own signal next fires. A Lua
+strategy can read the flow directly through the portfolio's pending cashflow.
 
 ### `Benchmark`
 

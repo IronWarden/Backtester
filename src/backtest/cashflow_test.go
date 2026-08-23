@@ -248,3 +248,76 @@ func TestAccumulatedMetricsSurviveTheRebuild(t *testing.T) {
 		}
 	}
 }
+
+// Hazard 4. Without this the default strategy never spends a contribution and
+// the whole feature looks broken to the people who asked for it.
+func TestBuyAndHoldInvestsContributions(t *testing.T) {
+	// Flat prices, so cash and stock are worth the same and any difference in
+	// the final book value is purely about whether the money was deployed.
+	closes := make([]float64, 200)
+	for i := range closes {
+		closes[i] = 100
+	}
+	hist := histFrom(map[string][]float64{"AAA": closes, "BBB": closes})
+
+	pc := PortfolioConfig{
+		Name: "contrib", BuyingPower: 10000,
+		StartTime: exactEpoch.Format("2006-01-02"),
+		EndTime:   exactEpoch.AddDate(0, 0, 200).Format("2006-01-02"),
+		Tickers:   []string{"AAA", "BBB"}, Strategy: "buyAndHold:equalWeights",
+		Cashflow: CashflowConfig{Amount: 1000, Frequency: "monthly"},
+	}
+	p, err := pc.ToPortfolio()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runOne(p, hist, map[int64]float64{})
+
+	if p.Metrics.NetContributions <= 0 {
+		t.Fatal("no contributions were made")
+	}
+	// Nearly all of it should be invested: what is left in cash is the
+	// rounding each leg leaves behind, not six months of deposits.
+	invested := 0.0
+	for _, ticker := range p.Tickers {
+		if pos, ok := p.Positions[ticker]; ok {
+			invested += pos.Amount * 100
+		}
+	}
+	total := invested + p.BuyingPower
+	if invested/total < 0.99 {
+		t.Errorf("only %.1f%% of the book is invested — contributions are "+
+			"piling up as cash (%.2f idle of %.2f)",
+			100*invested/total, p.BuyingPower, total)
+	}
+	// Both legs must grow, not just the first: equal weights means equal
+	// weights for new money too.
+	a, b := p.Positions["AAA"].Amount, p.Positions["BBB"].Amount
+	if math.Abs(a-b)/a > 0.01 {
+		t.Errorf("legs diverged: AAA %.2f vs BBB %.2f — the contribution is "+
+			"not being split at the configured weights", a, b)
+	}
+}
+
+// And the guarantee that protects everyone else: without a schedule,
+// buy-and-hold behaves exactly as it always did.
+func TestBuyAndHoldUnchangedWithoutASchedule(t *testing.T) {
+	closes := make([]float64, 200)
+	for i := range closes {
+		closes[i] = 100 * math.Pow(1.001, float64(i))
+	}
+	hist := histFrom(map[string][]float64{"AAA": closes, "BBB": closes})
+
+	p, err := InitializePortfolio(10000, exactEpoch, exactEpoch.AddDate(0, 0, 200),
+		"plain", []string{"AAA", "BBB"}, "buyAndHold:equalWeights", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runOne(p, hist, map[int64]float64{})
+
+	// One buy per ticker on day zero and nothing after.
+	if n := len(p.Trades); n != 2 {
+		t.Errorf("%d trades without a cashflow schedule, want 2 — buy-and-hold "+
+			"must still buy once and hold", n)
+	}
+}

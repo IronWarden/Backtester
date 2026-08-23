@@ -2,6 +2,7 @@ package backtest
 
 import (
 	"fmt"
+	"math"
 	"my-backtester/src/data"
 	"sort"
 	"strconv"
@@ -173,10 +174,22 @@ type BuyAndHold struct {
 
 func (s *BuyAndHold) Name() string { return "buyAndHold:" + s.BuyType }
 
+// Step buys the whole book on the first day and then holds — except that a
+// portfolio with a [portfolio.Cashflow] schedule keeps receiving money, and
+// "buy and hold" to someone contributing every month means "hold, and keep
+// buying". Without this the deposits would simply pile up as cash forever in
+// the DEFAULT strategy, which is what the Backtest tab generates unless a
+// library script is picked, and the feature would look broken to precisely the
+// people who asked for it.
+//
+// Nothing changes for a portfolio without a schedule: PendingCashflow is 0 on
+// every day, so the day != 0 branch returns exactly as it always did and every
+// existing result is bit-identical.
 func (s *BuyAndHold) Step(
 	p *Portfolio, hist map[string][]data.AssetData, day int,
 ) {
 	if day != 0 {
+		s.investContribution(p, hist, day)
 		return
 	}
 	// equalWeights sizes every leg against the balance as it stood before any
@@ -199,6 +212,52 @@ func (s *BuyAndHold) Step(
 		}
 		amount := generalBuy(available, price, s.BuyType, p.Tickers, p.Costs)
 		p.Buy(ticker, amount, price, td[0].Date)
+	}
+}
+
+// investContribution puts a deposit to work on the day it arrives, at the same
+// weights the opening purchase used.
+//
+// Only the NEW money is spent, not the whole cash balance. A balance can be
+// high for reasons that have nothing to do with a contribution — a forced sale
+// to fund a withdrawal, a strategy deliberately holding cash — and sweeping all
+// of it into the market would be a different strategy from the one the user
+// configured.
+//
+// Withdrawals are ignored here: raiseCash has already sold pro-rata to fund
+// them, and buying back into the position it just sold would defeat the point.
+func (s *BuyAndHold) investContribution(
+	p *Portfolio, hist map[string][]data.AssetData, day int,
+) {
+	cash := p.PendingCashflow()
+	if cash <= 0 {
+		return
+	}
+	// Sized against the contribution as it stood before any leg filled, for
+	// the same reason the opening purchase is: reading the live balance would
+	// shrink each leg in turn and strand a fraction of the money in cash.
+	budget := cash
+	for _, ticker := range p.Tickers {
+		td := hist[ticker]
+		if day >= len(td) {
+			continue
+		}
+		price := td[day].Close
+		if price <= 0 {
+			continue
+		}
+		available := budget
+		if s.BuyType == "greedy" {
+			// greedy pours what is left into each ticker in order, so it must
+			// keep reading the live figure — but capped at the contribution,
+			// so it cannot reach into cash the schedule did not provide.
+			available = math.Min(cash, p.BuyingPower)
+		}
+		amount := generalBuy(available, price, s.BuyType, p.Tickers, p.Costs)
+		if amount <= 0 {
+			continue
+		}
+		p.Buy(ticker, amount, price, td[day].Date)
 	}
 }
 

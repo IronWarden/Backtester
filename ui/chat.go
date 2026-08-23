@@ -432,8 +432,10 @@ baseline is raised by the flow, so Sharpe, CAGR and every other ratio still
 answer "how did the strategy do" rather than "how much did the account grow".
 A withdrawal larger than cash SELLS holdings pro-rata to fund itself; one that
 cannot be funded even after liquidating everything increments
-WithdrawalsMissed. Note buy-and-hold buys once on day one and never again, so
-without a strategy that reinvests, contributions accumulate as cash.
+WithdrawalsMissed. buyAndHold INVESTS each contribution on the day it arrives,
+at the same weights it opened with -- it does not just sit on the cash -- but
+only the new money, not the whole balance. Other built-ins deploy new cash when
+their own signal next fires.
 
 THE TICKER PICKER SHOWS COMPANY NAMES. Typing in the holdings box searches
 symbols AND company names and shows both, so a user can find AAPL by typing
