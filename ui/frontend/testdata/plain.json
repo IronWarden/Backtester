@@ -8,6 +8,8 @@
       "maxDrawdown": 1.25,
       "annualReturn": 1.25,
       "realAnnualReturn": 1.25,
+      "netContributions": 1.25,
+      "withdrawalsMissed": 7,
       "standardDev": 1.25,
       "avgCorrelation": 1.25,
       "cointegratedPairs": 7,

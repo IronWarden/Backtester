@@ -15,5 +15,8 @@
     "9988.HK": 20
   },
   "benchmark": "$SP500",
-  "strategy": ""
+  "strategy": "",
+  "cashflowDirection": "deposit",
+  "cashflowAmount": 0,
+  "cashflowFrequency": "never"
 }

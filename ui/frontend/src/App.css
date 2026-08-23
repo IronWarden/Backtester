@@ -274,6 +274,19 @@ button.primary:hover:not(:disabled),
   border-color: var(--neg);
 }
 
+/* Deposit/Withdraw, amount, frequency: one row that wraps rather than
+   overflowing a narrow window. The money field is the same control as Starting
+   capital directly above it, deliberately — one way to type money into this
+   form, not two. */
+.simple-form .cashflow-row {
+  margin-top: 0.2em;
+}
+
+.simple-form .cashflow-row .money-field {
+  flex: 0 1 9em;
+  min-width: 0;
+}
+
 .simple-form .add-portfolio {
   grid-column: 1 / -1;
   align-items: center;

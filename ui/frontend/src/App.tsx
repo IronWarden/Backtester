@@ -151,6 +151,11 @@ function App() {
             // beat the market?" unanswerable, which is the question simple mode
             // exists to answer.
             benchmark: "$SP500",
+            // "never" emits no [portfolio.Cashflow] block at all, so an
+            // untouched form generates exactly the config it always did.
+            cashflowDirection: "deposit",
+            cashflowAmount: 0,
+            cashflowFrequency: "never",
         },
     ]);
     // One per RUN, not one per portfolio: the engine registers a single claim

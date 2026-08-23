@@ -437,6 +437,12 @@ at the same weights it opened with -- it does not just sit on the cash -- but
 only the new money, not the whole balance. Other built-ins deploy new cash when
 their own signal next fires.
 
+THE BACKTEST TAB CAN WRITE A CASHFLOW SCHEDULE. The Portfolio card has a
+Deposit/Withdraw dropdown, an amount and a frequency (Never/Monthly/Quarterly/
+Annually). Never is the default and emits no block. It is per portfolio, so
+lump-sum vs monthly-contributions is a two-card comparison. A user does not
+need the Config tab for this.
+
 THE TICKER PICKER SHOWS COMPANY NAMES. Typing in the holdings box searches
 symbols AND company names and shows both, so a user can find AAPL by typing
 "apple". Names come from the optional company_profile table plus built-in

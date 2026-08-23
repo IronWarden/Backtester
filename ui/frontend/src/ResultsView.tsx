@@ -106,10 +106,29 @@ function hasBenchmark(results: main.RunResult[]): boolean {
   );
 }
 
+// Money the user put in is not money the strategy made. Contributing 500 a
+// month for ten years grows the account by 60,000 that was never a gain, so
+// the deposits are netted out — otherwise the Profit column reports the
+// paying-in as performance. Zero without a [portfolio.Cashflow] schedule, so
+// this is the old expression for every run that has none.
+//
+// The percentage stays against the starting capital rather than against
+// capital-plus-contributions: a money-weighted figure is a different question
+// (what did MY money earn) and answering it halfway here would be worse than
+// not answering it.
 function profit(r: main.RunResult): { abs: number; pct: number } | null {
   if (!r.initialCapital) return null;
-  const abs = r.finalValue - r.initialCapital;
+  const abs = r.finalValue - r.initialCapital - (r.netContributions ?? 0);
   return { abs, pct: (abs / r.initialCapital) * 100 };
+}
+
+// Whether any portfolio in this run had a cashflow schedule. The columns it
+// governs are blank for everyone else, and a wall of zeros is worse than no
+// column — the same rule the sweep and benchmark column groups follow.
+function hasCashflows(results: main.RunResult[]): boolean {
+  return results.some(
+    (r) => (r.netContributions ?? 0) !== 0 || (r.withdrawalsMissed ?? 0) > 0,
+  );
 }
 
 // Round tick values: pick a 1/2/2.5/5×10^n step and emit the multiples that
@@ -605,6 +624,8 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
   const tipOnLeft = hover !== null && hover.px > width * 0.62;
 
   const benchmarked = hasBenchmark(results);
+
+  const contributing = hasCashflows(results);
   // Only meaningful when something was actually searched: a single untried
   // portfolio has no selection bias to correct for, and showing a bar of 0.00
   // next to it would imply otherwise.
@@ -847,6 +868,22 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                 </th>
                 <th className="num">Avg Corr</th>
                 <th className="num">Coint Pairs</th>
+                {contributing && (
+                  <>
+                    <th
+                      className="num"
+                      title="Net money paid in by the [portfolio.Cashflow] schedule — deposits positive, withdrawals negative. Already subtracted from Profit."
+                    >
+                      Contributed
+                    </th>
+                    <th
+                      className="num"
+                      title="Scheduled withdrawals that could not be funded even after selling everything. Non-zero means the portfolio ran out of money."
+                    >
+                      Missed W/D
+                    </th>
+                  </>
+                )}
                 {swept && (
                   <>
                     <th className="num">Trials</th>
@@ -908,6 +945,17 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                     <td className="num">{r.timeInMarket.toFixed(1)}</td>
                     <td className="num">{r.avgCorrelation.toFixed(2)}</td>
                     <td className="num">{r.cointegratedPairs}</td>
+                    {contributing && (
+                      <>
+                        <td className="num">{fmtDollars(r.netContributions ?? 0)}</td>
+                        {/* A missed withdrawal is not a statistic, it is the
+                            result: the plan ran out of money. Coloured as the
+                            negative it is. */}
+                        <td className={`num ${(r.withdrawalsMissed ?? 0) > 0 ? "neg" : ""}`}>
+                          {r.withdrawalsMissed ?? 0}
+                        </td>
+                      </>
+                    )}
                     {swept && (
                       <>
                         <td className="num">{r.trials}</td>
@@ -977,6 +1025,12 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   <td className="num">—</td>{/* In Market % */}
                   <td className="num">—</td>{/* Avg Corr */}
                   <td className="num">—</td>{/* Coint Pairs */}
+                  {contributing && (
+                    <>
+                      <td className="num">—</td>{/* Contributed */}
+                      <td className="num">—</td>{/* Missed W/D */}
+                    </>
+                  )}
                   {swept && (
                     <>
                       <td className="num">—</td>

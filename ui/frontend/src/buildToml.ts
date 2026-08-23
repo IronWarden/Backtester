@@ -18,6 +18,17 @@ export const STARTER_SCRIPT = "example.lua";
 // reconstructed total-return series that reach back to 1927, so neither
 // constrains a realistic window at the start — only at the end, where they
 // currently stop earlier than the priced tickers do.
+export type CashflowFrequency = "never" | "monthly" | "quarterly" | "annually";
+
+// Labelled for the dropdown. "Never" is first because it is the default and
+// doubles as the off switch, so no separate checkbox is needed.
+export const CASHFLOW_FREQUENCIES: { value: CashflowFrequency; label: string }[] = [
+  { value: "never", label: "Never" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "annually", label: "Annually" },
+];
+
 export const BENCHMARKS: { value: string; label: string }[] = [
   { value: "$SP500", label: "S&P 500" },
   { value: "$USTOT", label: "Total US market" },
@@ -42,6 +53,15 @@ export type SimpleForm = {
   // "did this beat just buying the market?" is the one a user actually has,
   // and leaving Benchmark unset makes it unanswerable. "" is no benchmark.
   benchmark: string;
+  // Recurring deposit or withdrawal. "never" is the default and emits no
+  // TOML at all, which is what keeps a form that has not touched this
+  // generating byte-identical output.
+  cashflowDirection: "deposit" | "withdraw";
+  // Always POSITIVE here; the direction above carries the sign. A currency
+  // field that means the opposite thing when you type a minus is a trap, and
+  // a mistyped sign turns a contribution plan into a decumulation one.
+  cashflowAmount: number;
+  cashflowFrequency: CashflowFrequency;
   // A script from the shipped library, as its bare file name ("rsi.lua").
   // EMPTY MEANS BUY-AND-HOLD — the original behaviour, and the reason an
   // untouched form still generates byte-identical TOML.
@@ -89,11 +109,25 @@ function portfolioBlock(form: SimpleForm): string[] {
     lines.push(`Benchmark = ${JSON.stringify(form.benchmark)}`);
   }
 
+  // Emitted only when a schedule is actually set: "never" must produce no
+  // block, so an untouched form generates exactly what it always did.
+  const cashflow: string[] = [];
+  if (form.cashflowFrequency && form.cashflowFrequency !== "never" && form.cashflowAmount > 0) {
+    const signed =
+      form.cashflowDirection === "withdraw" ? -form.cashflowAmount : form.cashflowAmount;
+    cashflow.push(
+      "",
+      "  [portfolio.Cashflow]",
+      `  Amount = ${toFloat(signed)}`,
+      `  Frequency = ${JSON.stringify(form.cashflowFrequency)}`,
+    );
+  }
+
   // A library pick sizes itself and reads its own defaults, so no Params
   // block is emitted and the allocation percentages are not consulted.
   if (form.strategy) {
     lines.push(`Strategy = "lua:${STRATEGY_DIR}/${form.strategy}"`);
-    return lines;
+    return lines.concat(cashflow);
   }
 
   if (form.evenSplit) {
@@ -106,7 +140,7 @@ function portfolioBlock(form: SimpleForm): string[] {
     lines.push(`Params = { weights = { ${entries} } }`);
   }
 
-  return lines;
+  return lines.concat(cashflow);
 }
 
 // The whole config: a header comment, then one block per portfolio.

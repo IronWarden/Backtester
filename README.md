@@ -2061,6 +2061,27 @@ card would invent a concept the engine does not have.
 
 A single portfolio generates byte-for-byte the config it always did.
 
+### Recurring contributions, on the form
+
+The **Portfolio** card carries a *Deposit / Withdraw* dropdown, an amount, and a
+frequency (Never / Monthly / Quarterly / Annually). **Never** is the default and
+emits no `[portfolio.Cashflow]` block at all, so a form you have not touched
+generates exactly the config it always did — which is also why there is no
+separate enable checkbox.
+
+Direction is a dropdown rather than a minus sign. The TOML field is a signed
+`Amount`, but a currency box that means the opposite thing when you type `-` is
+a trap, and a mistyped sign turns a contribution plan into a decumulation one.
+
+A line under the row says what it means in words — *"$500 added on the first
+trading day of each month, beginning one month after 2015-06-01"* — because
+"monthly" hides both the first-trading-day-on-or-after rule and the one-period
+delay, and those are exactly what someone reconciling against a spreadsheet
+will trip on.
+
+It is **per portfolio**, so lump-sum against monthly-contributions is a
+two-card comparison on one chart.
+
 ### The ticker picker knows what a symbol is
 
 Typing in the holdings box searches **symbols and company names** and shows

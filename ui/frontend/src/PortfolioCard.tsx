@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { backtest } from "../wailsjs/go/models";
 import {
     BENCHMARKS,
+    CASHFLOW_FREQUENCIES,
     STRATEGY_DIR,
     usesAllocations,
 } from "./buildToml";
@@ -192,6 +193,23 @@ export default function PortfolioCard({
 
     // Preset chips need a known data window (i.e. at least one ticker chosen
     // and its ranges loaded) to snap the dates to.
+    // Named in plain words, with the real start date: "monthly" hides the
+    // first-trading-day-on-or-after rule, and that is exactly the detail
+    // someone reconciling against a spreadsheet will trip on. It also states
+    // the one-period delay, which surprises people otherwise.
+    const cashflowNote = useMemo(() => {
+        if (form.cashflowFrequency === "never") return "";
+        if (form.cashflowAmount <= 0) {
+            return "Set an amount, or leave the frequency on Never — as it stands nothing is scheduled.";
+        }
+        const verb = form.cashflowDirection === "withdraw" ? "taken out" : "added";
+        const every = { monthly: "month", quarterly: "quarter", annually: "year" }[
+            form.cashflowFrequency
+        ];
+        const start = form.startDate || "the start date";
+        return `$${formatMoney(form.cashflowAmount)} ${verb} on the first trading day of each ${every}, beginning one ${every} after ${start}. The opening capital is already invested, so the first one lands a ${every} in.`;
+    }, [form.cashflowFrequency, form.cashflowAmount, form.cashflowDirection, form.startDate]);
+
     const presetsReady =
         !!coverage &&
         !!coverage.start &&
@@ -242,6 +260,57 @@ export default function PortfolioCard({
                         </div>
                     </label>
                 </div>
+
+                {/* Direction is a dropdown rather than a minus sign. The TOML
+                    field is a signed Amount, but a currency box that means the
+                    opposite thing when you type "-" is a trap, and a mistyped
+                    sign turns a contribution plan into a decumulation one.
+                    "Never" is the default and emits no config at all, which is
+                    also why there is no enable checkbox. */}
+                <div className="criterion-row cashflow-row">
+                    <select
+                        aria-label="Deposit or withdraw"
+                        value={form.cashflowDirection}
+                        onChange={(e) =>
+                            patch({
+                                cashflowDirection: e.target.value as Form["cashflowDirection"],
+                            })
+                        }
+                    >
+                        <option value="deposit">Deposit</option>
+                        <option value="withdraw">Withdraw</option>
+                    </select>
+                    <div className="money-field">
+                        <span className="money-sign">$</span>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="500"
+                            aria-label="Recurring amount"
+                            value={formatMoney(form.cashflowAmount)}
+                            onChange={(e) => {
+                                const digits = e.target.value.replace(/[^0-9]/g, "");
+                                patch({ cashflowAmount: digits ? Number(digits) : 0 });
+                            }}
+                        />
+                    </div>
+                    <select
+                        aria-label="How often"
+                        value={form.cashflowFrequency}
+                        onChange={(e) =>
+                            patch({
+                                cashflowFrequency: e.target.value as Form["cashflowFrequency"],
+                            })
+                        }
+                    >
+                        {CASHFLOW_FREQUENCIES.map((f) => (
+                            <option key={f.value} value={f.value}>
+                                {f.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                {cashflowNote && <div className="hint">{cashflowNote}</div>}
             </section>
 
             <section className="form-card">

@@ -67,6 +67,27 @@ const hypothesis: HypothesisForm = JSON.parse(
 
 console.log("frontend smoke render");
 
+// Money paid in is not money the strategy made. Without netting it out, the
+// Profit column reports a decade of contributions as performance.
+check("profit excludes contributions", () => {
+    const { results, verdicts } = load("full");
+    const base = results[0] as main.RunResult;
+    const render = (netContributions: number) =>
+        renderToString(
+            <ResultsView
+                results={[main.RunResult.createFrom({ ...base, netContributions })]}
+                fontSize={16}
+                verdicts={verdicts}
+            />,
+        );
+    if (render(0) === render(50000)) {
+        throw new Error(
+            "50,000 of contributions changed nothing on screen — the Profit " +
+                "column is counting deposits as gains",
+        );
+    }
+});
+
 // RealAnnualReturn uses 0 as "CPI does not cover this window", which is a
 // different claim from "real growth was zero". Rendering it as 0.00 would be a
 // number the engine never asserted.
@@ -349,6 +370,41 @@ check("readStoredNumber rejects what Number() would accept", () => {
     // Number(null) is 0 and Number("") is 0, so a missing key has to be
     // rejected before the numeric check rather than by it.
     eq("missing", readStoredNumber("nope", 16, (n) => n >= 10), 16);
+});
+
+// The cashflow block, and above all its SIGN. The form carries a positive
+// amount plus a direction; getting the sign wrong turns a contribution plan
+// into a decumulation one, which is a completely different backtest.
+check("a cashflow schedule emits a correctly signed block", () => {
+    const none = buildToml([form]);
+    if (none.includes("Cashflow")) {
+        throw new Error("frequency 'never' emitted a block; it must emit nothing");
+    }
+
+    const dep = buildToml([
+        { ...form, cashflowFrequency: "monthly", cashflowAmount: 500, cashflowDirection: "deposit" },
+    ]);
+    if (!dep.includes("[portfolio.Cashflow]") || !dep.includes("Amount = 500.0")) {
+        throw new Error("deposit did not emit a positive Amount:\n" + dep);
+    }
+    if (!dep.includes('Frequency = "monthly"')) {
+        throw new Error("frequency missing:\n" + dep);
+    }
+
+    const wd = buildToml([
+        { ...form, cashflowFrequency: "annually", cashflowAmount: 500, cashflowDirection: "withdraw" },
+    ]);
+    if (!wd.includes("Amount = -500.0")) {
+        throw new Error("withdraw did not negate the amount:\n" + wd);
+    }
+
+    // An amount with no frequency, and a frequency with no amount, both do
+    // nothing rather than emitting a half-schedule the engine would refuse.
+    const halfA = buildToml([{ ...form, cashflowAmount: 500 }]);
+    const halfB = buildToml([{ ...form, cashflowFrequency: "monthly" }]);
+    if (halfA.includes("Cashflow") || halfB.includes("Cashflow")) {
+        throw new Error("a half-filled schedule emitted a block");
+    }
 });
 
 // Multi-portfolio gating. A run carries every portfolio, so one bad card has
