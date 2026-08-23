@@ -32,7 +32,10 @@ import {
 } from "../wailsjs/go/main/App";
 import { backtest, main } from "../wailsjs/go/models";
 import SimpleForm from "./SimpleForm";
-import type { SimpleForm as SimpleFormData } from "./buildToml";
+import type {
+    SimpleForm as SimpleFormData,
+    HypothesisForm as HypothesisFormData,
+} from "./buildToml";
 import ResultsView from "./ResultsView";
 import ErrorBoundary from "./ErrorBoundary";
 import ConsolePanel from "./ConsolePanel";
@@ -129,24 +132,37 @@ function App() {
     const [resultsHeight, setResultsHeight] = useState<number>(240);
     // Simple-mode form data lives here (not inside SimpleForm) so it survives
     // running a backtest and round-tripping through the Advanced editor.
-    const [simpleForm, setSimpleForm] = useState<SimpleFormData>({
-        name: "Buy and Hold",
-        buyingPower: 100000,
-        startDate: "2020-01-01",
-        endDate: today,
-        tickers: [],
-        evenSplit: true,
-        allocations: {},
-        // Empty is buy-and-hold, so an untouched form behaves exactly as it
-        // did before the picker existed.
-        strategy: "",
-        // Deliberately NOT a zero value: an unset Benchmark leaves "did this
-        // beat the market?" unanswerable, which is the question simple mode
-        // exists to answer.
-        benchmark: "$SP500",
-        // Empty claim = not pre-registered = the run is not judged. A
-        // default criterion would be judging against a bar nobody chose.
-        hypothesis: { claim: "", metric: "sharpe", op: ">=", value: "" },
+    // A LIST since the Backtest tab learned to run several portfolios at once.
+    // It opens with exactly one, so an untouched app generates exactly the
+    // config it generated before.
+    const [simpleForms, setSimpleForms] = useState<SimpleFormData[]>([
+        {
+            name: "Buy and Hold",
+            buyingPower: 100000,
+            startDate: "2020-01-01",
+            endDate: today,
+            tickers: [],
+            evenSplit: true,
+            allocations: {},
+            // Empty is buy-and-hold, so an untouched form behaves exactly as it
+            // did before the picker existed.
+            strategy: "",
+            // Deliberately NOT a zero value: an unset Benchmark leaves "did this
+            // beat the market?" unanswerable, which is the question simple mode
+            // exists to answer.
+            benchmark: "$SP500",
+        },
+    ]);
+    // One per RUN, not one per portfolio: the engine registers a single claim
+    // and judges every result against it, so a box per card would invent a
+    // concept the engine does not have. Empty claim = not pre-registered = the
+    // run is not judged; a default criterion would be judging against a bar
+    // nobody chose.
+    const [simpleHypothesis, setSimpleHypothesis] = useState<HypothesisFormData>({
+        claim: "",
+        metric: "sharpe",
+        op: ">=",
+        value: "",
     });
 
     // Drag the handle between editor and results to resize. The pointer moves in
@@ -510,8 +526,10 @@ function App() {
                     <SimpleForm
                         dbPath={dbPath}
                         running={running}
-                        form={simpleForm}
-                        onChange={setSimpleForm}
+                        forms={simpleForms}
+                        onChange={setSimpleForms}
+                        hypothesis={simpleHypothesis}
+                        onHypothesisChange={setSimpleHypothesis}
                         onRun={(cfg, hyp) => runConfig(cfg, false, hyp)}
                         onOpenAssistant={() => setChatOpen(true)}
                         onEditAsToml={(cfg, hyp) => {

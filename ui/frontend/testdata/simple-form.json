@@ -3,10 +3,17 @@
   "buyingPower": 10000,
   "startDate": "2015-05-26",
   "endDate": "2025-05-26",
-  "tickers": ["AAPL", "MSFT", "9988.HK"],
+  "tickers": [
+    "AAPL",
+    "MSFT",
+    "9988.HK"
+  ],
   "evenSplit": false,
-  "allocations": { "AAPL": 50, "MSFT": 30, "9988.HK": 20 },
+  "allocations": {
+    "AAPL": 50,
+    "MSFT": 30,
+    "9988.HK": 20
+  },
   "benchmark": "$SP500",
-  "hypothesis": { "claim": "", "metric": "AnnualReturn", "op": ">=", "value": "10" },
   "strategy": ""
 }

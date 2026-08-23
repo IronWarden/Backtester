@@ -409,6 +409,15 @@ whole comparison. The Backtest tab's presets snap to the earlier end and warn ab
 hand-typed one; a config you write by hand has no such guard, so check the
 benchmark's coverage with query_db before proposing a window.
 
+THE BACKTEST TAB RUNS SEVERAL PORTFOLIOS AT ONCE. "+ Add portfolio" appends a
+card and the run carries all of them -- one [[Portfolio]] block each, one line
+per portfolio on the chart, one row each in the table. Do NOT tell a user they
+have to switch to Config to compare two ideas; that was true until 2026-08-23
+and is not any more. Each card has its own tickers, dates, strategy and
+benchmark. Run is disabled until EVERY portfolio is runnable, and two
+portfolios may not share a Name. The pre-registered hypothesis is one per RUN,
+judged against every result -- there is no per-portfolio hypothesis.
+
 THE TICKER PICKER SHOWS COMPANY NAMES. Typing in the holdings box searches
 symbols AND company names and shows both, so a user can find AAPL by typing
 "apple". Names come from the optional company_profile table plus built-in
@@ -1761,6 +1770,11 @@ total US market.
   benchmark metrics unless it covers every trading day in the window, and the
   $-series end earlier than the priced tickers. Check coverage before
   proposing a window with a Benchmark in it.
+- The Backtest tab holds SEVERAL portfolios ("+ Add portfolio"): one
+  [[Portfolio]] block each, all in one run, compared on one chart. Comparing
+  two ideas no longer needs the Config tab. Names must be unique; Run waits
+  until every portfolio is valid; the hypothesis is one per run, not per
+  portfolio.
 - The Backtest tab's ticker box searches company NAMES as well as symbols
   ("apple" finds AAPL) and shows the name beside each holding. Names come from
   the optional company_profile table; ~5,600 of the priced symbols have one, so

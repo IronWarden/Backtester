@@ -1936,6 +1936,29 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### Several portfolios in one run
+
+**+ Add portfolio** appends another card, and the run carries all of them: one
+`[[Portfolio]]` block each, one line per portfolio on the equity chart, one row
+each in the metrics table. That is what makes a result a comparison rather than
+a number — and the runner and results view have always supported it. Until now
+the form emitted exactly one block, so the only way to compare two ideas was to
+hand-write TOML, which is a strange thing to ask of the tab the app opens on.
+
+A new portfolio inherits the previous one's window and starting capital (two
+portfolios over different date ranges are not a comparison) with no holdings
+and a fresh name. Each card carries its own tickers, dates, strategy, benchmark
+and coverage verdict. **Run is enabled only when every portfolio is runnable** —
+a run carries all of them, so one broken card stops the run rather than quietly
+contributing a bad block — and **two portfolios may not share a name**, because
+the name is how every result, trade and verdict is labelled.
+
+The pre-registered hypothesis stays **one per run**, not one per portfolio: the
+engine registers a single claim and judges every result against it, so a box per
+card would invent a concept the engine does not have.
+
+A single portfolio generates byte-for-byte the config it always did.
+
 ### The ticker picker knows what a symbol is
 
 Typing in the holdings box searches **symbols and company names** and shows

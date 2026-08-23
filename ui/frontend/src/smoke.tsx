@@ -23,6 +23,7 @@ import ConsolePanel from "./ConsolePanel";
 import SimpleFormView from "./SimpleForm";
 import { buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
+import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { backtest, main } from "../wailsjs/go/models";
 
@@ -87,18 +88,26 @@ for (const name of ["full", "plain", "no-curve", "empty"]) {
 // lookup is empty. A component that throws on empty data is the failure mode
 // this catches.
 const noop = () => {};
-for (const [label, f] of [
-    ["empty", { ...form, tickers: [], allocations: {} }],
-    ["populated", form],
-] as [string, SimpleForm][]) {
+const emptyHypothesis: HypothesisForm = { claim: "", metric: "sharpe", op: ">=", value: "" };
+for (const [label, fs] of [
+    ["one empty portfolio", [{ ...form, tickers: [], allocations: {} }]],
+    ["one populated portfolio", [form]],
+    // The multi-portfolio path: a second card, and a Remove button that only
+    // exists once there is more than one.
+    ["three portfolios", [form, { ...form, name: "B" }, { ...form, name: "C" }]],
+    // Two blocks sharing a name is the state the form must refuse to run.
+    ["duplicate names", [form, { ...form }]],
+] as [string, SimpleForm[]][]) {
     check(`SimpleForm / ${label}`, () => {
         renderToString(
             <SimpleFormView
                 dbPath=""
                 running={false}
                 onOpenAssistant={noop}
-                form={f}
+                forms={fs}
                 onChange={noop}
+                hypothesis={emptyHypothesis}
+                onHypothesisChange={noop}
                 onRun={noop}
                 onEditAsToml={noop}
             />,
@@ -111,7 +120,7 @@ for (const [label, f] of [
 // the cheapest thing in the app to pin down, and it had no cover at all.
 check("buildToml matches the golden config", () => {
     const want = readFileSync(join(testdata, "golden.toml"), "utf8");
-    const got = buildToml(form);
+    const got = buildToml([form]);
     if (got !== want) {
         throw new Error(
             "generated TOML changed. If that was intended, refresh " +
@@ -123,6 +132,34 @@ check("buildToml matches the golden config", () => {
                 got,
         );
     }
+});
+
+// One portfolio must still emit byte-for-byte what it emitted before the tab
+// could hold several. golden.toml predates the multi-portfolio work and is not
+// regenerated with it, so this is a real guarantee rather than a restatement.
+check("buildToml emits one block per portfolio", () => {
+    const want = readFileSync(join(testdata, "golden-multi.toml"), "utf8");
+    const second: SimpleForm = {
+        ...form,
+        name: "Momentum",
+        tickers: ["NVDA", "AMD"],
+        evenSplit: true,
+        allocations: {},
+        strategy: "momentum.lua",
+    };
+    const got = buildToml([form, second]);
+    if (got !== want) {
+        throw new Error(
+            "multi-portfolio TOML changed:\n\n--- want\n" + want + "\n--- got\n" + got,
+        );
+    }
+    // The single-portfolio config is a prefix of nothing and a special case of
+    // nothing: it is just the same builder with a one-element list.
+    if (!buildToml([form, second]).includes("[[Portfolio]]")) {
+        throw new Error("no portfolio blocks emitted");
+    }
+    const blocks = (got.match(/\[\[Portfolio\]\]/g) ?? []).length;
+    if (blocks !== 2) throw new Error(`expected 2 [[Portfolio]] blocks, got ${blocks}`);
 });
 
 check("buildHypothesis matches the golden hypothesis", () => {
@@ -138,6 +175,41 @@ check("buildHypothesis matches the golden hypothesis", () => {
             "generated hypothesis changed:\n\n--- want\n" + want + "\n--- got\n" + got,
         );
     }
+});
+
+// Multi-portfolio gating. A run carries every portfolio, so one bad card has
+// to stop the whole run rather than quietly contributing a broken block.
+const RANGES = { AAPL: ["2000-01-03", "2026-08-07"], MSFT: ["2000-01-03", "2026-08-07"] };
+
+check("a portfolio with no holdings is not runnable", () => {
+    eq("empty", portfolioRunnable({ ...form, tickers: [], allocations: {} }, RANGES), false);
+});
+
+check("a portfolio outside its data window is not runnable", () => {
+    // evenSplit still carries real percentages -- addTicker fills them -- so
+    // an all-zero allocation table means "no weights", not "equal weights".
+    const ok = { ...form, tickers: ["AAPL"], evenSplit: true, allocations: { AAPL: 100 },
+        startDate: "2010-01-01", endDate: "2020-01-01" };
+    eq("inside", portfolioRunnable(ok, RANGES), true);
+    // Starts before AAPL has bars.
+    eq("before first bar", portfolioRunnable({ ...ok, startDate: "1990-01-01" }, RANGES), false);
+    // Ends after the last bar.
+    eq("past last bar", portfolioRunnable({ ...ok, endDate: "2030-01-01" }, RANGES), false);
+    // A symbol the database has never heard of.
+    eq("unknown symbol", portfolioRunnable({ ...ok, tickers: ["NOPE"] }, RANGES), false);
+    // A library strategy sizes its own positions, so a zero allocation table
+    // is not a reason to refuse it -- only the buy-and-hold path reads them.
+    eq("no weights, buy and hold", portfolioRunnable({ ...ok, allocations: {} }, RANGES), false);
+    eq("no weights, library strategy",
+        portfolioRunnable({ ...ok, allocations: {}, strategy: "momentum.lua" }, RANGES), true);
+});
+
+check("duplicate portfolio names are reported", () => {
+    eq("none", duplicateNames([form, { ...form, name: "B" }]), []);
+    eq("one pair", duplicateNames([form, { ...form }]), [form.name]);
+    // Reported once however many times it repeats, and blanks are not names.
+    eq("triple", duplicateNames([form, { ...form }, { ...form }]), [form.name]);
+    eq("blank", duplicateNames([{ ...form, name: "" }, { ...form, name: "  " }]), []);
 });
 
 // The ticker picker's ordering. This is the whole of what the company-name
@@ -184,7 +256,22 @@ check("ticker search caps and does not treat empty as no matches", () => {
 });
 
 if (process.env.SMOKE_UPDATE === "1") {
-    writeFileSync(join(testdata, "golden.toml"), buildToml(form));
+    // golden.toml is deliberately NOT rewritten here -- it is the pre-multi
+    // output and refreshing it would erase the guarantee it exists to hold.
+    writeFileSync(
+        join(testdata, "golden-multi.toml"),
+        buildToml([
+            form,
+            {
+                ...form,
+                name: "Momentum",
+                tickers: ["NVDA", "AMD"],
+                evenSplit: true,
+                allocations: {},
+                strategy: "momentum.lua",
+            },
+        ]),
+    );
     writeFileSync(
         join(testdata, "golden-hypothesis.toml"),
         buildHypothesis(hypothesis).replace(/^ID(\s*)= ".*"$/m, 'ID$1= "H-<generated>"'),

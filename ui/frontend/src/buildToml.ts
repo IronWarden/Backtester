@@ -42,10 +42,6 @@ export type SimpleForm = {
   // "did this beat just buying the market?" is the one a user actually has,
   // and leaving Benchmark unset makes it unanswerable. "" is no benchmark.
   benchmark: string;
-  // The pre-registered question, or an empty claim for "do not judge this
-  // run". Kept in the form so it survives a run and a mode switch, like
-  // everything else here.
-  hypothesis: HypothesisForm;
   // A script from the shipped library, as its bare file name ("rsi.lua").
   // EMPTY MEANS BUY-AND-HOLD — the original behaviour, and the reason an
   // untouched form still generates byte-identical TOML.
@@ -70,27 +66,15 @@ function tomlKey(k: string): string {
   return /^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(k);
 }
 
-export function buildToml(form: SimpleForm): string {
+// One [[Portfolio]] block. Shared by the single- and multi-portfolio paths so
+// they cannot drift: the whole point of the byte-identity guarantee is that
+// adding the second portfolio did not change what the first one emits.
+function portfolioBlock(form: SimpleForm): string[] {
   const tickerList = form.tickers.map((t) => JSON.stringify(t)).join(", ");
-  // The buy-and-hold wording is load-bearing: an untouched form has to
-  // generate exactly the config it generated before the picker existed.
-  // These name the Config tab, which T84 renamed from "Advanced". They are
-  // TOML COMMENTS, so nothing parses them and no number moves — but a
-  // generated file telling the user to click a button that no longer exists
-  // is worse than the byte-identity this line previously had.
-  const heading = form.strategy
-    ? "# Generated from the Backtest form. Switch to Config to edit this"
-    : "# Generated from the Backtest form. Switch to Config to edit this";
-  const heading2 = form.strategy
-    ? "# config directly, tune the strategy's parameters, or add more blocks."
-    : "# config directly or add more [[Portfolio]] blocks.";
   const fallbackName = form.strategy
     ? form.strategy.replace(/\.lua$/, "")
     : "Buy and Hold";
   const lines: string[] = [
-    heading,
-    heading2,
-    "",
     "[[Portfolio]]",
     `Name = ${JSON.stringify(form.name || fallbackName)}`,
     `BuyingPower = ${toFloat(form.buyingPower)}`,
@@ -109,7 +93,7 @@ export function buildToml(form: SimpleForm): string {
   // block is emitted and the allocation percentages are not consulted.
   if (form.strategy) {
     lines.push(`Strategy = "lua:${STRATEGY_DIR}/${form.strategy}"`);
-    return lines.join("\n") + "\n";
+    return lines;
   }
 
   if (form.evenSplit) {
@@ -122,6 +106,28 @@ export function buildToml(form: SimpleForm): string {
     lines.push(`Params = { weights = { ${entries} } }`);
   }
 
+  return lines;
+}
+
+// The whole config: a header comment, then one block per portfolio.
+//
+// A single-portfolio list must produce EXACTLY what this produced before the
+// tab could hold more than one -- the generated TOML is the input to every run
+// started from the form, so a stray blank line is a diff nobody asked for. The
+// smoke render pins both shapes against goldens.
+export function buildToml(forms: SimpleForm[]): string {
+  // These name the Config tab, which T84 renamed from "Advanced". They are
+  // TOML COMMENTS, so nothing parses them and no number moves.
+  const anyStrategy = forms.some((f) => f.strategy);
+  const heading = "# Generated from the Backtest form. Switch to Config to edit this";
+  const heading2 = anyStrategy
+    ? "# config directly, tune the strategy's parameters, or add more blocks."
+    : "# config directly or add more [[Portfolio]] blocks.";
+
+  const lines: string[] = [heading, heading2];
+  for (const form of forms) {
+    lines.push("", ...portfolioBlock(form));
+  }
   return lines.join("\n") + "\n";
 }
 

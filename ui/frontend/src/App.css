@@ -229,6 +229,63 @@ button.primary:hover:not(:disabled),
   min-width: 0;
 }
 
+/* A portfolio is a group of cards now, not a card. It spans the full width and
+   repeats the parent's grid inside itself, so the two-column layout the form
+   always had is unchanged within one portfolio while several portfolios stack
+   as distinct, labelled units rather than one long undifferentiated column. */
+.simple-form .portfolio-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(24em, 100%), 1fr));
+  gap: 1em;
+  padding: 0.9em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg-panel);
+}
+
+.simple-form .portfolio-card-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75em;
+  padding: 0 0.2em;
+}
+
+.simple-form .portfolio-card-name {
+  font-weight: 600;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simple-form .portfolio-remove {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  padding: 0.2em 0.7em;
+  font-size: 0.85em;
+}
+
+.simple-form .portfolio-remove:hover {
+  color: var(--neg);
+  border-color: var(--neg);
+}
+
+.simple-form .add-portfolio {
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0.9em;
+}
+
+.simple-form .add-portfolio .hint {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .form-card.wide,
 .simple-form .coverage-msg,
 .simple-form .actions {
