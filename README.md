@@ -1936,6 +1936,27 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### The ticker picker knows what a symbol is
+
+Typing in the holdings box searches **symbols and company names** and shows
+both, so `apple` finds `AAPL` and `AAPL` reads as "Apple Inc." rather than as
+four letters you have to already recognise. Matches rank symbol before name and
+prefix before substring, so `AA` still gives you `AA` and `AAPL` first. Arrow
+keys move, Enter takes the highlighted row (or whatever you typed, if none is),
+Escape closes. The names also sit beside each selected holding in the
+allocation list.
+
+Names come from `App.TickerNames`: the optional `company_profile` table
+(SEC EDGAR, loaded by `add_company_info.py`) plus built-in labels for the ten
+`$`-prefixed benchmark series, which are synthetic and have no filer behind
+them. **Both sources are optional and coverage is partial** — about 5,600 of
+the priced symbols have a name, because `company_tickers.json` lists only
+current filers. A database with no `company_profile` table shows bare symbols
+and works exactly as it did before. Symbols carrying a generation suffix
+(`COR.1`, from `split_recycled.py`) are deliberately left unnamed: that series
+is the symbol's *previous* occupant, a different company, and the current
+filer's name would be wrong rather than missing.
+
 **Strategy** is a picker fed by the shipped library's gallery headers
 (`App.ListStrategies` over `backtest.LoadGallery`). Choosing one shows what it
 does, what it needs to work, and — the useful part — how it fails, before the

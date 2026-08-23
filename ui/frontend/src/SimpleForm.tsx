@@ -3,9 +3,11 @@ import {
     CriterionMetrics,
     ListStrategies,
     ListTickers,
+    TickerNames,
     TickerDateRanges,
 } from "../wailsjs/go/main/App";
 import { backtest } from "../wailsjs/go/models";
+import { searchTickers } from "./tickerSearch";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import {
     BENCHMARKS,
@@ -167,6 +169,14 @@ export default function SimpleForm({
 }: Props) {
     const [tickerInput, setTickerInput] = useState("");
     const [available, setAvailable] = useState<string[]>([]);
+    // {"AAPL": "Apple Inc."} for every symbol we can name. Partial by nature
+    // -- see App.TickerNames -- so every read of it falls back to the symbol.
+    const [names, setNames] = useState<Record<string, string>>({});
+    // Which suggestion the keyboard is on, or -1 for "none: Enter takes what
+    // was typed". Reset whenever the query changes, because the list under it
+    // has changed.
+    const [highlight, setHighlight] = useState(-1);
+    const [pickerOpen, setPickerOpen] = useState(false);
     // Per-ticker [firstDate, lastDate], keyed by symbol, from the chosen DB.
     const [ranges, setRanges] = useState<Record<string, string[]>>({});
     // Bumped when the assistant's fetch_history tool writes new bars, so
@@ -234,15 +244,40 @@ export default function SimpleForm({
             .catch(() => {
                 if (!cancelled) setRanges({});
             });
+        // Optional: a database with no company_profile table simply leaves
+        // this empty and the picker shows bare symbols, as it always did.
+        TickerNames(dbPath)
+            .then((n) => {
+                if (!cancelled) setNames(n ?? {});
+            })
+            .catch(() => {
+                if (!cancelled) setNames({});
+            });
         return () => {
             cancelled = true;
         };
     }, [dbPath, dbVersion]);
 
+    // Ranked matches for what has been typed, best first, capped so the list
+    // stays a list rather than a scroll of ten thousand symbols.
+    //
+    // Symbol beats name, and a prefix beats a substring: someone typing "AA"
+    // wants AA and AAPL before "Alcoa" and before every company with "aa"
+    // buried in its name. Matching the name at all is the point of the
+    // feature -- "apple" has to find AAPL for a user who does not know the
+    // symbol, which is the whole reason they could not use this form.
     const suggestions = useMemo(() => {
         const sel = new Set(form.tickers);
-        return available.filter((t) => !sel.has(t));
-    }, [available, form.tickers]);
+        return searchTickers(
+            available.filter((t) => !sel.has(t)),
+            names,
+            tickerInput,
+        );
+    }, [available, names, form.tickers, tickerInput]);
+
+    // The symbol is the identity and the name is the gloss, so a missing name
+    // degrades to exactly the old display rather than to an empty cell.
+    const nameOf = (t: string) => names[t] ?? "";
 
     function addTicker(raw: string) {
         const t = raw.trim().toUpperCase();
@@ -253,6 +288,8 @@ export default function SimpleForm({
             : { ...form.allocations, [t]: form.allocations[t] ?? 0 };
         patch({ tickers, allocations });
         setTickerInput("");
+        setHighlight(-1);
+        setPickerOpen(false);
     }
 
     function removeTicker(t: string) {
@@ -605,26 +642,83 @@ export default function SimpleForm({
             <section className="form-card wide">
                 <h3 className="form-card-title">Holdings &amp; allocation</h3>
 
+                {/* A real listbox rather than a <datalist>: the company name
+                    is the whole point, and WebKit -- which is the only engine
+                    this app ever runs in -- does not reliably render a
+                    datalist option's label beside its value. Owning the list
+                    also means owning the ranking and the keyboard. */}
                 <div className="ticker-add">
-                    <input
-                        list="ticker-options"
-                        placeholder={
-                            dbPath ? "Type a symbol and press Enter" : "Choose a DB first"
-                        }
-                        value={tickerInput}
-                        onChange={(e) => setTickerInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                e.preventDefault();
-                                addTicker(tickerInput);
+                    <div className="ticker-combo">
+                        <input
+                            role="combobox"
+                            aria-expanded={pickerOpen && suggestions.length > 0}
+                            aria-controls="ticker-listbox"
+                            aria-autocomplete="list"
+                            placeholder={
+                                dbPath
+                                    ? "Symbol or company name"
+                                    : "Choose a DB first"
                             }
-                        }}
-                    />
-                    <datalist id="ticker-options">
-                        {suggestions.map((t) => (
-                            <option key={t} value={t} />
-                        ))}
-                    </datalist>
+                            value={tickerInput}
+                            onChange={(e) => {
+                                setTickerInput(e.target.value);
+                                setHighlight(-1);
+                                setPickerOpen(true);
+                            }}
+                            onFocus={() => setPickerOpen(true)}
+                            // A click lands before blur, so closing has to wait
+                            // one tick or the row unmounts before it is chosen.
+                            onBlur={() => setTimeout(() => setPickerOpen(false), 120)}
+                            onKeyDown={(e) => {
+                                const n = suggestions.length;
+                                if (e.key === "ArrowDown" && n > 0) {
+                                    e.preventDefault();
+                                    setPickerOpen(true);
+                                    setHighlight((h) => (h + 1) % n);
+                                } else if (e.key === "ArrowUp" && n > 0) {
+                                    e.preventDefault();
+                                    setPickerOpen(true);
+                                    setHighlight((h) => (h <= 0 ? n - 1 : h - 1));
+                                } else if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    // Nothing highlighted means take what was
+                                    // typed: a symbol the DB has not heard of
+                                    // is still worth attempting, and the
+                                    // coverage check below reports it properly.
+                                    addTicker(
+                                        highlight >= 0 && highlight < n
+                                            ? suggestions[highlight]
+                                            : tickerInput,
+                                    );
+                                } else if (e.key === "Escape") {
+                                    setPickerOpen(false);
+                                    setHighlight(-1);
+                                }
+                            }}
+                        />
+                        {pickerOpen && suggestions.length > 0 && (
+                            <ul className="ticker-listbox" id="ticker-listbox" role="listbox">
+                                {suggestions.map((t, i) => (
+                                    <li
+                                        key={t}
+                                        role="option"
+                                        aria-selected={i === highlight}
+                                        className={i === highlight ? "on" : undefined}
+                                        onMouseEnter={() => setHighlight(i)}
+                                        onMouseDown={(e) => {
+                                            // mousedown, not click: blur would
+                                            // otherwise close the list first.
+                                            e.preventDefault();
+                                            addTicker(t);
+                                        }}
+                                    >
+                                        <span className="opt-sym">{t}</span>
+                                        <span className="opt-name">{nameOf(t)}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                     <button onClick={() => addTicker(tickerInput)}>Add</button>
                 </div>
 
@@ -648,7 +742,14 @@ export default function SimpleForm({
                         </div>
                         {form.tickers.map((t) => (
                             <div className="alloc-row" key={t}>
-                                <span className="alloc-sym">{t}</span>
+                                <span className="alloc-sym">
+                                    {t}
+                                    {nameOf(t) && (
+                                        <span className="alloc-name" title={nameOf(t)}>
+                                            {nameOf(t)}
+                                        </span>
+                                    )}
+                                </span>
                                 <div className="alloc-pct">
                                     <input
                                         type="text"

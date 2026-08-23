@@ -70,6 +70,10 @@ export function TickerDateRanges(arg1) {
   return window['go']['main']['App']['TickerDateRanges'](arg1);
 }
 
+export function TickerNames(arg1) {
+  return window['go']['main']['App']['TickerNames'](arg1);
+}
+
 export function WriteFile(arg1, arg2) {
   return window['go']['main']['App']['WriteFile'](arg1, arg2);
 }

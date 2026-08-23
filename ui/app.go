@@ -378,6 +378,63 @@ func (a *App) ListTickers(dbPath string) ([]string, error) {
 	return data.ListTickers()
 }
 
+// benchmarkNames labels the $-prefixed synthetic series. They are built by
+// add_collections.py rather than filed with the SEC, so no company_profile row
+// will ever exist for them -- without this the picker would show the ten most
+// useful symbols in the database as bare tickers. Names match COLLECTIONS in
+// the loader.
+var benchmarkNames = map[string]string{
+	"$SP500": "S&P 500",
+	"$USTOT": "Total U.S. Market",
+	"$SP100": "S&P 100",
+	"$SP400": "S&P 400 MidCap",
+	"$SP600": "S&P 600 SmallCap",
+	"$RUS2K": "Russell 2000",
+	"$EXUS":  "Total ex-US Market",
+	"$EM":    "Emerging Markets",
+	"$WORLD": "Total World Market",
+	"$CASH":  "Cash (T-bill)",
+}
+
+// TickerNames returns {"SYMBOL": "Company Name"} for every symbol we can name,
+// so the picker can show what a ticker actually is instead of asking the user
+// to already know.
+//
+// Two sources, neither of them required: company_profile (SEC EDGAR, loaded by
+// add_company_info.py) and the benchmark labels above. company_profile is
+// optional -- LoadCompanyProfiles returns nil when the table is absent -- so a
+// database without it yields an empty map and the picker falls back to bare
+// symbols rather than failing.
+//
+// Coverage is partial by nature: company_tickers.json lists only CURRENT
+// filers, so delisted symbols have no row, and neither do the generation
+// suffixes split_recycled.py assigns (COR.1). That last one is deliberate --
+// a generation suffix is the symbol's PREVIOUS occupant, a different company,
+// and labelling it with the current filer's name would be a lie rather than a
+// gap.
+func (a *App) TickerNames(dbPath string) (map[string]string, error) {
+	if dbPath == "" {
+		return nil, fmt.Errorf("db path is empty")
+	}
+	if _, err := data.InitDB(dbPath); err != nil {
+		return nil, fmt.Errorf("open db %q: %w", dbPath, err)
+	}
+	profiles, err := data.LoadCompanyProfiles(nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(profiles)+len(benchmarkNames))
+	for sym, p := range profiles {
+		if p.Name != "" {
+			out[sym] = p.Name
+		}
+	}
+	for sym, name := range benchmarkNames {
+		out[sym] = name
+	}
+	return out, nil
+}
+
 // TickerDateRanges returns, for every ticker in the DB, the earliest and
 // latest date it has data for, as {"SYMBOL": ["YYYY-MM-DD", "YYYY-MM-DD"]}.
 // The simple-mode form uses these to constrain the date pickers to the span

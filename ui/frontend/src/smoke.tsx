@@ -20,7 +20,9 @@ import { join } from "node:path";
 
 import ResultsView from "./ResultsView";
 import ConsolePanel from "./ConsolePanel";
+import SimpleFormView from "./SimpleForm";
 import { buildToml, buildHypothesis } from "./buildToml";
+import { searchTickers } from "./tickerSearch";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { backtest, main } from "../wailsjs/go/models";
 
@@ -54,6 +56,13 @@ function load(name: string) {
     };
 }
 
+const form: SimpleForm = JSON.parse(
+    readFileSync(join(testdata, "simple-form.json"), "utf8"),
+);
+const hypothesis: HypothesisForm = JSON.parse(
+    readFileSync(join(testdata, "hypothesis-form.json"), "utf8"),
+);
+
 console.log("frontend smoke render");
 
 for (const name of ["full", "plain", "no-curve", "empty"]) {
@@ -72,16 +81,34 @@ for (const name of ["full", "plain", "no-curve", "empty"]) {
     });
 }
 
+// The Backtest tab itself. Its effects (ListTickers, TickerNames, the gallery)
+// do not run under SSR, so this renders the no-database state -- which is also
+// the state a new user opens the app in, and the one where every optional
+// lookup is empty. A component that throws on empty data is the failure mode
+// this catches.
+const noop = () => {};
+for (const [label, f] of [
+    ["empty", { ...form, tickers: [], allocations: {} }],
+    ["populated", form],
+] as [string, SimpleForm][]) {
+    check(`SimpleForm / ${label}`, () => {
+        renderToString(
+            <SimpleFormView
+                dbPath=""
+                running={false}
+                onOpenAssistant={noop}
+                form={f}
+                onChange={noop}
+                onRun={noop}
+                onEditAsToml={noop}
+            />,
+        );
+    });
+}
+
 // buildToml is what turns the Backtest tab into a config, so a change here
 // silently changes every run started from the form. Pure function, no DOM --
 // the cheapest thing in the app to pin down, and it had no cover at all.
-const form: SimpleForm = JSON.parse(
-    readFileSync(join(testdata, "simple-form.json"), "utf8"),
-);
-const hypothesis: HypothesisForm = JSON.parse(
-    readFileSync(join(testdata, "hypothesis-form.json"), "utf8"),
-);
-
 check("buildToml matches the golden config", () => {
     const want = readFileSync(join(testdata, "golden.toml"), "utf8");
     const got = buildToml(form);
@@ -111,6 +138,49 @@ check("buildHypothesis matches the golden hypothesis", () => {
             "generated hypothesis changed:\n\n--- want\n" + want + "\n--- got\n" + got,
         );
     }
+});
+
+// The ticker picker's ordering. This is the whole of what the company-name
+// feature adds, and no render test can see it.
+const POOL = ["AA", "AAPL", "AMD", "APLE", "MSFT", "$SP500"];
+const NAMES: Record<string, string> = {
+    AA: "Alcoa Corp",
+    AAPL: "Apple Inc.",
+    AMD: "Advanced Micro Devices, Inc.",
+    APLE: "Apple Hospitality REIT, Inc.",
+    MSFT: "MICROSOFT CORP",
+    $SP500: "S&P 500",
+};
+
+function eq(what: string, got: unknown, want: unknown) {
+    const g = JSON.stringify(got);
+    const w = JSON.stringify(want);
+    if (g !== w) throw new Error(`${what}: got ${g}, want ${w}`);
+}
+
+check("ticker search ranks symbols before names", () => {
+    // AA is exact, AAPL is a symbol prefix; Apple Inc. and Apple Hospitality
+    // only match on the name and must come after both.
+    eq("AA", searchTickers(POOL, NAMES, "AA"), ["AA", "AAPL"]);
+});
+
+check("ticker search finds a symbol by company name", () => {
+    // The point of the feature: a user who knows "apple" but not "AAPL".
+    eq("apple", searchTickers(POOL, NAMES, "apple"), ["AAPL", "APLE"]);
+    // Case-folded on both sides -- profile names are inconsistently cased.
+    eq("microsoft", searchTickers(POOL, NAMES, "microsoft"), ["MSFT"]);
+});
+
+check("ticker search survives a missing name table", () => {
+    // No company_profile in the database: symbols still match, nothing throws.
+    eq("AA/no names", searchTickers(POOL, {}, "AA"), ["AA", "AAPL"]);
+    eq("apple/no names", searchTickers(POOL, {}, "apple"), []);
+});
+
+check("ticker search caps and does not treat empty as no matches", () => {
+    const many = Array.from({ length: 500 }, (_, i) => `T${i}`);
+    eq("cap", searchTickers(many, {}, "T").length, 8);
+    eq("empty query", searchTickers(POOL, NAMES, "  "), POOL);
 });
 
 if (process.env.SMOKE_UPDATE === "1") {

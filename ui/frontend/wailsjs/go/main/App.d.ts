@@ -37,4 +37,6 @@ export function SaveClaudeKey(arg1:string):Promise<void>;
 
 export function TickerDateRanges(arg1:string):Promise<Record<string, Array<string>>>;
 
+export function TickerNames(arg1:string):Promise<Record<string, string>>;
+
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

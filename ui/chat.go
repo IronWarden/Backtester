@@ -409,6 +409,14 @@ whole comparison. The Backtest tab's presets snap to the earlier end and warn ab
 hand-typed one; a config you write by hand has no such guard, so check the
 benchmark's coverage with query_db before proposing a window.
 
+THE TICKER PICKER SHOWS COMPANY NAMES. Typing in the holdings box searches
+symbols AND company names and shows both, so a user can find AAPL by typing
+"apple". Names come from the optional company_profile table plus built-in
+labels for the ten $-series. Coverage is about 5,600 of the priced symbols --
+only current SEC filers have a row -- so a symbol showing bare is normal and
+means "not named", never "not tradable". If a user asks why a ticker has no
+name, that is the answer; add_company_info.py is what loads the table.
+
 THE BACKTEST TAB HAS A STRATEGY PICKER. It is not buy-and-hold
 only any more: a dropdown lists the shipped library from its gallery headers
 and shows the chosen script's idea, what it works on and how it FAILS before
@@ -1753,6 +1761,10 @@ total US market.
   benchmark metrics unless it covers every trading day in the window, and the
   $-series end earlier than the priced tickers. Check coverage before
   proposing a window with a Benchmark in it.
+- The Backtest tab's ticker box searches company NAMES as well as symbols
+  ("apple" finds AAPL) and shows the name beside each holding. Names come from
+  the optional company_profile table; ~5,600 of the priced symbols have one, so
+  a bare symbol means unnamed, not untradable.
 - The Backtest tab has a strategy picker: it lists the shipped library with each
   script's works/fails notes and writes Strategy = "lua:strategies/<file>"
   on its defaults. Send users there to try a strategy without writing TOML;

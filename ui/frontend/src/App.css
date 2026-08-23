@@ -373,10 +373,74 @@ button.primary:hover:not(:disabled),
   flex-wrap: wrap;
 }
 
-.simple-form .ticker-add input[list] {
-  /* Hold ~16em on a roomy window, but allow shrinking so it never overflows a
+/* The combobox wraps the input so the listbox can hang off it. Relative
+   positioning is what keeps the list attached to the field rather than to the
+   card, which matters once several portfolios stack. */
+.simple-form .ticker-combo {
+  position: relative;
+  /* Hold ~18em on a roomy window, but allow shrinking so it never overflows a
      narrow one (0 grow keeps it from stretching the full row width). */
-  flex: 0 1 16em;
+  flex: 0 1 18em;
+  min-width: 0;
+}
+
+.simple-form .ticker-combo input {
+  width: 100%;
+  min-width: 0;
+}
+
+.simple-form .ticker-listbox {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.2em 0;
+  list-style: none;
+  max-height: 15em;
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-2);
+}
+
+.simple-form .ticker-listbox li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.3em 0.6em;
+  cursor: pointer;
+}
+
+.simple-form .ticker-listbox li.on {
+  background: var(--accent-soft);
+}
+
+.simple-form .ticker-listbox .opt-sym {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* The name is the gloss, not the identity: it truncates rather than wrapping,
+   so every row stays one line and the symbols keep a straight left edge. */
+.simple-form .ticker-listbox .opt-name,
+.simple-form .alloc-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85em;
+  color: var(--text-3);
+}
+
+.simple-form .alloc-sym {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
   min-width: 0;
 }
 
