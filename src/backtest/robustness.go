@@ -296,6 +296,9 @@ func (p *Portfolio) rerun(
 	// Same deflator as the portfolio it is a perturbation of, or the shifted
 	// runs would report a real return of zero and look worse than they are.
 	clone.CPI = p.CPI
+	clone.Cashflow, clone.cashflowStep, clone.cashflowAnchor =
+		p.Cashflow, p.cashflowStep, p.cashflowAnchor
+	clone.nextCashflow = clone.firstCashflow()
 	defer func() {
 		if c, ok := clone.Strategy.(interface{ Close() }); ok {
 			c.Close()
@@ -305,9 +308,12 @@ func (p *Portfolio) rerun(
 	clone.Strategy.Step(clone, shifted, 0)
 	prev := clone.GetPortfolioValue(clone.Tickers, shifted, 0)
 	for day := 1; day < length; day++ {
+		// Same schedule as the portfolio this perturbs, or the shifted runs
+		// would be comparing a contributing book against a static one.
+		flow := clone.applyCashflow(shifted[clone.Tickers[0]][day].Date, shifted, day)
 		clone.Strategy.Step(clone, shifted, day)
 		curr := clone.GetPortfolioValue(clone.Tickers, shifted, day)
-		clone.AdjustPortfolioParameters(clone.Tickers, shifted, day, prev, curr)
+		clone.AdjustPortfolioParameters(clone.Tickers, shifted, day, prev, curr, flow)
 		prev = curr
 	}
 	clone.GetBacktestingData(riskFreeRates, shifted, length)

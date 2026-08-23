@@ -213,7 +213,10 @@ func runValidation(
 	for day := 1; day < days; day++ {
 		p.Strategy.Step(p, hist, day)
 		curr := p.GetPortfolioValue(p.Tickers, hist, day)
-		p.AdjustPortfolioParameters(p.Tickers, hist, day, prev, curr)
+		// 0: this drives look-ahead and cash-conservation checks over
+		// fabricated series with invented dates, where a contribution
+		// schedule would mean nothing.
+		p.AdjustPortfolioParameters(p.Tickers, hist, day, prev, curr, 0)
 		prev = curr
 	}
 	return p

@@ -168,9 +168,9 @@ func TestAdjustPortfolioParametersRecordsSeries(t *testing.T) {
 	}
 	tickers := []string{"AAA"}
 
-	p.AdjustPortfolioParameters(tickers, hist, 0, 1000, 1000)
-	p.AdjustPortfolioParameters(tickers, hist, 1, 1000, 1020)
-	p.AdjustPortfolioParameters(tickers, hist, 2, 1020, 990)
+	p.AdjustPortfolioParameters(tickers, hist, 0, 1000, 1000, 0)
+	p.AdjustPortfolioParameters(tickers, hist, 1, 1000, 1020, 0)
+	p.AdjustPortfolioParameters(tickers, hist, 2, 1020, 990, 0)
 
 	if len(p.DailyReturns) != 3 || len(p.PortfolioCloseValues) != 3 {
 		t.Fatalf("recorded %d returns / %d close values, want 3 each",
@@ -199,7 +199,7 @@ func TestAdjustPortfolioParametersZeroStartingValue(t *testing.T) {
 	hist := map[string][]data.AssetData{
 		"AAA": {{Date: testDay, Close: 10}},
 	}
-	p.AdjustPortfolioParameters([]string{"AAA"}, hist, 0, 0, 100)
+	p.AdjustPortfolioParameters([]string{"AAA"}, hist, 0, 0, 100, 0)
 
 	got := p.DailyReturns[0].Return
 	if math.IsNaN(got) || math.IsInf(got, 0) || got != 0 {

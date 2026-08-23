@@ -33,6 +33,45 @@ type OutputConfig struct {
 // nothing. Unlike OutputConfig this is a value, not a pointer: "no costs"
 // and "all costs zero" are the same thing, so there is nothing for nil to
 // express and no nil to guard against on the trade path.
+// CashflowConfig is a schedule of deposits or withdrawals applied during the
+// run: contributing on payday, or drawing down in retirement.
+//
+// An absent block means no flows and byte-identical results, which is what
+// keeps every config written before this existed unaffected.
+type CashflowConfig struct {
+	// Amount is signed: positive deposits, negative withdraws. The desktop
+	// form owns the sign through a Deposit/Withdraw dropdown rather than
+	// asking anyone to type a minus into a currency field.
+	Amount float64 `toml:"Amount"`
+	// Frequency is "monthly", "quarterly" or "annually". Empty means no
+	// schedule at all, so a block that sets only Amount does nothing and says
+	// so at check time rather than silently.
+	Frequency string `toml:"Frequency"`
+	// Start is the optional YYYY-MM-DD anchor. Empty means the portfolio's
+	// StartDate.
+	//
+	// The FIRST flow lands one whole period after this date, not on it: the
+	// starting capital is already in the book, so a June start with a monthly
+	// schedule contributes in July. Anything else double-counts the opening
+	// balance on day one.
+	Start string `toml:"Start"`
+}
+
+// Zero reports whether the block asks for nothing, which is the state every
+// pre-existing config is in.
+func (c CashflowConfig) Zero() bool {
+	return c.Amount == 0 && c.Frequency == "" && c.Start == ""
+}
+
+// cashflowPeriods maps the configured vocabulary onto a month step. Months
+// rather than days because "monthly" must not drift: 30-day steps walk off the
+// calendar within a year.
+var cashflowPeriods = map[string]int{
+	"monthly":   1,
+	"quarterly": 3,
+	"annually":  12,
+}
+
 type CostConfig struct {
 	// CommissionPerTrade is a flat amount charged per filled order.
 	CommissionPerTrade float64 `toml:"commission_per_trade"`
@@ -164,6 +203,10 @@ type PortfolioConfig struct {
 	Strategy    string         `toml:"Strategy"`
 	Params      map[string]any `toml:"Params"`
 	Costs       CostConfig     `toml:"Costs"`
+	// Cashflow is an optional schedule of deposits or withdrawals. Absent
+	// means none, and none is what every config written before this existed
+	// has, so their numbers are unchanged.
+	Cashflow CashflowConfig `toml:"Cashflow"`
 	// Benchmark is an optional ticker to score this portfolio against, e.g.
 	// "$SP500". It is NOT traded and never joins Tickers — it only supplies
 	// a return series for the benchmark-relative metrics. Empty means those
@@ -595,6 +638,44 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 			"portfolio %q: maintenance_pct %.4f exceeds initial_pct %.4f, so "+
 				"every short would be called the day it was opened",
 			pc.Name, pc.Margin.Maintenance(), pc.Margin.Initial())
+	}
+	// Validated here rather than at check time alone, because ToPortfolio is
+	// the one path every caller shares -- the CLI, the UI and the sweep
+	// expansion all arrive through it.
+	if !pc.Cashflow.Zero() {
+		step, ok := cashflowPeriods[pc.Cashflow.Frequency]
+		if !ok {
+			return nil, fmt.Errorf(
+				"portfolio %q: Cashflow.Frequency is %q; it must be one of "+
+					"monthly, quarterly, annually",
+				pc.Name, pc.Cashflow.Frequency)
+		}
+		if pc.Cashflow.Amount == 0 {
+			return nil, fmt.Errorf(
+				"portfolio %q: Cashflow.Frequency is %q but Amount is 0, so the "+
+					"schedule would do nothing. Set an amount or remove the block",
+				pc.Name, pc.Cashflow.Frequency)
+		}
+		anchor := startTime
+		if pc.Cashflow.Start != "" {
+			t, err := time.Parse("2006-01-02", pc.Cashflow.Start)
+			if err != nil {
+				return nil, fmt.Errorf("portfolio %q: Cashflow.Start: %w", pc.Name, err)
+			}
+			if t.Before(startTime) || t.After(endTime) {
+				return nil, fmt.Errorf(
+					"portfolio %q: Cashflow.Start %s falls outside the window "+
+						"%s..%s, so no flow could ever land",
+					pc.Name, pc.Cashflow.Start, pc.StartTime, pc.EndTime)
+			}
+			anchor = t
+		}
+		p.Cashflow = pc.Cashflow
+		p.cashflowStep = step
+		// One whole period after the anchor: the opening balance is already in
+		// the book, so a flow on day one would double-count it.
+		p.cashflowAnchor = anchor
+		p.nextCashflow = p.firstCashflow()
 	}
 	p.AllowShort = pc.AllowShort
 	p.Margin = pc.Margin

@@ -372,7 +372,7 @@ func TestExposureIsGrossWhenShorting(t *testing.T) {
 
 	// Long 200, short 200: net zero, gross 400.
 	value := p.GetPortfolioValue(p.Tickers, bars, 0)
-	p.AdjustPortfolioParameters(p.Tickers, bars, 0, 1000, value)
+	p.AdjustPortfolioParameters(p.Tickers, bars, 0, 1000, value, 0)
 
 	if len(p.Exposure) != 1 {
 		t.Fatalf("got %d exposure points, want 1", len(p.Exposure))

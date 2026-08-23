@@ -57,6 +57,18 @@ type Metrics struct {
 	// existed. Reported because a short-side edge that the borrow eats is not
 	// an edge, and nothing else in the result would show it.
 	BorrowPaid float64
+	// NetContributions is the signed total moved by the cashflow schedule:
+	// deposits positive, withdrawals negative. Zero when there is no schedule.
+	//
+	// Profit is finalValue - initialCapital - NetContributions. Without the
+	// last term, contributing 500 a month for ten years reports 60,000 of
+	// "profit" that was deposits.
+	NetContributions float64
+	// WithdrawalsMissed is how many scheduled withdrawals could not be funded
+	// even after liquidating every holding. Non-zero means the portfolio ran
+	// out of money partway through — which for a decumulation backtest is not
+	// a footnote, it is the answer.
+	WithdrawalsMissed int
 	// MarginCalls is how many days a maintenance breach forced a cover the
 	// strategy did not ask for. Zero for any long-only book. A non-zero value
 	// means the result includes trades the strategy never chose, which is
@@ -653,7 +665,7 @@ func (p *Portfolio) GetBacktestingData(
 				newest.Format("2006-01-02"))
 		}
 	}
-	maxDrawdown := GetMaxDrawdown(p.PortfolioCloseValues)
+	maxDrawdown := GetMaxDrawdown(p.DrawdownSeries())
 	avgCorrelation := AvgPairwiseCorrelation(p.Tickers, hist, dataLen)
 	cointegratedPairs := CountCointegratedPairs(p.Tickers, hist, dataLen)
 	metrics := Metrics{
@@ -676,8 +688,25 @@ func (p *Portfolio) GetBacktestingData(
 			dates[i] = dr.Date
 		}
 		metrics.LongestUnderwaterDays = LongestUnderwater(
-			GetDrawdowns(p.PortfolioCloseValues, dates, 0), dates[n-1])
+			GetDrawdowns(p.DrawdownSeries(), dates, 0), dates[n-1])
 	}
+	// Everything above is DERIVED from the return series and is rebuilt from
+	// scratch. These are ACCUMULATED during the simulation instead — counted
+	// as they happen, with nothing left afterwards to recompute them from —
+	// so they have to be carried across the rebuild by hand.
+	//
+	// Assigning a fresh Metrics without this silently zeroed all of them, and
+	// had done since each was added: the existing tests set them up and assert
+	// them without ever calling GetBacktestingData, so nothing noticed that
+	// every REAL run reported 0 borrow paid, 0 margin calls and 0 delisted
+	// holdings while the README, CLAUDE.md and both assistant prompts said
+	// otherwise. Anything counted in the loop belongs in this list.
+	metrics.BorrowPaid = p.Metrics.BorrowPaid
+	metrics.MarginCalls = p.Metrics.MarginCalls
+	metrics.DelistedHoldings = p.Metrics.DelistedHoldings
+	metrics.UnclassifiedDelistings = p.Metrics.UnclassifiedDelistings
+	metrics.NetContributions = p.Metrics.NetContributions
+	metrics.WithdrawalsMissed = p.Metrics.WithdrawalsMissed
 	p.Metrics = metrics
 }
 

@@ -266,6 +266,11 @@ EndDate     = "2025-01-01"
 Tickers     = ["AAPL", "MSFT"]   # no duplicates; all must cover the window
 Strategy    = "buyAndHold:equalWeights"   # optional; see specs below
 Benchmark   = "$SP500"            # optional; scored against, NOT traded
+
+[portfolio.Cashflow]              # optional; absent = no flows, identical results
+Amount    = 500.0                 # signed: negative WITHDRAWS
+Frequency = "monthly"             # monthly | quarterly | annually
+Start     = "2016-01-01"          # optional; defaults to StartDate
 Fundamentals = ["Net Income"]     # optional; reported figures Lua may read
 AllowShort  = false               # optional; default is the long-only engine
 DelistingReturn = 0.0             # optional; must be in [-1, 0], 0 applies nothing
@@ -417,6 +422,18 @@ and is not any more. Each card has its own tickers, dates, strategy and
 benchmark. Run is disabled until EVERY portfolio is runnable, and two
 portfolios may not share a Name. The pre-registered hypothesis is one per RUN,
 judged against every result -- there is no per-portfolio hypothesis.
+
+[portfolio.Cashflow] IS A DEPOSIT/WITHDRAWAL SCHEDULE. Amount is SIGNED --
+negative withdraws -- and the first flow lands one whole PERIOD after Start,
+never on it, because the opening capital is already in the book. Flows are
+applied before the strategy acts each day, so a strategy can invest a
+contribution the day it arrives. They do NOT count as return: the day's
+baseline is raised by the flow, so Sharpe, CAGR and every other ratio still
+answer "how did the strategy do" rather than "how much did the account grow".
+A withdrawal larger than cash SELLS holdings pro-rata to fund itself; one that
+cannot be funded even after liquidating everything increments
+WithdrawalsMissed. Note buy-and-hold buys once on day one and never again, so
+without a strategy that reinvests, contributions accumulate as cash.
 
 THE TICKER PICKER SHOWS COMPANY NAMES. Typing in the holdings box searches
 symbols AND company names and shows both, so a user can find AAPL by typing
@@ -598,6 +615,17 @@ across asset classes (e.g. ["$SP500", "$CASH"]).
   trust most. If a user asks for a real drawdown, say it is deliberately not
   offered and why.
 - StandardDev: annualized stdev of daily returns.
+- NetContributions: signed total moved by a [portfolio.Cashflow] schedule --
+  deposits positive, withdrawals negative, 0 when there is no schedule. **It is
+  not profit and must be subtracted from it**: contributing 500 a month for ten
+  years grows the account by 60,000 that was never a gain. The results panel
+  already nets it out; if a user quotes a final value at you, ask whether they
+  were contributing before you call any of it performance.
+- WithdrawalsMissed: how many scheduled withdrawals could not be funded even
+  after selling every holding. **Non-zero is the headline, not a footnote** --
+  it means the portfolio ran out of money partway through, so a decumulation
+  plan with a non-zero count FAILED however good its other numbers look. Every
+  figure after the first miss describes a spent account.
 - AvgCorrelation / CointegratedPairs: mean pairwise return correlation and
   count of cointegrated ticker pairs in the portfolio.
 - LongestUnderwaterDays: the most CALENDAR days the equity curve spent below a
@@ -1694,6 +1722,11 @@ classes (e.g. ["$SP500", "$CASH"]).
 - SortinoRatio: same numerator, downside deviation denominator.
 - MaxDrawdown: worst peak-to-trough decline, in %.
 - AnnualReturn: CAGR of the compounded daily returns, in %.
+- NetContributions / WithdrawalsMissed: from an optional [portfolio.Cashflow]
+  schedule (Amount signed, Frequency monthly|quarterly|annually). Contributions
+  are NOT profit and are netted out of it, and are NOT return -- the daily
+  baseline is raised by the flow. A non-zero WithdrawalsMissed means the
+  portfolio ran out of money, which is the headline result.
 - RealAnnualReturn: the same CAGR with inflation divided out (CPIAUCSL,
   compounded not subtracted). 0 means NOT AVAILABLE -- CPI must cover both ends
   of the window and is published a month in arrears -- shown as an em dash, not

@@ -880,6 +880,90 @@ Costs make high-turnover strategies look worse, which is the point — the
 `Turnover` metric reports how much trading each strategy is doing, so the two
 can be read together.
 
+### `[portfolio.Cashflow]` — recurring deposits and withdrawals
+
+Contributing on payday, or drawing down in retirement. Optional; **absent means
+no flows and byte-identical results**, so nothing written before this existed
+is affected.
+
+```toml
+[[Portfolio]]
+Name        = "Contributing"
+BuyingPower = 10000.0
+StartDate   = "2015-01-01"
+EndDate     = "2025-01-01"
+Tickers     = ["AAPL", "MSFT"]
+
+  [portfolio.Cashflow]
+  Amount    = 500.0          # SIGNED: negative withdraws
+  Frequency = "monthly"      # monthly | quarterly | annually
+  Start     = "2015-06-01"   # optional; defaults to StartDate
+```
+
+**The first flow lands one whole period after `Start`, never on it.** The
+opening capital is already in the book, so contributing on day one would
+double-count it: a January start with a monthly schedule contributes in
+February.
+
+Flows are applied at the top of each day, **before the strategy acts**, so a
+strategy can invest a contribution the day it arrives rather than a day late.
+
+#### A contribution is not a return
+
+The day's return is measured against the book's value at the previous close, so
+money added in between would post as performance the market never delivered —
+deposit £500 into a £10,000 book and the day shows a 5% gain. Every ratio the
+engine reports is built on that daily series, so the error would propagate into
+Sharpe, Sortino, CAGR, the rolling Sharpe and the significance nulls alike.
+
+The day's baseline is therefore raised by the flow before the return is taken.
+The reported figures answer **"how did the strategy do"**, which is the only
+question a backtest can answer about a book whose size you were changing by
+hand.
+
+Note the deliberate contrast with `borrow_bps_annual`, which is charged on the
+adjacent line of the same loop and gets the *opposite* treatment: borrow cost is
+a real cost of holding the position and *should* depress the day's return.
+
+#### Drawdowns are measured on a flow-adjusted series
+
+With a schedule set, `MaxDrawdown`, `CalmarRatio`, `LongestUnderwaterDays` and
+the Deepest Drawdowns panel are computed from an index that compounds the
+flow-neutralised returns, not from the raw book value. Against the raw value a
+withdrawal reads as a decline that never happened, and a deposit refills the
+peak and **erases** one that did — plausibly and invisibly.
+
+The equity **curve** stays the raw book value, because the chart should show the
+account actually growing when money is added. Two series, two questions: what
+the account was worth, and how the strategy performed.
+
+#### Withdrawals that cannot be funded
+
+A withdrawal larger than the cash balance **sells holdings pro-rata** to fund
+itself — pro-rata rather than largest-first, so funding a withdrawal does not
+itself rebalance the book. The sales go through the normal path, so commission
+and slippage are charged and the trades appear in the blotter.
+
+One that cannot be met even after liquidating everything is **counted, not
+skipped**: `Metrics.WithdrawalsMissed` increments and a warning names the date
+and the shortfall. A decumulation plan with a non-zero count has **failed**,
+however good its other numbers look — every figure after the first miss
+describes a spent account.
+
+#### `NetContributions` and profit
+
+`Metrics.NetContributions` is the signed total moved: deposits positive,
+withdrawals negative. **It is not profit.** Contributing £500 a month for ten
+years grows the account by £60,000 that was never a gain, so profit is
+`FinalValue − BuyingPower − NetContributions`.
+
+#### Buy-and-hold will not spend the money
+
+`buyAndHold` buys once, on the first day, and never acts again. With a
+contribution schedule and no strategy that reinvests, **the deposits accumulate
+as cash** and drag the return down. Use a strategy that trades on an ongoing
+basis, or expect the cash to sit there.
+
 ### `Benchmark`
 
 Set `Benchmark = "$SP500"` on a portfolio to score it against that series.
@@ -2127,6 +2211,8 @@ Reported metrics per run:
 
   **Only the return is deflated.** The equity curve, `MaxDrawdown`, `CalmarRatio` and `LongestUnderwaterDays` stay nominal on purpose: a drawdown is a *nominal* experience — you watched the account fall by that much — and restating it in today's money would corrupt the figure users trust most to answer "how bad was it". `SharpeRatio` is already quoted on excess-of-risk-free returns, which prices the time value of money from a different direction; deflating on top would double-count.
 - `StandardDev` — annualized stdev of daily returns.
+- `NetContributions` — signed total moved by a `[portfolio.Cashflow]` schedule; deposits positive, withdrawals negative, `0` without one. Not profit — see above.
+- `WithdrawalsMissed` — scheduled withdrawals that could not be funded even after selling every holding. Non-zero means the portfolio ran out of money partway through, which for a decumulation backtest is the answer rather than a footnote.
 - `LongestUnderwaterDays` — the most calendar days the equity curve ever spent below a previous peak, measured from that peak until it was regained, and to the end of the run for a decline never recovered. `MaxDrawdown` says how *deep* the worst hole was; this says how *long* you would have had to sit in one. A 40% drawdown recovered in a month and a 15% one that took three years are not the same experience, and only the second gets abandoned. Computed over **every** drawdown, not the deepest few the results panel lists — the longest is frequently not the deepest.
 - `CalmarRatio` — `AnnualReturn / MaxDrawdown`. Return per unit of worst-case decline, and a different question from Sharpe: Sharpe penalises volatility in both directions, Calmar counts only the deepest hole the account was ever in — which is what actually decides whether a strategy gets abandoned partway through. **A portfolio that never declined reports 0, not infinity**: an unbounded ratio is undefined rather than excellent, and reporting it would sort a strategy that never traded above every real one.
 - `Turnover` — annualized gross traded notional as a multiple of the portfolio's average value; `1.0` means it traded its own value once over a year. Both sides of a round trip count. Reported whether or not `[portfolio.Costs]` is set.

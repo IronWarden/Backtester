@@ -79,7 +79,7 @@ func runBenchSimulation(p *Portfolio, hist map[string][]data.AssetData) {
 	for day := 1; day < benchDays; day++ {
 		p.Strategy.Step(p, hist, day)
 		curr := p.GetPortfolioValue(p.Tickers, hist, day)
-		p.AdjustPortfolioParameters(p.Tickers, hist, day, prev, curr)
+		p.AdjustPortfolioParameters(p.Tickers, hist, day, prev, curr, 0)
 		prev = curr
 	}
 }

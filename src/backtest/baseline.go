@@ -104,13 +104,20 @@ func equalWeightBaseline(
 	// The yardstick must be measured in the same money as the thing it is a
 	// yardstick for.
 	base.CPI = p.CPI
+	base.Cashflow, base.cashflowStep, base.cashflowAnchor =
+		p.Cashflow, p.cashflowStep, p.cashflowAnchor
+	base.nextCashflow = base.firstCashflow()
 
 	base.Strategy.Step(base, windowed, 0)
 	prev := base.GetPortfolioValue(base.Tickers, windowed, 0)
 	for day := 1; day < dataLen; day++ {
+		// The yardstick receives the same contributions as the strategy it is
+		// a yardstick FOR. Without this the strategy is fed money the baseline
+		// is not, and every verdict flatters it for free.
+		flow := base.applyCashflow(windowed[base.Tickers[0]][day].Date, windowed, day)
 		base.Strategy.Step(base, windowed, day)
 		curr := base.GetPortfolioValue(base.Tickers, windowed, day)
-		base.AdjustPortfolioParameters(base.Tickers, windowed, day, prev, curr)
+		base.AdjustPortfolioParameters(base.Tickers, windowed, day, prev, curr, flow)
 		prev = curr
 	}
 	base.GetBacktestingData(riskFreeRates, windowed, dataLen)

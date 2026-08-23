@@ -53,6 +53,20 @@ type Portfolio struct {
 	Strategy             Strategy
 	StartTime            time.Time
 	EndTime              time.Time
+	// Cashflow is the deposit/withdrawal schedule, zero when there is none.
+	Cashflow CashflowConfig
+	// cashflowStep is the schedule's period in months, and nextCashflow the
+	// date the next flow is due. Both are derived once by ToPortfolio so the
+	// daily loop does no date arithmetic beyond a comparison.
+	cashflowStep int
+	nextCashflow time.Time
+	// cashflowAnchor is the resolved Start, kept so a clone can recompute its
+	// own first due date. The baseline and the robustness runs are built AFTER
+	// the parent has finished, by which point the parent's nextCashflow has
+	// walked past the end of the window — copying it would leave the clone
+	// never paying anything.
+	cashflowAnchor time.Time
+
 	// CPI is the monthly deflator covering this run, loaded once by the runner
 	// and shared read-only across the worker pool. Nil when the database has
 	// no economic_indicators table, which simply leaves the real return
@@ -388,6 +402,47 @@ func (p *Portfolio) Buy(
 	p.tradedNotional += notional
 }
 
+// DrawdownSeries is the value series drawdowns should be measured on.
+//
+// Without a cashflow schedule it is the book value itself, returned unchanged,
+// so every result computed before schedules existed is bit-identical -- not
+// merely equal to within rounding, which compounding a return series would not
+// have been.
+//
+// With one, the raw book value contains the deposits and withdrawals, and
+// measuring a decline against it is wrong in both directions: a withdrawal
+// reads as a drawdown that never happened, and a deposit refills the peak and
+// ERASES one that did. MaxDrawdown, CalmarRatio, LongestUnderwaterDays and the
+// Deepest Drawdowns panel all inherit that, plausibly and invisibly.
+//
+// So drawdowns come instead from an index built by compounding the
+// flow-neutralised daily returns. Drawdown is a ratio, so the index needs no
+// particular starting level -- it only has to move the way the strategy did.
+//
+// The equity CURVE stays the raw book value on purpose: the chart should show
+// the account actually growing when money is added. Two series, two questions
+// -- what the account was worth, and how the strategy performed.
+func (p *Portfolio) DrawdownSeries() []float64 {
+	if p.cashflowStep == 0 {
+		return p.PortfolioCloseValues
+	}
+	returns := make([]float64, len(p.DailyReturns))
+	for i, dr := range p.DailyReturns {
+		returns[i] = dr.Return
+	}
+	return rebasedCurve(returns, p.InitialBuyingPower)
+}
+
+// firstCashflow is the date the first flow falls due, recomputed from the
+// anchor so a clone starts the schedule from the beginning rather than
+// inheriting a pointer the parent has already run past.
+func (p *Portfolio) firstCashflow() time.Time {
+	if p.cashflowStep == 0 {
+		return time.Time{}
+	}
+	return p.cashflowAnchor.AddDate(0, p.cashflowStep, 0)
+}
+
 func (p *Portfolio) Deposit(cash float64) {
 	p.BuyingPower += cash
 }
@@ -688,13 +743,25 @@ func (p *Portfolio) GetPortfolioValue(
 
 // AdjustPortfolioParameters records the day's return and refreshes
 // current prices on open positions.
+// cashflow is the signed amount the schedule moved at the top of this day, 0
+// when there was none. It is a PARAMETER rather than something the caller
+// folds into startingValue because there are four hand-written daily loops in
+// this package: making it explicit means a new one cannot silently omit it,
+// since it will not compile without saying what the flow was.
 func (p *Portfolio) AdjustPortfolioParameters(
 	tickers []string,
 	currentDayData map[string][]data.AssetData,
 	day int,
 	startingValue float64,
 	endingValue float64,
+	cashflow float64,
 ) {
+	// Money added or taken between the two marks is not performance. Raising
+	// the baseline by the flow is the standard time-weighted treatment and is
+	// what makes the reported return answer "how did the STRATEGY do" rather
+	// than "how much did the account grow", which is the only question a
+	// backtest can answer about a book whose size the user was changing.
+	startingValue += cashflow
 	dailyChange := 0.0
 	if startingValue > 0.0 {
 		dailyChange = (endingValue - startingValue) / startingValue

@@ -345,12 +345,16 @@ func runOne(
 		// Before the strategy acts: the borrow is owed on what was held
 		// overnight, not on what today's orders leave behind.
 		p.chargeBorrow()
+		// Also before the strategy acts, so it can invest a contribution on
+		// the day it lands rather than a day late. Unlike the borrow above,
+		// this must NOT show up as a return — see AdjustPortfolioParameters.
+		flow := p.applyCashflow(windowed[p.Tickers[0]][day].Date, windowed, day)
 		p.Strategy.Step(p, windowed, day)
 		// After the strategy has acted, so a cover it made itself counts, and
 		// before the day is valued, so a forced cover is in the day's number.
 		p.enforceMaintenanceMargin(windowed, day)
 		curr := p.GetPortfolioValue(p.Tickers, windowed, day)
-		p.AdjustPortfolioParameters(p.Tickers, windowed, day, prev, curr)
+		p.AdjustPortfolioParameters(p.Tickers, windowed, day, prev, curr, flow)
 		prev = curr
 	}
 	// Before the metrics are computed, since it changes the final equity value.
@@ -631,8 +635,11 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					Dates:          dates,
 					// EquityCurve and dayTimes are appended together each
 					// day, so they share length and ordering.
+					// Not EquityCurve: with a cashflow schedule the book
+					// value contains the flows, and a withdrawal would be
+					// reported as a decline. See Portfolio.DrawdownSeries.
 					Drawdowns: GetDrawdowns(
-						p.PortfolioCloseValues, dayTimes, topDrawdowns,
+						p.DrawdownSeries(), dayTimes, topDrawdowns,
 					),
 					RollingSharpe: GetRollingSharpe(
 						returns, dayTimes, rollingSharpeWindow,
