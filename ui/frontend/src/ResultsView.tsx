@@ -476,6 +476,39 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
     return { series, tMin, tMax, tSpan, yMin, yMax, ySpan };
   }, [plottable]);
 
+  // The benchmark's own figures, deduped by ticker exactly as the chart does,
+  // so N portfolios sharing $SP500 contribute one row rather than N identical
+  // ones. Rebased to the portfolio's starting capital, so its "final value"
+  // answers "what would that capital have become in the index".
+  const benchmarkRows = useMemo(() => {
+    const rows: {
+      ticker: string;
+      finalValue: number;
+      profit: number;
+      stats: main.RunResult["benchmarkStats"];
+    }[] = [];
+    const seen = new Set<string>();
+    for (const r of results) {
+      const ticker = r.benchmarkStats?.ticker;
+      const curve = r.benchmarkCurve;
+      if (!ticker || !curve || curve.length === 0 || seen.has(ticker)) continue;
+      seen.add(ticker);
+      const finalValue = curve[curve.length - 1];
+      rows.push({
+        ticker,
+        finalValue,
+        profit: finalValue - r.initialCapital,
+        stats: r.benchmarkStats,
+      });
+    }
+    return rows;
+  }, [results]);
+
+  // Every hook must run before the early return below: React counts hooks
+  // per render, and ResultsView stays mounted across a run (App clears
+  // results, then fills them), so a hook placed after the return would be
+  // skipped on the empty render and appear on the next one -- "rendered
+  // more hooks than during the previous render", which unmounts the tree.
   if (results.length === 0) {
     return (
       <div className="results-empty">
@@ -574,34 +607,6 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
   // portfolio has no selection bias to correct for, and showing a bar of 0.00
   // next to it would imply otherwise.
   const swept = results.some((r) => (r.trials ?? 0) > 1);
-
-  // The benchmark's own figures, deduped by ticker exactly as the chart does,
-  // so N portfolios sharing $SP500 contribute one row rather than N identical
-  // ones. Rebased to the portfolio's starting capital, so its "final value"
-  // answers "what would that capital have become in the index".
-  const benchmarkRows = useMemo(() => {
-    const rows: {
-      ticker: string;
-      finalValue: number;
-      profit: number;
-      stats: main.RunResult["benchmarkStats"];
-    }[] = [];
-    const seen = new Set<string>();
-    for (const r of results) {
-      const ticker = r.benchmarkStats?.ticker;
-      const curve = r.benchmarkCurve;
-      if (!ticker || !curve || curve.length === 0 || seen.has(ticker)) continue;
-      seen.add(ticker);
-      const finalValue = curve[curve.length - 1];
-      rows.push({
-        ticker,
-        finalValue,
-        profit: finalValue - r.initialCapital,
-        stats: r.benchmarkStats,
-      });
-    }
-    return rows;
-  }, [results]);
 
   return (
     <div className="results-view">

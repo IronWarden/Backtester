@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import App from "./App";
+import ErrorBoundary from "./ErrorBoundary";
 
 // Bundle Monaco locally so the app works offline. Importing from
 // editor.api skips Monaco's "all basic languages" barrel — we add only
@@ -40,6 +41,8 @@ const root = createRoot(container!);
 
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary label="The app">
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

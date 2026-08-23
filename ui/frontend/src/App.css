@@ -1708,3 +1708,30 @@ td.num.dim { color: var(--muted, #8a8a85); }
 .vcheck.fail .vstatus { color: #d95926; }
 .vcheck.unavailable .vstatus { color: var(--muted, #8a8a85); }
 .vdetail { color: var(--muted, #8a8a85); font-size: 11px; }
+
+/* Render-error surface. Without this a thrown error unmounts the React root
+   and the window simply goes black — the failure with the least information
+   in it. Shown in place, with the component stack, so the panel that broke
+   names itself. */
+.render-error {
+  margin: 0.6em;
+  padding: 0.7em 0.9em;
+  border: 1px solid var(--neg);
+  border-radius: 4px;
+  background: rgba(230, 103, 103, 0.08);
+  overflow: auto;
+}
+
+.render-error-head {
+  color: var(--neg);
+  font-size: 0.9em;
+  margin-bottom: 0.5em;
+}
+
+.render-error-body {
+  margin: 0;
+  font-size: 0.78em;
+  line-height: 1.4;
+  color: var(--text-3);
+  white-space: pre-wrap;
+}

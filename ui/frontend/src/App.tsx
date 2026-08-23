@@ -34,6 +34,7 @@ import { backtest, main } from "../wailsjs/go/models";
 import SimpleForm from "./SimpleForm";
 import type { SimpleForm as SimpleFormData } from "./buildToml";
 import ResultsView from "./ResultsView";
+import ErrorBoundary from "./ErrorBoundary";
 import ConsolePanel from "./ConsolePanel";
 import ChatPanel from "./ChatPanel";
 import QueryConsole from "./QueryConsole";
@@ -650,7 +651,9 @@ function App() {
             />
 
             <div className="results" style={{ height: resultsHeight * scale }}>
-                <ResultsView results={results} fontSize={fontSize} verdicts={verdicts} />
+                <ErrorBoundary label="The results view">
+                    <ResultsView results={results} fontSize={fontSize} verdicts={verdicts} />
+                </ErrorBoundary>
             </div>
 
             <ConsolePanel diagnostics={diagnostics} fontSize={fontSize} />
