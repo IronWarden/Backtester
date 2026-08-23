@@ -133,7 +133,30 @@
       ],
       "walkForward": {
         "objective": "2021-03-04",
-        "windows": null
+        "windows": [
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          },
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          }
+        ]
       },
       "trials": 7,
       "expectedMaxSharpe": 1.25,
@@ -333,7 +356,30 @@
       ],
       "walkForward": {
         "objective": "2021-03-04",
-        "windows": null
+        "windows": [
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          },
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          }
+        ]
       },
       "trials": 7,
       "expectedMaxSharpe": 1.25,

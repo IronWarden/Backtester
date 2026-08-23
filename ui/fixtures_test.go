@@ -30,6 +30,13 @@ var updateFixtures = flag.Bool("update", false,
 
 // fillValue populates every exported field of v with a plausible non-zero
 // value, so the fixture exercises every branch that asks "is this set?".
+// maxFillDepth has to reach the deepest nested slice in the wire shape.
+// RunOutput -> Results[] -> RunResult -> *WalkForwardResult -> Windows[] is
+// five levels, and stopping at four left walkForward.windows null -- so the
+// walk-forward panel was never rendered by the smoke check that exists to
+// render it. There is no recursion in these types, so this terminates.
+const maxFillDepth = 6
+
 func fillValue(v reflect.Value, depth int) {
 	switch v.Kind() {
 	case reflect.Struct:
@@ -43,14 +50,14 @@ func fillValue(v reflect.Value, depth int) {
 			}
 		}
 	case reflect.Ptr:
-		if depth > 4 {
+		if depth > maxFillDepth {
 			return
 		}
 		p := reflect.New(v.Type().Elem())
 		fillValue(p.Elem(), depth+1)
 		v.Set(p)
 	case reflect.Slice:
-		if depth > 4 {
+		if depth > maxFillDepth {
 			return
 		}
 		s := reflect.MakeSlice(v.Type(), 2, 2)

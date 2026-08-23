@@ -67,6 +67,96 @@ const hypothesis: HypothesisForm = JSON.parse(
 
 console.log("frontend smoke render");
 
+// Seven of the eleven result panels are COLLAPSIBLE and default to closed
+// (T85), and a closed panel renders no body: `{open && children}`. So every
+// render check above exercises four panels and silently skips walk-forward,
+// splits, drawdowns, trading, attribution, calendar-year and monthly returns
+// -- which are most of the table code in the file.
+//
+// The open/closed set comes from localStorage, so opening them here means
+// installing one. Node has none, which is the same reason the storage guards
+// exist; a stub is both how these panels get rendered and a check that the
+// stored state is actually honoured.
+const ALL_PANELS = {
+    "walk-forward": true,
+    splits: true,
+    drawdowns: true,
+    trading: true,
+    attribution: true,
+    yearly: true,
+    monthly: true,
+};
+
+function withPanelsOpen<T>(fn: () => T): T {
+    const store = new Map<string, string>([
+        ["backtester-results-panels", JSON.stringify(ALL_PANELS)],
+    ]);
+    Object.defineProperty(globalThis, "localStorage", {
+        value: {
+            getItem: (k: string) => store.get(k) ?? null,
+            setItem: (k: string, v: string) => {
+                store.set(k, v);
+            },
+        },
+        configurable: true,
+        writable: true,
+    });
+    try {
+        return fn();
+    } finally {
+        delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
+    }
+}
+
+check("every collapsible panel renders when opened", () => {
+    const { results, verdicts } = load("full");
+    const html = withPanelsOpen(() =>
+        renderToString(<ResultsView results={results} fontSize={16} verdicts={verdicts} />),
+    );
+    // Each panel's own heading proves its body was reached, not just its title.
+    for (const marker of [
+        "Walk-forward windows",
+        "In-sample vs out-of-sample",
+        "Deepest drawdowns",
+        "Attribution",
+        "Calendar year returns",
+        "Monthly returns",
+    ]) {
+        if (!html.includes(marker)) throw new Error(`panel missing: ${marker}`);
+    }
+    // Closed by default, so the same render without the stub is much smaller.
+    const closed = renderToString(
+        <ResultsView results={results} fontSize={16} verdicts={verdicts} />,
+    );
+    if (html.length <= closed.length) {
+        throw new Error(
+            `opening the panels did not render more (${html.length} vs ${closed.length}) ` +
+                "-- the stored panel state is being ignored",
+        );
+    }
+});
+
+// The seven time.Time fields cross the wire as `any` -- wails has no
+// TypeScript mapping for them and says so on every binding regeneration (T96).
+// `any` means tsc cannot catch a raw RFC3339 string being rendered, so assert
+// it at runtime instead: no "T00:00:00Z" may reach the DOM. The fixture dates
+// are all midnight UTC, which makes them a reliable canary.
+check("no raw timestamp reaches the DOM", () => {
+    const { results, verdicts } = load("full");
+    // Opened, because the drawdowns table -- where these dates are rendered --
+    // is one of the panels that is closed by default.
+    const html = withPanelsOpen(() =>
+        renderToString(<ResultsView results={results} fontSize={16} verdicts={verdicts} />),
+    );
+    if (html.includes("T00:00:00Z")) {
+        const at = html.indexOf("T00:00:00Z");
+        throw new Error(
+            "a time.Time field was rendered raw instead of through fmtDate: ..." +
+                html.slice(Math.max(0, at - 120), at + 20),
+        );
+    }
+});
+
 for (const name of ["full", "plain", "no-curve", "empty"]) {
     const { results, verdicts, diagnostics } = load(name);
     // Both zoom extremes: the chart lays itself out in real pixels scaled by
