@@ -18,6 +18,7 @@ import {
 import type { SimpleForm as Form, HypothesisForm } from "./buildToml";
 import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
 import PortfolioCard from "./PortfolioCard";
+import { readStored, writeStored } from "./storage";
 
 // The Backtest tab.
 //
@@ -69,11 +70,7 @@ type Props = {
 const ONBOARDED_KEY = "backtester-onboarded";
 
 function readOnboarded(): boolean {
-    try {
-        return localStorage.getItem(ONBOARDED_KEY) === "1";
-    } catch {
-        return false;
-    }
+    return readStored(ONBOARDED_KEY) === "1";
 }
 
 function FirstRun({
@@ -271,12 +268,9 @@ export default function SimpleForm({
 
     function dismissFirstRun() {
         setOnboarded(true);
-        try {
-            localStorage.setItem(ONBOARDED_KEY, "1");
-        } catch {
-            // Storage refused: the card reappears next launch, which is a
-            // better failure than the form refusing to render.
-        }
+        // Storage refused: the card reappears next launch, which is a better
+        // failure than the form refusing to render.
+        writeStored(ONBOARDED_KEY, "1");
     }
 
     return (

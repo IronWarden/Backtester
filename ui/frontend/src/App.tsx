@@ -38,6 +38,7 @@ import type {
 } from "./buildToml";
 import ResultsView from "./ResultsView";
 import ErrorBoundary from "./ErrorBoundary";
+import { readStoredNumber, writeStored } from "./storage";
 import ConsolePanel from "./ConsolePanel";
 import ChatPanel from "./ChatPanel";
 import QueryConsole from "./QueryConsole";
@@ -109,20 +110,19 @@ function App() {
     );
     const [errorMsg, setErrorMsg] = useState<string>("");
     const [statusMsg, setStatusMsg] = useState<string>("");
-    const [fontSize, setFontSize] = useState<number>(() => {
-        const stored = Number(localStorage.getItem(FONT_STORAGE_KEY));
-        return Number.isFinite(stored) && stored >= MIN_FONT_SIZE
-            ? clampFont(stored)
-            : defaultFontSize();
-    });
+    // Through storage.ts: this runs in the ROOT component's initializer, so a
+    // browser that throws on localStorage access would take the whole app with
+    // it rather than lose a zoom level.
+    const [fontSize, setFontSize] = useState<number>(() =>
+        clampFont(
+            readStoredNumber(FONT_STORAGE_KEY, defaultFontSize(), (n) => n >= MIN_FONT_SIZE),
+        ),
+    );
     // Assistant panel width in base pixels; rendered at chatWidth * scale so
     // it grows and shrinks with the zoom, like the results panel height.
-    const [chatWidth, setChatWidth] = useState<number>(() => {
-        const stored = Number(localStorage.getItem(CHAT_WIDTH_STORAGE_KEY));
-        return Number.isFinite(stored) && stored >= 200
-            ? stored
-            : DEFAULT_CHAT_WIDTH;
-    });
+    const [chatWidth, setChatWidth] = useState<number>(() =>
+        readStoredNumber(CHAT_WIDTH_STORAGE_KEY, DEFAULT_CHAT_WIDTH, (n) => n >= 200),
+    );
     // Zoom factor relative to the base size. The whole UI sizes itself in `em`
     // off .app's font-size, but a few pixel-valued dimensions (the results
     // panel, the SVG chart) have to be multiplied by this to scale in step.
@@ -253,18 +253,11 @@ function App() {
     }, []);
 
     useEffect(() => {
-        try {
-            localStorage.setItem(FONT_STORAGE_KEY, String(fontSize));
-        } catch {}
+        writeStored(FONT_STORAGE_KEY, String(fontSize));
     }, [fontSize]);
 
     useEffect(() => {
-        try {
-            localStorage.setItem(
-                CHAT_WIDTH_STORAGE_KEY,
-                String(Math.round(chatWidth)),
-            );
-        } catch {}
+        writeStored(CHAT_WIDTH_STORAGE_KEY, String(Math.round(chatWidth)));
     }, [chatWidth]);
 
     // Whenever the TOML changes (or its on-disk path), look for a lua:<path>

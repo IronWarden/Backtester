@@ -24,6 +24,7 @@ import SimpleFormView from "./SimpleForm";
 import { buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
 import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
+import { readStored, readStoredNumber, readStoredObject, writeStored } from "./storage";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { backtest, main } from "../wailsjs/go/models";
 
@@ -175,6 +176,25 @@ check("buildHypothesis matches the golden hypothesis", () => {
             "generated hypothesis changed:\n\n--- want\n" + want + "\n--- got\n" + got,
         );
     }
+});
+
+// Persisted UI state. Node has no working localStorage, which makes this the
+// exact environment the guards exist for: a browser told to block site data
+// throws from the accessor, and two of these reads run in the ROOT component's
+// useState initializer, where a throw is a blank window rather than a lost
+// preference.
+check("reading persisted state never throws without localStorage", () => {
+    eq("readStored", readStored("anything"), null);
+    eq("readStoredObject", readStoredObject("anything"), {});
+    eq("readStoredNumber", readStoredNumber("anything", 16, (n) => n > 0), 16);
+    // Writing must be just as quiet.
+    writeStored("anything", "value");
+});
+
+check("readStoredNumber rejects what Number() would accept", () => {
+    // Number(null) is 0 and Number("") is 0, so a missing key has to be
+    // rejected before the numeric check rather than by it.
+    eq("missing", readStoredNumber("nope", 16, (n) => n >= 10), 16);
 });
 
 // Multi-portfolio gating. A run carries every portfolio, so one bad card has

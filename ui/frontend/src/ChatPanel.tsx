@@ -7,6 +7,7 @@ import {
 } from "../wailsjs/go/main/App";
 import { main } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
+import { readStored, writeStored } from "./storage";
 
 // Shown until the backend reports the real list (Claude models plus
 // whatever the local Ollama server has pulled). Sonnet is the default:
@@ -245,7 +246,7 @@ export default function ChatPanel({
             .then((opts) => {
                 if (!opts || opts.length === 0) return;
                 setModels(opts);
-                const stored = localStorage.getItem(MODEL_STORAGE_KEY);
+                const stored = readStored(MODEL_STORAGE_KEY);
                 if (stored && opts.some((o) => o.id === stored)) {
                     setModel(stored);
                 }
@@ -256,7 +257,7 @@ export default function ChatPanel({
     function pickModel(id: string) {
         setModel(id);
         try {
-            localStorage.setItem(MODEL_STORAGE_KEY, id);
+            writeStored(MODEL_STORAGE_KEY, id);
         } catch {}
     }
 

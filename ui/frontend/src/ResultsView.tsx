@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { backtest, main } from "../wailsjs/go/models";
+import { readStoredObject, writeStored } from "./storage";
 
 // Categorical palette (dark-surface steps), assigned by portfolio index in
 // fixed slot order. Validated against the #1a1a19 card surface for CVD
@@ -342,23 +343,17 @@ type Props = {
 // collapsed header never stands for an empty body.
 const PANEL_STATE_KEY = "backtester-results-panels";
 
+// Shape-guarded, not just parse-guarded: the indexing that follows happens in
+// Collapsible, outside any try here, so a stored `"null"` would throw where
+// nothing catches it. See storage.ts.
 function readPanelState(): Record<string, boolean> {
-  try {
-    const raw = localStorage.getItem(PANEL_STATE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-  } catch {
-    return {};
-  }
+  return readStoredObject<boolean>(PANEL_STATE_KEY);
 }
 
 function writePanelOpen(id: string, open: boolean) {
-  try {
-    const next = { ...readPanelState(), [id]: open };
-    localStorage.setItem(PANEL_STATE_KEY, JSON.stringify(next));
-  } catch {
-    // A browser that refuses storage still gets a working panel; it just
-    // forgets the choice, which is the right way to degrade.
-  }
+  // A browser that refuses storage still gets a working panel; it just
+  // forgets the choice, which is the right way to degrade.
+  writeStored(PANEL_STATE_KEY, JSON.stringify({ ...readPanelState(), [id]: open }));
 }
 
 function Collapsible({

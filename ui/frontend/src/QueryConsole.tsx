@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import { RunUserQuery } from "../wailsjs/go/main/App";
 import { main } from "../wailsjs/go/models";
+import { readStored, writeStored } from "./storage";
 
 // Survive app restarts: people build queries up incrementally.
 const SQL_STORAGE_KEY = "backtester-console-sql";
@@ -15,7 +16,7 @@ type Props = { dbPath: string; fontSize: number };
 
 export default function QueryConsole({ dbPath, fontSize }: Props) {
     const [sql, setSql] = useState<string>(
-        () => localStorage.getItem(SQL_STORAGE_KEY) || DEFAULT_SQL,
+        () => readStored(SQL_STORAGE_KEY) || DEFAULT_SQL,
     );
     const [result, setResult] = useState<main.QueryResult | null>(null);
     const [error, setError] = useState<string>("");
@@ -27,7 +28,7 @@ export default function QueryConsole({ dbPath, fontSize }: Props) {
 
     useEffect(() => {
         try {
-            localStorage.setItem(SQL_STORAGE_KEY, sql);
+            writeStored(SQL_STORAGE_KEY, sql);
         } catch {}
     }, [sql]);
 
