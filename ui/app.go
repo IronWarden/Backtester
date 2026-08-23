@@ -473,11 +473,54 @@ func (a *App) PickLuaFile() (string, error) {
 
 // ReadFile returns the file's contents as a string. Used by the frontend
 // to load the TOML/Lua source into Monaco.
+// resolveAppPath maps a path the frontend holds onto the file the ENGINE would
+// read, by walking the same parents backtest.resolveLuaPath walks.
+//
+// The CLI runs from the repo root and the desktop app runs from ui/, so
+// "strategies/example.lua" means the one library in both -- that is why reads
+// of a lua: spec parent-walk. The file helpers here did not, and the mismatch
+// was a real bug (T95): from cwd=ui, FileExists("strategies/example.lua") said
+// no, the Lua tab reported "new file, will be created on Save", and saving
+// wrote a ZERO-BYTE ui/strategies/example.lua -- recreating the shadow
+// directory T86 deleted, with an empty script that then shadowed the real one.
+//
+// Rules, in order:
+//   - absolute paths are returned untouched; the file dialogs produce those
+//     and second-guessing them would be wrong;
+//   - an existing file wins, nearest first, so cwd still shadows a parent
+//     exactly as it did before;
+//   - for a file that does not exist yet, the first candidate whose PARENT
+//     DIRECTORY exists wins -- a new script named "strategies/mine.lua"
+//     belongs in the library the gallery lists, not in a new directory beside
+//     the binary;
+//   - failing all that, the path as given, so nothing new can fail to write.
+func resolveAppPath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	candidates := []string{
+		path,
+		filepath.Join("..", path),
+		filepath.Join("..", "..", path),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(filepath.Dir(c)); err == nil && info.IsDir() {
+			return c
+		}
+	}
+	return path
+}
+
 func (a *App) ReadFile(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path is empty")
 	}
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(resolveAppPath(path))
 	if err != nil {
 		return "", err
 	}
@@ -491,6 +534,9 @@ func (a *App) WriteFile(path, content string) error {
 	if path == "" {
 		return fmt.Errorf("path is empty")
 	}
+	// Resolved so a save lands on the file the engine reads. Without this the
+	// Lua tab wrote a second, shadowing copy under ui/ -- see resolveAppPath.
+	path = resolveAppPath(path)
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("mkdir %q: %w", dir, err)
@@ -505,7 +551,7 @@ func (a *App) FileExists(path string) bool {
 	if path == "" {
 		return false
 	}
-	info, err := os.Stat(path)
+	info, err := os.Stat(resolveAppPath(path))
 	return err == nil && !info.IsDir()
 }
 
