@@ -7,6 +7,7 @@
       "sortinoRatio": 1.25,
       "maxDrawdown": 1.25,
       "annualReturn": 1.25,
+      "realAnnualReturn": 1.25,
       "standardDev": 1.25,
       "avgCorrelation": 1.25,
       "cointegratedPairs": 7,
@@ -36,7 +37,8 @@
         "annualReturn": 0,
         "sharpeRatio": 0,
         "maxDrawdown": 0,
-        "standardDev": 0
+        "standardDev": 0,
+        "realAnnualReturn": 0
       },
       "splits": null,
       "walkForward": null,

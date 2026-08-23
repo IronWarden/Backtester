@@ -579,6 +579,24 @@ across asset classes (e.g. ["$SP500", "$CASH"]).
 - SortinoRatio: same numerator, downside deviation denominator.
 - MaxDrawdown: worst peak-to-trough decline of daily portfolio value, in %.
 - AnnualReturn: CAGR of the compounded daily return series, in %.
+- RealAnnualReturn: AnnualReturn with inflation divided out -- the same CAGR in
+  constant money, so a 10% year in 2021 and a 10% year in 2013 stop looking
+  identical. Deflated by CPIAUCSL from economic_indicators, endpoint to
+  endpoint over the run's own window, using the COMPOUNDING form
+  ((1+nominal)/(1+inflation)), not nominal-minus-inflation -- over a decade the
+  difference is real. 10% nominal against 3% inflation is 6.80% real, not 7%.
+  **0 means NOT AVAILABLE, not "no real growth"**: it is reported only when CPI
+  covers the months at BOTH ends of the window, and CPI for a month is
+  published mid-way through the next one, so a run ending in the last few weeks
+  will not have it. Deflating by a shorter span would overstate the real return
+  silently, so the engine reports nothing instead. The results panel shows an em
+  dash. The benchmark row carries its own RealAnnualReturn over the same window
+  and the same factor, so the two are directly comparable.
+  ONLY the return is deflated. The equity curve, MaxDrawdown, CalmarRatio and
+  LongestUnderwaterDays stay nominal on purpose -- a drawdown is a nominal
+  experience, and restating it in today's money would corrupt the figure users
+  trust most. If a user asks for a real drawdown, say it is deliberately not
+  offered and why.
 - StandardDev: annualized stdev of daily returns.
 - AvgCorrelation / CointegratedPairs: mean pairwise return correlation and
   count of cointegrated ticker pairs in the portfolio.
@@ -1676,6 +1694,11 @@ classes (e.g. ["$SP500", "$CASH"]).
 - SortinoRatio: same numerator, downside deviation denominator.
 - MaxDrawdown: worst peak-to-trough decline, in %.
 - AnnualReturn: CAGR of the compounded daily returns, in %.
+- RealAnnualReturn: the same CAGR with inflation divided out (CPIAUCSL,
+  compounded not subtracted). 0 means NOT AVAILABLE -- CPI must cover both ends
+  of the window and is published a month in arrears -- shown as an em dash, not
+  as zero growth. Only the return is deflated; drawdown and everything built on
+  it stay nominal.
 - StandardDev: annualized stdev of daily returns.
 - CalmarRatio: AnnualReturn / MaxDrawdown. A portfolio that never declined
   reports 0, NOT infinity — check MaxDrawdown to tell which case it is.

@@ -897,8 +897,12 @@ The benchmark is also reported **on its own terms**, so "did I beat it" does
 not have to be inferred from alpha. Each result carries a `BenchmarkCurve` —
 the benchmark's value over the same trading days, compounded from the
 portfolio's own starting capital so the two share one axis and one origin —
-and `BenchmarkStats`, its own `AnnualReturn`, `SharpeRatio`, `MaxDrawdown` and
-`StandardDev`, computed with the same functions the portfolio uses. The
+and `BenchmarkStats`, its own `AnnualReturn`, `RealAnnualReturn`,
+`SharpeRatio`, `MaxDrawdown` and `StandardDev`, computed with the same
+functions the portfolio uses. The benchmark's real return is deflated over the
+same window by the same CPI ratio, so the two `Real %` figures answer the same
+question — a real portfolio return beside a nominal benchmark one would be
+worse than showing neither. The
 desktop UI draws the curve as a muted dashed line on the equity chart and adds
 one row per distinct benchmark to the metrics table.
 
@@ -2115,6 +2119,13 @@ Reported metrics per run:
 - `SortinoRatio` — annualized, downside-deviation denominator.
 - `MaxDrawdown` — peak-to-trough drawdown of the daily close-value series, as a percent.
 - `AnnualReturn` — CAGR derived from the compounded daily return series.
+- `RealAnnualReturn` — `AnnualReturn` with inflation divided out: the same CAGR expressed in constant money, so a 10% year in 2021 and a 10% year in 2013 stop looking identical. Deflated by **`CPIAUCSL`** (CPI for All Urban Consumers, All Items, seasonally adjusted) from the optional `economic_indicators` table, endpoint to endpoint over the run's own window.
+
+  It uses the **compounding** form — `(1 + nominal) / (1 + inflation)` — not `nominal − inflation`. The subtraction is an approximation that drifts as both the return and the window grow, which is exactly the decade-long case this figure exists for: 10% nominal against 3% inflation is **6.80% real, not 7%**.
+
+  **Zero means *not available*, not "no real growth".** It is reported only when CPI has a reading for the months at *both* ends of the window. CPI for a month is published mid-way through the next one, so a run ending in the last few weeks will not have it — and deflating by a shorter span than the return covers would overstate the real return silently, in the flattering direction. The engine reports nothing instead, and the results panel shows an em dash. A database with no `economic_indicators` table behaves identically to before this metric existed.
+
+  **Only the return is deflated.** The equity curve, `MaxDrawdown`, `CalmarRatio` and `LongestUnderwaterDays` stay nominal on purpose: a drawdown is a *nominal* experience — you watched the account fall by that much — and restating it in today's money would corrupt the figure users trust most to answer "how bad was it". `SharpeRatio` is already quoted on excess-of-risk-free returns, which prices the time value of money from a different direction; deflating on top would double-count.
 - `StandardDev` — annualized stdev of daily returns.
 - `LongestUnderwaterDays` — the most calendar days the equity curve ever spent below a previous peak, measured from that peak until it was regained, and to the end of the run for a decline never recovered. `MaxDrawdown` says how *deep* the worst hole was; this says how *long* you would have had to sit in one. A 40% drawdown recovered in a month and a 15% one that took three years are not the same experience, and only the second gets abandoned. Computed over **every** drawdown, not the deepest few the results panel lists — the longest is frequently not the deepest.
 - `CalmarRatio` — `AnnualReturn / MaxDrawdown`. Return per unit of worst-case decline, and a different question from Sharpe: Sharpe penalises volatility in both directions, Calmar counts only the deepest hole the account was ever in — which is what actually decides whether a strategy gets abandoned partway through. **A portfolio that never declined reports 0, not infinity**: an unbounded ratio is undefined rather than excellent, and reporting it would sort a strategy that never traded above every real one.

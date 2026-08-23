@@ -67,6 +67,23 @@ const hypothesis: HypothesisForm = JSON.parse(
 
 console.log("frontend smoke render");
 
+// RealAnnualReturn uses 0 as "CPI does not cover this window", which is a
+// different claim from "real growth was zero". Rendering it as 0.00 would be a
+// number the engine never asserted.
+check("an unavailable real return renders as a dash, not zero", () => {
+    const { results, verdicts } = load("full");
+    const unavailable = results.map((r: main.RunResult) =>
+        main.RunResult.createFrom({ ...r, realAnnualReturn: 0 }),
+    );
+    const html = renderToString(
+        <ResultsView results={unavailable} fontSize={16} verdicts={verdicts} />,
+    );
+    // The metrics table always renders, so the cell is definitely in there.
+    if (html.includes(">0.00<")) {
+        throw new Error("a zero real return rendered as 0.00 rather than an em dash");
+    }
+});
+
 // Seven of the eleven result panels are COLLAPSIBLE and default to closed
 // (T85), and a closed panel renders no body: `{open && children}`. So every
 // render check above exercises four panels and silently skips walk-forward,

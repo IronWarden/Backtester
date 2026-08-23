@@ -101,6 +101,9 @@ func equalWeightBaseline(
 		return stats
 	}
 	base.Costs = p.Costs
+	// The yardstick must be measured in the same money as the thing it is a
+	// yardstick for.
+	base.CPI = p.CPI
 
 	base.Strategy.Step(base, windowed, 0)
 	prev := base.GetPortfolioValue(base.Tickers, windowed, 0)

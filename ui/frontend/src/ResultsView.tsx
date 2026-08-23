@@ -84,6 +84,13 @@ function fmtDollars(v: number): string {
 // Go's time.Time arrives as an RFC3339 string, typed `any` by the wails
 // binding generator. An ongoing drawdown has no recovery date and is sent
 // as the zero time, which we render as a dash rather than as year 1.
+// The engine reports 0 for "CPI does not cover both ends of this window", which
+// is a different claim from "real growth was zero" and must not be rendered as
+// 0.00. Exactly zero is unreachable for a real run, so the sentinel is safe.
+function fmtReal(v: number | undefined): string {
+  return v ? v.toFixed(2) : "—";
+}
+
 function fmtDate(v: any): string {
   if (!v) return "—";
   const d = new Date(v as string);
@@ -818,6 +825,12 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   Underwater
                 </th>
                 <th className="num">Annual %</th>
+                <th
+                  className="num"
+                  title="Annual % with inflation divided out (CPI). An em dash means CPI does not cover both ends of the window — it is published a month in arrears — not that real growth was zero."
+                >
+                  Real %
+                </th>
                 <th className="num">Std Dev</th>
                 <th className="num">Turnover</th>
                 <th className="num" title="Mean invested fraction of the book">
@@ -877,6 +890,10 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                     <td className="num">{r.maxDrawdown.toFixed(2)}</td>
                     <td className="num">{r.longestUnderwaterDays}</td>
                     <td className="num">{r.annualReturn.toFixed(2)}</td>
+                    {/* Zero means "CPI did not reach both ends of this
+                        window", not "no real growth" — opposite claims, so it
+                        must not render as 0.00. */}
+                    <td className="num">{fmtReal(r.realAnnualReturn)}</td>
                     <td className="num">{r.standardDev.toFixed(4)}</td>
                     <td className="num">{r.turnover.toFixed(2)}</td>
                     <td className="num">{r.avgExposure.toFixed(1)}</td>
@@ -952,6 +969,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   <td className="num">{b.stats.maxDrawdown.toFixed(2)}</td>
                   <td className="num">—</td>{/* Underwater */}
                   <td className="num">{b.stats.annualReturn.toFixed(2)}</td>
+                  <td className="num">{fmtReal(b.stats.realAnnualReturn)}</td>
                   <td className="num">{b.stats.standardDev.toFixed(4)}</td>
                   <td className="num">—</td>{/* Turnover */}
                   <td className="num">—</td>{/* Exposure % */}

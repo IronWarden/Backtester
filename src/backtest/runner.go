@@ -560,6 +560,14 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 
 	startTime, endTime := dateRange(portfolios)
 	riskFreeRates := data.GetRiskFreeRates(startTime, endTime)
+	// One query for the union window, shared read-only by every worker, the
+	// same way the risk-free series is. A few hundred monthly rows. Nil when
+	// the table is absent, which leaves the real return unreported and changes
+	// nothing else.
+	cpi := data.GetCPISeries()
+	for _, p := range portfolios {
+		p.CPI = cpi
+	}
 
 	allTickersMap := make(map[string]bool)
 	for _, p := range portfolios {

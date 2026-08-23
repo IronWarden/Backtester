@@ -293,6 +293,9 @@ func (p *Portfolio) rerun(
 		return nil, false
 	}
 	clone.Costs = costs
+	// Same deflator as the portfolio it is a perturbation of, or the shifted
+	// runs would report a real return of zero and look worse than they are.
+	clone.CPI = p.CPI
 	defer func() {
 		if c, ok := clone.Strategy.(interface{ Close() }); ok {
 			c.Close()

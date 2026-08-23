@@ -36,6 +36,7 @@ type RunResult struct {
 	SortinoRatio      float64 `json:"sortinoRatio"`
 	MaxDrawdown       float64 `json:"maxDrawdown"`
 	AnnualReturn      float64 `json:"annualReturn"`
+	RealAnnualReturn  float64 `json:"realAnnualReturn"`
 	StandardDev       float64 `json:"standardDev"`
 	AvgCorrelation    float64 `json:"avgCorrelation"`
 	CointegratedPairs int     `json:"cointegratedPairs"`
@@ -253,6 +254,7 @@ func (a *App) RunBacktest(
 			SortinoRatio:          r.Metrics.SortinoRatio,
 			MaxDrawdown:           r.Metrics.MaxDrawdown,
 			AnnualReturn:          r.Metrics.AnnualReturn,
+			RealAnnualReturn:      r.Metrics.RealAnnualReturn,
 			StandardDev:           r.Metrics.StandardDev,
 			AvgCorrelation:        r.Metrics.AvgCorrelation,
 			CointegratedPairs:     r.Metrics.CointegratedPairs,

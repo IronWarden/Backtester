@@ -53,6 +53,16 @@ type Portfolio struct {
 	Strategy             Strategy
 	StartTime            time.Time
 	EndTime              time.Time
+	// CPI is the monthly deflator covering this run, loaded once by the runner
+	// and shared read-only across the worker pool. Nil when the database has
+	// no economic_indicators table, which simply leaves the real return
+	// unreported — it is not an error and nothing else changes.
+	CPI []data.CPIPoint
+	// inflationFactor is CPI(end)/CPI(start) for the window actually
+	// simulated, cached once the metrics are computed so the benchmark can be
+	// deflated by the same number rather than re-deriving it and risking a
+	// different answer.
+	inflationFactor float64
 	// Costs is the trading-cost model applied by Buy and Sell. The zero
 	// value charges nothing. Clone must carry this across — the runner
 	// simulates clones, so a cost model left behind here would be silently

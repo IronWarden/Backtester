@@ -84,6 +84,16 @@ type Metrics struct {
 	// whether a strategy gets abandoned partway through.
 	CalmarRatio float64
 
+	// RealAnnualReturn is AnnualReturn with inflation divided out: the same
+	// CAGR expressed in constant money, so a 10% year in 2021 and a 10% year
+	// in 2013 stop looking identical.
+	//
+	// Zero when CPI does not cover both ends of the window, which the UI shows
+	// as an em dash rather than as 0.00 — "not available" and "no real growth"
+	// are opposite claims. Only the return is deflated; the equity curve and
+	// every drawdown-derived figure stay nominal. See inflation.go.
+	RealAnnualReturn float64
+
 	// LongestUnderwaterDays is the most calendar days the equity curve ever
 	// spent below a previous peak, from the peak until it was regained — and
 	// until the end of the run for a decline never recovered.
@@ -437,6 +447,7 @@ func (p *Portfolio) applyBenchmarkMetrics(
 	p.BenchmarkCurve = rebasedCurve(benchmark, p.InitialBuyingPower)
 	p.BenchmarkStats = benchmarkStatsFrom(
 		p.Benchmark, benchmark, benchmarkExcess, p.BenchmarkCurve, p.DailyReturns,
+		p.inflationFactor,
 	)
 }
 
@@ -458,6 +469,12 @@ type BenchmarkStats struct {
 	SharpeRatio  float64 `json:"sharpeRatio"`
 	MaxDrawdown  float64 `json:"maxDrawdown"`
 	StandardDev  float64 `json:"standardDev"`
+	// RealAnnualReturn deflates AnnualReturn over the same window by the same
+	// CPI ratio the portfolio uses. Filled in rather than left blank on
+	// purpose: a real portfolio return next to a nominal benchmark return
+	// would be the worst of both, and the window is shared so the factor is
+	// already in hand.
+	RealAnnualReturn float64 `json:"realAnnualReturn"`
 }
 
 // rebasedCurve compounds a return series into a value series starting from
@@ -490,18 +507,25 @@ func benchmarkStatsFrom(
 	ticker string,
 	returns, excess, curve []float64,
 	days []DailyReturn,
+	inflationFactor float64,
 ) BenchmarkStats {
 	numYears := 0.0
 	if n := len(days); n > 1 {
 		span := days[n-1].Date.Sub(days[0].Date)
 		numYears = span.Hours() / 24 / 365.25
 	}
+	annualReturn := GetAnnualReturn(returns, numYears)
 	return BenchmarkStats{
 		Ticker:       ticker,
-		AnnualReturn: GetAnnualReturn(returns, numYears),
+		AnnualReturn: annualReturn,
 		SharpeRatio:  GetSharpeRatio(excess),
 		MaxDrawdown:  GetMaxDrawdown(curve),
 		StandardDev:  stat.StdDev(returns, nil) * math.Sqrt(252.0),
+		// The portfolio's own factor, over the portfolio's own days, so the
+		// two Real % cells answer the same question. Zero when the portfolio
+		// has no real return either, which keeps the pair consistent rather
+		// than showing one and not the other.
+		RealAnnualReturn: realFromNominal(annualReturn, numYears, inflationFactor),
 	}
 }
 
@@ -603,6 +627,32 @@ func (p *Portfolio) GetBacktestingData(
 	sharpeRatio := GetSharpeRatio(excess)
 	sortinoRatio := GetSortinoRatio(excess)
 	annualReturn := GetAnnualReturn(dailyReturns, numYears)
+	// Deflated over the same endpoints numYears is measured across, so the
+	// real figure describes exactly the window the nominal one does. Zero when
+	// CPI does not reach both ends.
+	realAnnualReturn := 0.0
+	if n := len(p.DailyReturns); n > 1 {
+		first, last := p.DailyReturns[0].Date, p.DailyReturns[n-1].Date
+		if factor, ok := InflationFactor(p.CPI, first, last); ok {
+			realAnnualReturn = GetRealAnnualReturn(dailyReturns, numYears, factor)
+			p.inflationFactor = factor
+		} else if len(p.CPI) > 0 {
+			// A blank Real % column with no explanation reads as a bug. Say
+			// which end is uncovered and how far short the series falls, so
+			// the answer is "the CPI table is behind" rather than "the app is
+			// broken". Only when a series exists at all: a database with no
+			// economic_indicators table never promised this column.
+			newest := p.CPI[len(p.CPI)-1].Date
+			diagf("info", p.Pname,
+				"no real return for %q: CPI runs to %s but the window ends %s. "+
+					"CPI is published a month in arrears, and deflating by a "+
+					"shorter span than the window would overstate the real return, "+
+					"so it is not reported. Re-run the economic-indicator loader, "+
+					"or end the window on or before %s.",
+				p.Pname, newest.Format("2006-01"), last.Format("2006-01"),
+				newest.Format("2006-01-02"))
+		}
+	}
 	maxDrawdown := GetMaxDrawdown(p.PortfolioCloseValues)
 	avgCorrelation := AvgPairwiseCorrelation(p.Tickers, hist, dataLen)
 	cointegratedPairs := CountCointegratedPairs(p.Tickers, hist, dataLen)
@@ -612,6 +662,7 @@ func (p *Portfolio) GetBacktestingData(
 		SortinoRatio:      sortinoRatio,
 		MaxDrawdown:       maxDrawdown,
 		AnnualReturn:      annualReturn,
+		RealAnnualReturn:  realAnnualReturn,
 		AvgCorrelation:    avgCorrelation,
 		CointegratedPairs: cointegratedPairs,
 		Turnover:          GetTurnover(p.tradedNotional, p.PortfolioCloseValues),
