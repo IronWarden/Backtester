@@ -253,3 +253,113 @@ func TestDrawdownIsMeasuredFromTheRunningPeak(t *testing.T) {
 			labels[235:260])
 	}
 }
+
+// The expanding-median comparison LabelRegimes used to make by sorting a copy
+// of every volatility seen so far. Kept here as the reference the streaming
+// median has to agree with exactly: the point of runningMedian is that it is
+// faster, not that it is different.
+func labelRegimesBySorting(returns []float64) []Regime {
+	labels := make([]Regime, len(returns))
+	if len(returns) == 0 {
+		return labels
+	}
+	index, peak := 1.0, 1.0
+	var vols []float64
+	for i, r := range returns {
+		index *= 1 + r
+		if index > peak {
+			peak = index
+		}
+		labels[i] = RegimeUnknown
+		if i < RegimeWarmup {
+			continue
+		}
+		drawdown := index/peak - 1
+		vol, ok := sampleStdev(returns[i-RegimeVolWindow+1 : i+1])
+		if !ok {
+			continue
+		}
+		vols = append(vols, vol)
+		volatile := vol > median(vols)
+		switch {
+		case drawdown <= BearDrawdown && volatile:
+			labels[i] = RegimeBearVolatile
+		case drawdown <= BearDrawdown:
+			labels[i] = RegimeBearCalm
+		case volatile:
+			labels[i] = RegimeBullVolatile
+		default:
+			labels[i] = RegimeBullCalm
+		}
+	}
+	return labels
+}
+
+// LabelRegimes sorted the whole volatility history once per day, which made
+// every backtest quadratic in its own length -- 80% of the per-portfolio cost
+// at ten years, seconds at forty. The streaming median removed that, and this
+// is what says it removed nothing else: same labels, day for day, on markets
+// with enough structure to exercise every branch.
+func TestStreamingMedianLabelsIdenticallyToSorting(t *testing.T) {
+	rng := rand.New(rand.NewSource(20260905))
+	for _, days := range []int{0, 1, RegimeWarmup, RegimeWarmup + 1, 500, 3000} {
+		returns := make([]float64, days)
+		vol := 0.008
+		for i := range returns {
+			// Volatility that drifts and occasionally jumps, so the median
+			// comparison flips both ways rather than settling.
+			if i%137 == 0 {
+				vol = 0.004 + rng.Float64()*0.02
+			}
+			returns[i] = rng.NormFloat64()*vol + 0.0002
+		}
+		got := LabelRegimes(returns)
+		want := labelRegimesBySorting(returns)
+		if len(got) != len(want) {
+			t.Fatalf("%d days: got %d labels, want %d", days, len(got), len(want))
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("%d days: label %d is %q, the sorting version says %q",
+					days, i, got[i], want[i])
+			}
+		}
+	}
+}
+
+// The median itself, against the definition rather than against a label: an
+// even count averages the two middle values, an odd count takes the middle,
+// and an empty set is 0 -- the same answers median() gives.
+func TestRunningMedianMatchesTheSortingMedian(t *testing.T) {
+	rng := rand.New(rand.NewSource(7))
+	var m runningMedian
+	if m.median() != 0 {
+		t.Fatalf("empty running median is %v, want 0", m.median())
+	}
+	var seen []float64
+	for i := 0; i < 400; i++ {
+		v := rng.NormFloat64()
+		seen = append(seen, v)
+		m.push(v)
+		if got, want := m.median(), median(seen); got != want {
+			t.Fatalf("after %d values: running median %v, sorting median %v",
+				i+1, got, want)
+		}
+	}
+}
+
+// Labelling ten years of daily returns. The sorting version took ~120ms here
+// and grew with the SQUARE of the run's length; this should stay in the
+// microseconds and grow with it linearly, so a regression is visible as an
+// order of magnitude rather than as a percentage.
+func BenchmarkLabelRegimes(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	returns := make([]float64, 2517)
+	for i := range returns {
+		returns[i] = rng.NormFloat64() * 0.01
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		LabelRegimes(returns)
+	}
+}

@@ -23,6 +23,7 @@ package backtest
 // database read inside the run path rather than an arithmetic change here.
 
 import (
+	"container/heap"
 	"fmt"
 	"math"
 	"my-backtester/src/data"
@@ -119,7 +120,7 @@ func LabelRegimes(returns []float64) []Regime {
 
 	index := 1.0
 	peak := 1.0
-	var vols []float64
+	var vols runningMedian
 
 	for i, r := range returns {
 		index *= 1 + r
@@ -137,11 +138,11 @@ func LabelRegimes(returns []float64) []Regime {
 		if !ok {
 			continue
 		}
-		vols = append(vols, vol)
+		vols.push(vol)
 		// Compared against the median of every window seen SO FAR, so "high
 		// volatility" means high relative to what had already happened rather
 		// than relative to the whole run — which would be a peek.
-		volatile := vol > median(vols)
+		volatile := vol > vols.median()
 
 		switch {
 		case drawdown <= BearDrawdown && volatile:
@@ -156,6 +157,69 @@ func LabelRegimes(returns []float64) []Regime {
 	}
 	return labels
 }
+
+// runningMedian answers "the median of everything pushed so far" in O(log n)
+// per value. LabelRegimes needs that answer once per trading day, and asking it
+// by sorting a copy of the whole history each time made a run QUADRATIC in its
+// own length: at ten years it was already 80% of the per-portfolio cost, at
+// forty years 2.5s, and over a century-long benchmark series minutes — all of
+// it inside sort.Float64s, none of it simulating anything.
+//
+// Two heaps: low holds the smaller half as a max-heap, high the larger half as
+// a min-heap, and the median is read off their roots. It selects exactly the
+// same one or two values the sort did, so the labels — and every number derived
+// from them — are unchanged.
+type runningMedian struct {
+	low  maxHeap // the smaller half, largest at the root
+	high minHeap // the larger half, smallest at the root
+}
+
+func (m *runningMedian) push(v float64) {
+	if m.low.Len() == 0 || v <= m.low[0] {
+		heap.Push(&m.low, v)
+	} else {
+		heap.Push(&m.high, v)
+	}
+	// Keep the halves within one of each other, with the extra element in low,
+	// so an odd count reads its median straight off low's root.
+	switch {
+	case m.low.Len() > m.high.Len()+1:
+		heap.Push(&m.high, heap.Pop(&m.low))
+	case m.high.Len() > m.low.Len():
+		heap.Push(&m.low, heap.Pop(&m.high))
+	}
+}
+
+// median returns 0 for an empty set, matching the free function it replaced.
+func (m *runningMedian) median() float64 {
+	switch {
+	case m.low.Len() == 0:
+		return 0
+	case m.low.Len() > m.high.Len():
+		return m.low[0]
+	default:
+		return (m.low[0] + m.high[0]) / 2
+	}
+}
+
+// The two halves. Separate types rather than one with a comparison func: this
+// runs once per day of every backtest, and an indirect call per Less is the
+// kind of cost that put us here.
+type maxHeap []float64
+
+func (h maxHeap) Len() int           { return len(h) }
+func (h maxHeap) Less(i, j int) bool { return h[i] > h[j] }
+func (h maxHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *maxHeap) Push(x any)        { *h = append(*h, x.(float64)) }
+func (h *maxHeap) Pop() any          { old := *h; n := len(old); v := old[n-1]; *h = old[:n-1]; return v }
+
+type minHeap []float64
+
+func (h minHeap) Len() int           { return len(h) }
+func (h minHeap) Less(i, j int) bool { return h[i] < h[j] }
+func (h minHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *minHeap) Push(x any)        { *h = append(*h, x.(float64)) }
+func (h *minHeap) Pop() any          { old := *h; n := len(old); v := old[n-1]; *h = old[:n-1]; return v }
 
 // SliceByRegime splits a strategy's daily returns by label and scores each
 // environment separately. strategyReturns and labels must be 1:1.
