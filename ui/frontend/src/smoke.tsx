@@ -24,7 +24,15 @@ import SimpleFormView from "./SimpleForm";
 import { CRITERION_OPS, buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
 import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
-import { BLANK, EXAMPLES, buildExample, exampleHypothesis } from "./examples";
+import {
+    BASKETS,
+    BLANK,
+    CRITERION_PRESETS,
+    EXAMPLES,
+    basketTickers,
+    buildExample,
+    exampleHypothesis,
+} from "./examples";
 import { readStored, readStoredNumber, readStoredObject, writeStored } from "./storage";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { backtest, main } from "../wailsjs/go/models";
@@ -283,6 +291,9 @@ for (const [label, fs] of [
     ["three portfolios", [form, { ...form, name: "B" }, { ...form, name: "C" }]],
     // Two blocks sharing a name is the state the form must refuse to run.
     ["duplicate names", [form, { ...form }]],
+    // An empty card beside a populated one: the only state that renders the
+    // starter baskets, since a wholly empty form gets the examples instead.
+    ["one populated, one empty", [form, { ...form, name: "B", tickers: [], allocations: {} }]],
 ] as [string, SimpleForm[]][]) {
     check(`SimpleForm / ${label}`, () => {
         renderToString(
@@ -572,6 +583,55 @@ check("an example is withdrawn rather than broken when symbols are missing", () 
     // And an empty database offers nothing at all, rather than throwing.
     for (const ex of EXAMPLES) {
         eq(`${ex.id} on empty db`, buildExample(ex, {}, "$SP500", BLANK), null);
+    }
+});
+
+check("starter baskets are filtered to what the database has", () => {
+    const ranges = {
+        AAPL: ["1990-01-02", "2026-08-07"],
+        MSFT: ["1990-01-02", "2026-08-07"],
+        GOOGL: ["2004-08-19", "2026-08-07"],
+        SPY: ["1993-01-29", "2026-08-07"],
+    };
+    for (const b of BASKETS) {
+        const got = basketTickers(b, ranges);
+        const have = b.tickers.filter((t) => t in ranges);
+        // Offered only when enough of it survives -- a "spread across sectors"
+        // that resolves to two names is a lie, so it is withdrawn instead.
+        eq(`${b.id}`, got, have.length >= b.minTickers ? have : []);
+        // Never a symbol this database does not have.
+        for (const t of got) {
+            if (!(t in ranges)) throw new Error(`${b.id} offered missing ${t}`);
+        }
+    }
+    // An empty database offers nothing rather than throwing.
+    for (const b of BASKETS) eq(`${b.id} on empty db`, basketTickers(b, {}), []);
+});
+
+check("every criterion preset names a metric the engine serves", () => {
+    // Same list App.CriterionMetrics returns. A preset the engine would reject
+    // has to fail here rather than at run time, where it costs a whole run.
+    const METRICS = [
+        "sharpe", "sortino", "calmar", "annual_return", "max_drawdown",
+        "total_return", "turnover", "exposure", "time_in_market", "p_value",
+    ];
+    if (CRITERION_PRESETS.length === 0) throw new Error("no presets offered");
+    for (const p of CRITERION_PRESETS) {
+        if (!METRICS.includes(p.metric)) {
+            throw new Error(`${p.id} uses unknown metric ${p.metric}`);
+        }
+        if (!CRITERION_OPS.includes(p.op)) {
+            throw new Error(`${p.id} uses unknown operator ${p.op}`);
+        }
+        // A preset must COMPLETE a registration, claim included, or clicking
+        // it leaves the run unjudged while looking like it did something.
+        const built = buildHypothesis({
+            claim: p.claim, metric: p.metric, op: p.op, value: p.value,
+        });
+        if (built === "") throw new Error(`${p.id} produced no hypothesis`);
+        if (!built.includes(`${p.metric} ${p.op} ${p.value}`)) {
+            throw new Error(`${p.id} did not register its own criterion: ${built}`);
+        }
     }
 });
 

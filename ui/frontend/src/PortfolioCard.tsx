@@ -8,6 +8,7 @@ import {
 } from "./buildToml";
 import type { SimpleForm as Form } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
+import { BASKETS, basketTickers } from "./examples";
 import {
     allocationTotal,
     benchmarkWarningOf,
@@ -83,6 +84,10 @@ type Props = {
     names: Record<string, string>;
     ranges: Ranges;
     pickable: backtest.StrategyCard[];
+    // Whether to offer starter baskets in an empty holdings box. False while
+    // the whole form is empty, because the starter examples own that moment --
+    // two answers to the same question is worse than one.
+    showBaskets: boolean;
 };
 
 export default function PortfolioCard({
@@ -94,6 +99,7 @@ export default function PortfolioCard({
     names,
     ranges,
     pickable,
+    showBaskets,
 }: Props) {
     const [tickerInput, setTickerInput] = useState("");
     // Which suggestion the keyboard is on, or -1 for "none: Enter takes what
@@ -129,6 +135,20 @@ export default function PortfolioCard({
         setTickerInput("");
         setHighlight(-1);
         setPickerOpen(false);
+    }
+
+    // A whole basket at once. Not addTicker in a loop: each call patches from
+    // the form it closed over, so the second would drop the first.
+    function addBasket(syms: string[]) {
+        const tickers = [...form.tickers];
+        for (const t of syms) if (!tickers.includes(t)) tickers.push(t);
+        if (tickers.length === form.tickers.length) return;
+        const allocations = form.evenSplit
+            ? evenAllocations(tickers)
+            : Object.fromEntries(
+                  tickers.map((t) => [t, form.allocations[t] ?? 0]),
+              );
+        patch({ tickers, allocations });
     }
 
     function removeTicker(t: string) {
@@ -537,6 +557,29 @@ export default function PortfolioCard({
                 {form.tickers.length === 0 ? (
                     <div className="empty">
                         No holdings yet — add a ticker to allocate to it.
+                        {showBaskets && (
+                            <div className="baskets">
+                                {BASKETS.map((b) => {
+                                    const syms = basketTickers(b, ranges);
+                                    if (syms.length === 0) return null;
+                                    return (
+                                        <button
+                                            key={b.id}
+                                            className="basket"
+                                            onClick={() => addBasket(syms)}
+                                            title={syms.join(", ")}
+                                        >
+                                            <span className="basket-label">
+                                                {b.label}
+                                            </span>
+                                            <span className="basket-note">
+                                                {b.note}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="alloc-list">

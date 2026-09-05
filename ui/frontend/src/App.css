@@ -520,7 +520,8 @@ button.primary:hover:not(:disabled),
   gap: 0.4em;
 }
 
-.date-presets .presets-label {
+.date-presets .presets-label,
+.criterion-presets .presets-label {
   font-size: 0.8em;
   color: var(--text-3);
   margin-right: 0.2em;
@@ -723,6 +724,56 @@ button.primary:hover:not(:disabled),
   font-size: 0.82em;
   color: var(--text-3);
   font-style: italic;
+}
+
+/* Starter baskets, inside an empty holdings box. Same idea as the starter
+   examples one level down: a holdings list to accept and then edit, for
+   someone who does not know which symbols they want. Not offered while the
+   whole form is empty -- the examples own that moment. */
+.simple-form .baskets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin-top: 0.6em;
+  font-style: normal;
+}
+
+.simple-form button.basket {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.35em 0.7em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.simple-form button.basket:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.simple-form .basket-label {
+  font-size: var(--fs-s);
+  color: var(--text-2);
+}
+
+.simple-form .basket-note {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* Criterion presets. They fill the metric/operator/number controls above
+   rather than replacing them, so the row sits directly under those and reuses
+   the same chips the date presets use. */
+.simple-form .criterion-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
 }
 
 /* Starter examples. Shown only while no portfolio has holdings, so this is

@@ -1838,6 +1838,16 @@ total US market.
   portfolio plus its hypothesis, with the window clamped to what the database
   and the benchmark actually cover, and each is hidden when the data cannot
   support it. They are a starting point to EDIT, not a recommendation.
+- An empty holdings box offers STARTER BASKETS (big tech, the whole market as
+  one fund, a spread across sector ETFs), filtered to symbols the database has
+  and withdrawn if too few survive. Shown only once something else in the form
+  has holdings; a wholly empty form gets the starter examples instead.
+- The criterion row offers PRESETS that fill it: "Better than a coin flip"
+  (p_value <= 0.05), "Steady enough to hold" (sharpe >= 1), "Never fell more
+  than 30%" (max_drawdown <= 30 -- the metric is a POSITIVE percentage), "Made
+  at least 8% a year" (annual_return >= 8). They fill the existing controls
+  rather than hiding them, and fill the claim only when it is empty. Suggest
+  one when a user does not know what threshold to register.
 - The Backtest tab sets Benchmark = "$SP500" by default, so its configs answer
   "did this beat the market". The benchmark is scored against, never traded,
   so the portfolio's own return is unaffected — but the engine skips ALL

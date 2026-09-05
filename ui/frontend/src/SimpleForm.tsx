@@ -17,7 +17,13 @@ import {
 } from "./buildToml";
 import type { SimpleForm as Form, HypothesisForm } from "./buildToml";
 import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
-import { BLANK, EXAMPLES, buildExample, exampleHypothesis } from "./examples";
+import {
+    BLANK,
+    CRITERION_PRESETS,
+    EXAMPLES,
+    buildExample,
+    exampleHypothesis,
+} from "./examples";
 import PortfolioCard from "./PortfolioCard";
 import { readStored, writeStored } from "./storage";
 
@@ -289,6 +295,14 @@ export default function SimpleForm({
         [gallery],
     );
 
+    // A preset naming a metric this engine does not serve would produce a
+    // criterion the run refuses, so the vocabulary check happens here rather
+    // than in the click handler.
+    const presets = useMemo(
+        () => CRITERION_PRESETS.filter((p) => metrics.includes(p.metric)),
+        [metrics],
+    );
+
     const hypothesisToml = buildHypothesis(hypothesis);
     // A claim typed with no threshold is a half-registration: say so rather
     // than running unjudged and letting the user believe it was tested.
@@ -369,6 +383,9 @@ export default function SimpleForm({
                     available={available}
                     names={names}
                     ranges={ranges}
+                    // Only once something is in the form: an untouched form
+                    // gets the starter examples above instead.
+                    showBaskets={anyTickers}
                     pickable={pickable}
                 />
             ))}
@@ -438,6 +455,37 @@ export default function SimpleForm({
                         onChange={(e) => patchHypothesis({ value: e.target.value })}
                     />
                 </div>
+
+                {/* The presets fill the controls above rather than replacing
+                    them, so the vocabulary is visible after one click instead
+                    of hidden behind a friendly label. Filtered against the
+                    metric list the ENGINE serves, so the form cannot offer a
+                    criterion ParseCriterion would reject. */}
+                {presets.length > 0 && (
+                    <div className="criterion-presets">
+                        <span className="presets-label">Or start from</span>
+                        {presets.map((pre) => (
+                            <button
+                                key={pre.id}
+                                className="preset-chip"
+                                onClick={() =>
+                                    patchHypothesis({
+                                        // Never overwrite a claim the user
+                                        // wrote in their own words.
+                                        claim: hypothesis.claim.trim()
+                                            ? hypothesis.claim
+                                            : pre.claim,
+                                        metric: pre.metric,
+                                        op: pre.op,
+                                        value: pre.value,
+                                    })
+                                }
+                            >
+                                {pre.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {hypothesisIncomplete ? (
                     <div className="coverage-msg err">

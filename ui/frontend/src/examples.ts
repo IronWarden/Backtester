@@ -198,3 +198,119 @@ export function exampleHypothesis(ex: Example): HypothesisForm {
     value: ex.hypothesis.value,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Starter baskets
+//
+// The picker searches by company name, which helps someone who knows they want
+// Apple. It does nothing for someone who does not know what to hold, and that
+// is the more common beginner. These are the same idea as the examples above,
+// one level down: a holdings list you can accept and then edit.
+//
+// Deliberately NOT offered on a form with nothing in it anywhere -- the
+// starter examples own that moment, and two answers to the same question is
+// worse than one. They appear on a card that has been emptied, and on the
+// second portfolio of a comparison, which is exactly where someone knows they
+// want "something to compare against" and not which symbols that means.
+
+export type Basket = {
+  id: string;
+  label: string;
+  // Why you would hold this, in the fewest words that are still true.
+  note: string;
+  tickers: string[];
+  // Below this many surviving symbols the basket is not offered: a "spread
+  // across sectors" that resolves to two names is a lie.
+  minTickers: number;
+};
+
+export const BASKETS: Basket[] = [
+  {
+    id: "big-tech",
+    label: "Big tech",
+    note: "Five names that led the last decade",
+    tickers: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"],
+    minTickers: 3,
+  },
+  {
+    id: "whole-market",
+    label: "The whole market",
+    note: "One fund, the broad US index",
+    tickers: ["SPY"],
+    minTickers: 1,
+  },
+  {
+    id: "sectors",
+    label: "Spread across sectors",
+    note: "Tech, health, energy, banks, staples",
+    tickers: ["XLK", "XLV", "XLE", "XLF", "XLP"],
+    minTickers: 4,
+  },
+];
+
+// The symbols this database has, in the basket's preferred order. Empty when
+// too few survive to be worth offering.
+export function basketTickers(b: Basket, ranges: Ranges): string[] {
+  const have = b.tickers.filter((t) => !!ranges[t]);
+  return have.length >= b.minTickers ? have : [];
+}
+
+// ---------------------------------------------------------------------------
+// Hypothesis presets
+//
+// Pre-registering a claim is the best idea in the app and the one a beginner
+// is least able to use: the box asks for a metric, an operator and a number,
+// and `sharpe >= 1.2` means nothing on a first run. The honest consequence is
+// that they leave it blank and lose the discipline entirely.
+//
+// These fill the existing controls rather than replacing them, so they teach
+// the vocabulary instead of hiding it -- after clicking "Steady enough to
+// hold" you can see that it meant sharpe >= 1, and change the number.
+
+export type CriterionPreset = {
+  id: string;
+  label: string;
+  // Used only when the claim box is still empty: a preset should complete the
+  // registration, never overwrite something the user wrote in their own words.
+  claim: string;
+  metric: string;
+  op: string;
+  value: string;
+};
+
+export const CRITERION_PRESETS: CriterionPreset[] = [
+  {
+    id: "not-luck",
+    label: "Better than a coin flip",
+    claim: "this strategy's timing beats being invested at random",
+    metric: "p_value",
+    op: "<=",
+    value: "0.05",
+  },
+  {
+    id: "steady",
+    label: "Steady enough to hold",
+    claim: "this strategy earns enough per unit of risk to be worth holding",
+    metric: "sharpe",
+    op: ">=",
+    value: "1",
+  },
+  {
+    id: "shallow",
+    label: "Never fell more than 30%",
+    claim: "this strategy avoids a fall I could not sit through",
+    // MaxDrawdown is reported as a POSITIVE percentage (metrics.go returns
+    // the depth, not a signed return), so the bound is an upper one.
+    metric: "max_drawdown",
+    op: "<=",
+    value: "30",
+  },
+  {
+    id: "beats-market",
+    label: "Made at least 8% a year",
+    claim: "this strategy beats what the market has returned on average",
+    metric: "annual_return",
+    op: ">=",
+    value: "8",
+  },
+];

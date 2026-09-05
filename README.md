@@ -2003,6 +2003,26 @@ minutes, and its findings appear in the same console described below. Errors
 mean the config will not run as written; warnings mean it will run but may not
 do what was meant.
 
+#### Saying what you are hoping for
+
+Pre-registering a claim is the most useful habit the app can teach and the
+hardest one to start: the criterion is a metric, an operator and a number, and
+`sharpe >= 1.2` means very little on a first run. So under the criterion row
+there are presets:
+
+| preset | the criterion it fills |
+|---|---|
+| Better than a coin flip | `p_value <= 0.05` |
+| Steady enough to hold | `sharpe >= 1` |
+| Never fell more than 30% | `max_drawdown <= 30` |
+| Made at least 8% a year | `annual_return >= 8` |
+
+They **fill** the existing controls rather than replacing them, so one click
+also shows you what the phrase meant and leaves you free to change the number.
+A preset only appears if the engine actually serves its metric, so the form
+cannot offer a criterion the run would reject. If the claim box is empty a
+preset fills that too; if you have written your own words, they are left alone.
+
 #### The run console
 
 Below the results panel is a **Console** strip that appears whenever a run had
@@ -2070,6 +2090,19 @@ not carry are dropped, the window is clamped to what the remaining holdings
 is not offered at all. So clicking one always produces a run rather than a red
 date error. They vanish once a portfolio has holdings, and return if you clear
 it.
+
+### When you do not know what to hold
+
+The ticker box searches company names as well as symbols, which helps if you
+know you want Apple. If you do not know what you want at all, an empty holdings
+box offers **starter baskets** — big tech, the whole market as one fund, or a
+spread across five sectors — and one click adds the lot at equal weight.
+
+Like the examples, a basket is filtered to symbols your database actually has
+and is withdrawn entirely if too few survive, so "spread across sectors" never
+resolves to two names. They appear only once something else in the form has
+holdings: on a wholly empty form the starter examples above are the better
+answer, and offering both would be two answers to one question.
 
 ### Several portfolios in one run
 
