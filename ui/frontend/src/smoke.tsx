@@ -65,6 +65,15 @@ const hypothesis: HypothesisForm = JSON.parse(
     readFileSync(join(testdata, "hypothesis-form.json"), "utf8"),
 );
 
+// The same form with a schedule on it. Shared by the golden and the sign
+// check so the file on disk is the document those assertions describe.
+const cashflowForm: SimpleForm = {
+    ...form,
+    cashflowFrequency: "monthly",
+    cashflowAmount: 500,
+    cashflowDirection: "deposit",
+};
+
 console.log("frontend smoke render");
 
 // Money paid in is not money the strategy made. Without netting it out, the
@@ -338,6 +347,20 @@ check("buildToml emits one block per portfolio", () => {
     if (blocks !== 2) throw new Error(`expected 2 [[Portfolio]] blocks, got ${blocks}`);
 });
 
+// A schedule adds a sub-table, which is the one shape in this document whose
+// header the decoder can reject outright. TestGeneratedConfigsParse feeds this
+// file to the real TOML decoder, so the golden is a parse test, not just a
+// snapshot.
+check("buildToml matches the golden cashflow config", () => {
+    const want = readFileSync(join(testdata, "golden-cashflow.toml"), "utf8");
+    const got = buildToml([cashflowForm]);
+    if (got !== want) {
+        throw new Error(
+            "generated cashflow TOML changed:\n\n--- want\n" + want + "\n--- got\n" + got,
+        );
+    }
+});
+
 check("buildHypothesis matches the golden hypothesis", () => {
     const want = readFileSync(join(testdata, "golden-hypothesis.toml"), "utf8");
     // The ID is generated fresh per registration -- that is the point of it --
@@ -381,11 +404,22 @@ check("a cashflow schedule emits a correctly signed block", () => {
         throw new Error("frequency 'never' emitted a block; it must emit nothing");
     }
 
-    const dep = buildToml([
-        { ...form, cashflowFrequency: "monthly", cashflowAmount: 500, cashflowDirection: "deposit" },
-    ]);
-    if (!dep.includes("[portfolio.Cashflow]") || !dep.includes("Amount = 500.0")) {
+    const dep = buildToml([cashflowForm]);
+    // The sub-table header must name the array header EXACTLY: TOML keys are
+    // case-sensitive, so "[portfolio.Cashflow]" under "[[Portfolio]]" is a
+    // second, unrelated top-level table -- which the decoder rejects with
+    // "incompatible types" rather than ignoring. That shipped once.
+    if (!dep.includes("[Portfolio.Cashflow]") || !dep.includes("Amount = 500.0")) {
         throw new Error("deposit did not emit a positive Amount:\n" + dep);
+    }
+    for (const header of dep.match(/^\s*\[[A-Za-z0-9_.-]+\]$/gm) ?? []) {
+        const parent = header.trim().slice(1, -1).split(".")[0];
+        if (parent !== "Portfolio") {
+            throw new Error(
+                `sub-table ${header.trim()} does not hang off [[Portfolio]]; ` +
+                    "TOML keys are case-sensitive:\n" + dep,
+            );
+        }
     }
     if (!dep.includes('Frequency = "monthly"')) {
         throw new Error("frequency missing:\n" + dep);
@@ -502,6 +536,7 @@ if (process.env.SMOKE_UPDATE === "1") {
             },
         ]),
     );
+    writeFileSync(join(testdata, "golden-cashflow.toml"), buildToml([cashflowForm]));
     writeFileSync(
         join(testdata, "golden-hypothesis.toml"),
         buildHypothesis(hypothesis).replace(/^ID(\s*)= ".*"$/m, 'ID$1= "H-<generated>"'),

@@ -117,7 +117,7 @@ function portfolioBlock(form: SimpleForm): string[] {
       form.cashflowDirection === "withdraw" ? -form.cashflowAmount : form.cashflowAmount;
     cashflow.push(
       "",
-      "  [portfolio.Cashflow]",
+      "  [Portfolio.Cashflow]",
       `  Amount = ${toFloat(signed)}`,
       `  Frequency = ${JSON.stringify(form.cashflowFrequency)}`,
     );
