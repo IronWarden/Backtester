@@ -725,6 +725,51 @@ button.primary:hover:not(:disabled),
   font-style: italic;
 }
 
+/* Starter examples. Shown only while no portfolio has holdings, so this is
+   what an empty form looks like rather than a permanent banner. Each button
+   leads with the QUESTION, because a strategy name teaches a beginner
+   nothing. */
+.simple-form .examples-lead {
+  margin: 0;
+  font-size: var(--fs-s);
+  color: var(--text-3);
+}
+
+.simple-form .example-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15em, 1fr));
+  gap: 0.5em;
+}
+
+.simple-form button.example {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.6em 0.75em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.simple-form button.example:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.simple-form .example-label {
+  font-size: var(--fs-m);
+  color: var(--text-1, var(--text-2));
+}
+
+.simple-form .example-question {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
 /* First-run card. Sits above the form, blocks nothing, and never returns
    once dismissed — an onboarding step you have to dismiss before every run
    is a tax, not an explanation. */

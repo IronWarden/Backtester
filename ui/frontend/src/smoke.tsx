@@ -21,9 +21,10 @@ import { join } from "node:path";
 import ResultsView from "./ResultsView";
 import ConsolePanel from "./ConsolePanel";
 import SimpleFormView from "./SimpleForm";
-import { buildToml, buildHypothesis } from "./buildToml";
+import { CRITERION_OPS, buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
 import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
+import { BLANK, EXAMPLES, buildExample, exampleHypothesis } from "./examples";
 import { readStored, readStoredNumber, readStoredObject, writeStored } from "./storage";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { backtest, main } from "../wailsjs/go/models";
@@ -517,6 +518,83 @@ check("ticker search caps and does not treat empty as no matches", () => {
     const many = Array.from({ length: 500 }, (_, i) => `T${i}`);
     eq("cap", searchTickers(many, {}, "T").length, 8);
     eq("empty query", searchTickers(POOL, NAMES, "  "), POOL);
+});
+
+// Starter examples. The whole promise is that clicking one produces a RUN --
+// an example that opens with a red date error is worse than no example -- so
+// what gets pinned is runnability against a realistic coverage table, not the
+// wording.
+const EXAMPLE_RANGES = {
+    AAPL: ["1990-01-02", "2026-08-07"],
+    MSFT: ["1990-01-02", "2026-08-07"],
+    GOOGL: ["2004-08-19", "2026-08-07"],
+    AMZN: ["1997-05-15", "2026-08-07"],
+    NVDA: ["1999-01-22", "2026-08-07"],
+    SPY: ["1993-01-29", "2026-08-07"],
+    // The benchmark ends BEFORE the priced tickers, which is the real
+    // database's state and the thing that silently drops every
+    // benchmark-relative metric. An example has to survive it.
+    $SP500: ["1927-12-30", "2026-07-02"],
+};
+
+check("every starter example produces a runnable portfolio", () => {
+    for (const ex of EXAMPLES) {
+        const built = buildExample(ex, EXAMPLE_RANGES, "$SP500", BLANK);
+        if (!built) throw new Error(`${ex.id} could not be built at all`);
+        if (!portfolioRunnable(built, EXAMPLE_RANGES)) {
+            throw new Error(
+                `${ex.id} builds a portfolio the engine would refuse: ` +
+                    JSON.stringify(built),
+            );
+        }
+        // Inside the benchmark's window too, or the run quietly loses the
+        // comparison the example's question is asking about.
+        if (built.endDate > EXAMPLE_RANGES.$SP500[1]) {
+            throw new Error(
+                `${ex.id} ends ${built.endDate}, past the benchmark's last bar`,
+            );
+        }
+        if (built.tickers.length === 0) throw new Error(`${ex.id} has no holdings`);
+        // Equal weight: an example must never open by demanding percentages.
+        if (!built.evenSplit) throw new Error(`${ex.id} did not use equal weight`);
+    }
+});
+
+check("an example is withdrawn rather than broken when symbols are missing", () => {
+    // A database with only SPY: the two five-name examples cannot be built,
+    // the single-ticker ones still can.
+    const thin = { SPY: ["1993-01-29", "2026-08-07"], $SP500: ["1927-12-30", "2026-07-02"] };
+    for (const ex of EXAMPLES) {
+        const built = buildExample(ex, thin, "$SP500", BLANK);
+        const enough = ex.tickers.filter((t) => t in thin).length >= ex.minTickers;
+        eq(`${ex.id} offered`, built !== null, enough);
+    }
+    // And an empty database offers nothing at all, rather than throwing.
+    for (const ex of EXAMPLES) {
+        eq(`${ex.id} on empty db`, buildExample(ex, {}, "$SP500", BLANK), null);
+    }
+});
+
+check("every starter example registers a criterion the engine accepts", () => {
+    // The metric vocabulary is served by Go (App.CriterionMetrics); this is
+    // the list it returns, so a preset naming something else fails here rather
+    // than at run time.
+    const METRICS = [
+        "sharpe", "sortino", "calmar", "annual_return", "max_drawdown",
+        "total_return", "turnover", "exposure", "time_in_market", "p_value",
+    ];
+    for (const ex of EXAMPLES) {
+        const h = exampleHypothesis(ex);
+        if (!METRICS.includes(h.metric)) {
+            throw new Error(`${ex.id} uses unknown metric ${h.metric}`);
+        }
+        if (!CRITERION_OPS.includes(h.op)) {
+            throw new Error(`${ex.id} uses unknown operator ${h.op}`);
+        }
+        if (buildHypothesis(h) === "") {
+            throw new Error(`${ex.id} produced no hypothesis: ${JSON.stringify(h)}`);
+        }
+    }
 });
 
 if (process.env.SMOKE_UPDATE === "1") {

@@ -17,6 +17,7 @@ import {
 } from "./buildToml";
 import type { SimpleForm as Form, HypothesisForm } from "./buildToml";
 import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
+import { BLANK, EXAMPLES, buildExample, exampleHypothesis } from "./examples";
 import PortfolioCard from "./PortfolioCard";
 import { readStored, writeStored } from "./storage";
 
@@ -114,6 +115,57 @@ function FirstRun({
                 <button className="ghost" onClick={onDismiss}>
                     Got it
                 </button>
+            </div>
+        </section>
+    );
+}
+
+// Starter examples.
+//
+// The form asks for holdings, two dates, a strategy, an allocation and a
+// success criterion before anything has happened, and a beginner has no basis
+// for any of them. One click here answers all five with a run that works, so
+// the first act is editing something rather than inventing it.
+//
+// Shown only while no portfolio has holdings, so it is the empty form's
+// content rather than a permanent banner -- and it comes back if the user
+// clears everything, which is exactly when they want it again.
+function Examples({
+    ranges,
+    onPick,
+}: {
+    ranges: Record<string, string[]>;
+    onPick: (id: string) => void;
+}) {
+    // Built against the loaded database: an example whose symbols are missing,
+    // or whose window cannot be made to work, is withdrawn rather than shown
+    // broken. A starter example that opens with a red date error is worse than
+    // no starter example.
+    const benchmark = ranges["$SP500"] ? "$SP500" : "";
+    const usable = EXAMPLES.filter(
+        (ex) => buildExample(ex, ranges, benchmark, BLANK) !== null,
+    );
+    if (usable.length === 0) return null;
+
+    return (
+        <section className="form-card wide examples">
+            <h3 className="form-card-title">Start from a question</h3>
+            <p className="examples-lead">
+                Each one fills the form with a run that works on this database.
+                Change anything you like before hitting Run — that is the point
+                of them.
+            </p>
+            <div className="example-list">
+                {usable.map((ex) => (
+                    <button
+                        key={ex.id}
+                        className="example"
+                        onClick={() => onPick(ex.id)}
+                    >
+                        <span className="example-label">{ex.label}</span>
+                        <span className="example-question">{ex.question}</span>
+                    </button>
+                ))}
             </div>
         </section>
     );
@@ -268,6 +320,20 @@ export default function SimpleForm({
         onChange(forms.filter((_, j) => j !== i));
     }
 
+    // Replace the (empty) form with the example, and register its question as
+    // the hypothesis: the discipline the app is built around is worth nothing
+    // if the first run silently skips it. Safe to replace outright because the
+    // examples are only offered while no portfolio holds anything.
+    function applyExample(id: string) {
+        const ex = EXAMPLES.find((e) => e.id === id);
+        if (!ex) return;
+        const benchmark = ranges["$SP500"] ? "$SP500" : "";
+        const built = buildExample(ex, ranges, benchmark, forms[0] ?? BLANK);
+        if (!built) return;
+        onChange([built]);
+        onHypothesisChange(exampleHypothesis(ex));
+    }
+
     function dismissFirstRun() {
         setOnboarded(true);
         // Storage refused: the card reappears next launch, which is a better
@@ -285,6 +351,10 @@ export default function SimpleForm({
                     }}
                     onDismiss={dismissFirstRun}
                 />
+            )}
+
+            {!anyTickers && (
+                <Examples ranges={ranges} onPick={applyExample} />
             )}
 
             {forms.map((f, i) => (

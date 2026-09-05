@@ -2046,6 +2046,31 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### Starting from a question
+
+An empty form asks for holdings, two dates, a strategy, an allocation and a
+success criterion before anything has happened — five decisions a first-time
+user has no basis to make. So while no portfolio has holdings, the tab offers
+**starter examples**, each labelled with the question it asks:
+
+| example | the question it asks |
+|---|---|
+| Hold the big five | What would simply holding the five biggest tech names have done? |
+| Chase the winners | Does rotating into whatever has been rising beat holding all of them? |
+| Step out of falls | Does selling when the market drops below its average beat sitting through it? |
+| Drip money in | Is paying in a bit each month better than investing it all at once? |
+
+One click fills the holdings, the window, the strategy, the benchmark and a
+matching pre-registered hypothesis — a complete run you are then meant to
+**edit**, which is a much easier first act than assembling one from nothing.
+
+Every example is built against the database you have loaded: symbols it does
+not carry are dropped, the window is clamped to what the remaining holdings
+**and** the benchmark both cover, and an example that cannot be made runnable
+is not offered at all. So clicking one always produces a run rather than a red
+date error. They vanish once a portfolio has holdings, and return if you clear
+it.
+
 ### Several portfolios in one run
 
 **+ Add portfolio** appends another card, and the run carries all of them: one
@@ -2336,3 +2361,24 @@ Per-strategy state lives on the implementing struct, so a `Strategy` instance is
     └── frontend/src/        # React: App, ChatPanel, QueryConsole,
                              #   ResultsView, SimpleForm
 ```
+
+## Licence
+
+Three files, because three different things ship together and they are not
+under the same terms:
+
+| File | Covers |
+|---|---|
+| [`LICENSE`](LICENSE) | The software. A **beta evaluation licence** — free to use, including commercially, but not open source and not redistributable. The source is published to be read; reading it grants nothing further. Beta terms end at 1.0. |
+| [`DATA-LICENSE.md`](DATA-LICENSE.md) | The bundled `stock_data.db`. **More restrictive than the software licence** — some of the data comes from providers whose terms forbid redistribution. Also the honest inventory of what is wrong with the data, which anyone acting on a result should read first. |
+| [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) | The 22 Go modules and 11 npm packages compiled into the binary, plus the DuckDB C++ library statically linked by `go-duckdb`. All permissive (MIT, BSD, ISC, Apache-2.0), and all of them require their notice to travel with the binary. |
+
+`THIRD-PARTY-NOTICES.txt` is generated — regenerate it whenever a dependency
+changes, because a stale notices file asserts something untrue:
+
+```bash
+python3 gen_notices.py
+```
+
+It reads `go list -deps` and `npm ls --omit=dev`, so it lists what is actually
+linked and bundled rather than everything in `go.mod` and `package.json`.

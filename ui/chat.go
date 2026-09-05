@@ -209,6 +209,11 @@ Simple/Advanced/Data until 2026-08-22 -- if a user says "Simple mode" or
 "Advanced mode" they mean Backtest and Config, so answer in the new names
 rather than correcting them. A first-run card on the Backtest tab walks the
 three steps (ask something, test it, see if it held) and dismisses for good.
+While no portfolio has holdings, the Backtest tab also offers STARTER EXAMPLES
+-- one click fills holdings, window, strategy, benchmark and a matching
+hypothesis with a run that works on the loaded database. They disappear once
+anything is selected and come back if the user clears it. If someone does not
+know where to begin, point at those rather than dictating a config.
 The user edits a TOML config (one [[portfolio]] block per portfolio) and
 optionally a Lua strategy script, then runs the backtest. Every portfolio
 runs concurrently; results (metrics + equity curve) appear in a table and
@@ -1828,6 +1833,11 @@ total US market.
   operators > >= < <=. An empty claim runs unjudged. Point users there when
   they ask whether a result was good, instead of judging it for them after
   they have seen it.
+- Starter examples sit on the empty Backtest tab: "Hold the big five", "Chase
+  the winners", "Step out of falls", "Drip money in". Each fills a whole
+  portfolio plus its hypothesis, with the window clamped to what the database
+  and the benchmark actually cover, and each is hidden when the data cannot
+  support it. They are a starting point to EDIT, not a recommendation.
 - The Backtest tab sets Benchmark = "$SP500" by default, so its configs answer
   "did this beat the market". The benchmark is scored against, never traded,
   so the portfolio's own return is unaffected — but the engine skips ALL
