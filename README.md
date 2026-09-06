@@ -2140,6 +2140,31 @@ global added to the engine cannot ship without its documentation, and the
 editor can never offer one that does not exist — which would be worse than
 offering nothing, since you would only find out on day 0 of a run.
 
+### Checking a script before running it
+
+The Lua tab's **✓ Check script** compiles the script, requires its `step(day)`,
+and then *runs that function* for three days against a two-ticker synthetic
+history built in memory. It opens no database and simulates no market, so it
+answers on a keystroke.
+
+Running it is the part that matters. Anything that only compiles the file will
+never execute the body, and the body is where the mistakes are — a misspelled
+global, a `nil` compared with a number, arguments in the wrong order. Those are
+reported as **warnings**, not errors, and the message says what they ran
+against: a script that needs fundamentals gets `nil` from this history and may
+raise here while being perfectly correct in a real run. Only the unambiguous
+failures are errors — a syntax error with its line, no `step` at all, a `step`
+that is not a function, an empty file.
+
+It also reports a `[portfolio.Params]` key the script never reads, which in a
+sweep means every trial ran identical settings. The reverse is deliberately not
+reported: `params.period or 20` is ordinary Lua.
+
+An endless loop at the top of a script is bounded rather than fatal — the check
+runs under a two-second deadline, because hanging the app is the one failure a
+checker must not have. Every one of the twelve shipped strategies passes it,
+which is what `TestCheckPassesEveryShippedStrategy` exists to keep true.
+
 ### "How to read this"
 
 The first panel on the results is a collapsible reading guide, open the first

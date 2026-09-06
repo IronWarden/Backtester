@@ -21,6 +21,7 @@ function defaultFontSize(): number {
 }
 import Editor from "@monaco-editor/react";
 import {
+    CheckLuaScript,
     DatabaseNotice,
     LuaAPI,
     DefaultDBPath,
@@ -515,6 +516,37 @@ function App() {
         }
     }
 
+    // The Lua half of ✓ Check: compile the script, require its step(day), and
+    // run that for a few days against synthetic prices — so a typo inside the
+    // body is found here rather than on day 0 of a real backtest. Opens no
+    // database. The config text goes along only for [portfolio.Params], so a
+    // script reading params.period is checked with the values it would get.
+    async function checkScript() {
+        setErrorMsg("");
+        setResults([]);
+        setDiagnostics([]);
+        setStatusMsg("Checking the script…");
+        try {
+            const res = await CheckLuaScript(luaText, luaPath, tomlText);
+            const diags = res.diagnostics ?? [];
+            setDiagnostics(diags);
+            const errors = diags.filter((d) => d.level === "error").length;
+            const warnings = diags.length - errors;
+            if (errors > 0) {
+                setStatusMsg(
+                    `Script check failed — ${errors} error(s), ${warnings} warning(s)`,
+                );
+            } else if (warnings > 0) {
+                setStatusMsg(`Script check passed — ${warnings} warning(s)`);
+            } else {
+                setStatusMsg("Script check passed");
+            }
+        } catch (e: any) {
+            setErrorMsg(String(e?.message ?? e));
+            setStatusMsg("");
+        }
+    }
+
     // Load a simple-mode-generated config into the Advanced editor and switch.
     function editAsToml(cfgText: string) {
         setTomlText(cfgText);
@@ -643,13 +675,26 @@ function App() {
                                 lua · {chipLabel(luaPath, "none")}
                             </span>
                         </div>
-                        <button
-                            onClick={checkConfig}
-                            disabled={running}
-                            title="Validate the config without running it"
-                        >
-                            ✓ Check
-                        </button>
+                        {/* One button, checking whichever thing is open. Two
+                            buttons would ask the user which of "check" they
+                            meant while looking straight at the answer. */}
+                        {tab === "lua" ? (
+                            <button
+                                onClick={checkScript}
+                                disabled={running}
+                                title="Compile the script and run its step(day) against synthetic prices, without a backtest"
+                            >
+                                ✓ Check script
+                            </button>
+                        ) : (
+                            <button
+                                onClick={checkConfig}
+                                disabled={running}
+                                title="Validate the config without running it"
+                            >
+                                ✓ Check
+                            </button>
+                        )}
                         <button
                             onClick={() => runConfig(tomlText, true)}
                             disabled={running}

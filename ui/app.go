@@ -212,6 +212,70 @@ func (a *App) CheckConfig(cfgText, defaultLuaPath string) (out RunOutput, err er
 	return RunOutput{Diagnostics: collector.records()}, nil
 }
 
+// CheckLuaScript compiles and dry-runs the script in the editor without
+// running a backtest: the Lua half of the ✓ Check the TOML tab has had since
+// T77. It opens no database and simulates no market, so it answers on a
+// keystroke.
+//
+// cfgText is read only for [portfolio.Params], so a script reading
+// params.period is checked with the values the config would actually give it.
+// The portfolio whose Strategy names this script wins; a portfolio that omits
+// Strategy is the fallback, since that is the one the editor's script runs as.
+func (a *App) CheckLuaScript(source, luaPath, cfgText string) (out RunOutput, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("script check panic: %v\n%s", r, debug.Stack())
+		}
+	}()
+	name := luaPath
+	if name == "" {
+		name = "the script"
+	}
+
+	diagMu.Lock()
+	defer diagMu.Unlock()
+	var collector diagCollector
+	backtest.Diagnostics = collector.record
+	defer func() { backtest.Diagnostics = nil }()
+
+	backtest.CheckLuaScript(source, name, paramsForScript(cfgText, luaPath))
+	return RunOutput{Diagnostics: collector.records()}, nil
+}
+
+// paramsForScript digs the [portfolio.Params] out of the config text for the
+// portfolio that runs this script. A config that does not parse yields no
+// params rather than an error: the TOML tab's own ✓ reports that, and refusing
+// to check a script because the config beside it is mid-edit would be the
+// checker getting in the way.
+func paramsForScript(cfgText, luaPath string) map[string]any {
+	if strings.TrimSpace(cfgText) == "" {
+		return nil
+	}
+	cfg, err := backtest.LoadConfigText(cfgText)
+	if err != nil || cfg == nil {
+		return nil
+	}
+	var fallback map[string]any
+	base := filepath.Base(luaPath)
+	for _, pc := range cfg.Portfolios {
+		spec := strings.TrimPrefix(pc.Strategy, "lua:")
+		switch {
+		case pc.Strategy == "":
+			// Omitting Strategy means "the script open in the Lua tab", which
+			// is exactly this one -- but a named match is better evidence, so
+			// this is only used if nothing names the script.
+			if fallback == nil {
+				fallback = pc.Params
+			}
+		case spec == luaPath || (base != "" && filepath.Base(spec) == base):
+			if len(pc.Params) > 0 {
+				return pc.Params
+			}
+		}
+	}
+	return fallback
+}
+
 // RunBacktest executes the in-editor TOML config against the chosen DB.
 // defaultLuaPath is used as the strategy for any portfolio that omits its
 // Strategy field, so the script open in the Lua tab becomes the default.

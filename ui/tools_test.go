@@ -288,3 +288,61 @@ func TestLeanPromptFitsOllamaContext(t *testing.T) {
 			n, budget, ollamaNumCtx)
 	}
 }
+
+// The Lua tab's ✓ is the shortest path from a typo to knowing about it, and it
+// has to work on the two things a user's editor actually holds: a script with
+// a config beside it, and a script with a config that does not parse yet.
+func TestCheckLuaScriptFindsParamsAndSurvivesABrokenConfig(t *testing.T) {
+	const script = "function step(day)\n  local _ = params.period\nend\n"
+	const cfg = `
+[[portfolio]]
+Name = "P"
+BuyingPower = 1000.0
+StartDate = "2020-01-01"
+EndDate = "2021-01-01"
+Tickers = ["AAA"]
+Strategy = "lua:strategies/mine.lua"
+[portfolio.Params]
+period = 20
+lookbck = 60
+`
+	a := &App{}
+	out, err := a.CheckLuaScript(script, "strategies/mine.lua", cfg)
+	if err != nil {
+		t.Fatalf("CheckLuaScript: %v", err)
+	}
+	var joined string
+	for _, d := range out.Diagnostics {
+		joined += d.Level + ": " + d.Message + "\n"
+	}
+	if !strings.Contains(joined, "params.lookbck") {
+		t.Errorf("the params the config sets were not checked against the script:\n%s", joined)
+	}
+	if strings.Contains(joined, "error") {
+		t.Errorf("a working script reported an error:\n%s", joined)
+	}
+
+	// A config mid-edit must not stop the script being checked: the TOML tab's
+	// own ✓ is what reports a broken config.
+	out, err = a.CheckLuaScript(script, "strategies/mine.lua", "[[portfolio]\nName =")
+	if err != nil {
+		t.Fatalf("CheckLuaScript with an unparseable config: %v", err)
+	}
+	for _, d := range out.Diagnostics {
+		if d.Level == "error" {
+			t.Errorf("an unparseable config broke the script check: %s", d.Message)
+		}
+	}
+
+	// And the script's own failure still reaches the user.
+	out, _ = a.CheckLuaScript("step = 3\n", "strategies/mine.lua", "")
+	found := false
+	for _, d := range out.Diagnostics {
+		if d.Level == "error" && strings.Contains(d.Message, "not a function") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a script whose step is not a function passed the check: %+v", out.Diagnostics)
+	}
+}

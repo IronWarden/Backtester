@@ -99,6 +99,13 @@ interesting across asset classes — e.g. `["$SP500", "$CASH"]`.
 
 ## Writing your own
 
+**Check it before you run it.** The Lua tab's ✓ Check script compiles the
+script, requires `step(day)`, and runs it for three days against synthetic
+prices — no database, no backtest. A typo inside the body is found there
+instead of on day 0 of a real run. It reports a syntax error, a missing or
+non-function `step`, anything the dry run raises, and a `[portfolio.Params]`
+key the script never reads.
+
 **The editor knows all of this.** In the app's Lua tab, typing offers every
 global with its signature and a one-line explanation, and hovering a name shows
 the same thing — the list is served by the engine itself (`backtest.LuaAPI`),

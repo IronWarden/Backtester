@@ -631,6 +631,15 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+THE LUA TAB HAS ITS OWN CHECK BUTTON. "Check script" compiles the script,
+requires step(day) and runs it for three days against a synthetic two-ticker
+history -- no database, no backtest. Errors: a syntax error with its line, no
+step, a step that is not a function, an empty file. Warnings: anything the dry
+run raised (which may be the check's plain data rather than a real bug -- it
+has no fundamentals), and a [portfolio.Params] key the script never reads. Tell
+a user to check a script before running it; it is instant and it catches the
+mistakes that otherwise cost a full run to find.
+
 THE LUA EDITOR COMPLETES AND EXPLAINS THE STRATEGY API. Every global is
 offered as you type, with its signature and a one-line description, and hover
 shows the same; "step" is the first completion on an empty file. The list comes

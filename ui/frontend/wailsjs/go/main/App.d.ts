@@ -7,6 +7,8 @@ export function Chat(arg1:Array<main.ChatMessage>,arg2:string,arg3:string,arg4:s
 
 export function CheckConfig(arg1:string,arg2:string):Promise<main.RunOutput>;
 
+export function CheckLuaScript(arg1:string,arg2:string,arg3:string):Promise<main.RunOutput>;
+
 export function CriterionMetrics():Promise<Array<string>>;
 
 export function DatabaseNotice(arg1:string):Promise<string>;
