@@ -176,6 +176,27 @@ func configDirPath() (string, error) {
 	return filepath.Join(base, appDirName), nil
 }
 
+// DataDir returns the per-user directory for large files the app maintains
+// rather than the user -- a writable copy of a shipped database, above all.
+// Kept apart from ConfigDir because these are gigabytes, not settings, and on
+// Linux the convention puts them in different places
+// ($XDG_DATA_HOME/~/.local/share rather than $XDG_CONFIG_HOME/~/.config).
+func DataDir() (string, error) {
+	base := os.Getenv("XDG_DATA_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("no home directory: %w", err)
+		}
+		base = filepath.Join(home, ".local", "share")
+	}
+	dir := filepath.Join(base, appDirName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("creating %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
 // UserStrategiesDir is the library a packaged app writes to, under ConfigDir.
 // It is created only when something is about to be written into it.
 func UserStrategiesDir() (string, error) {

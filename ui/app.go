@@ -361,6 +361,24 @@ func (a *App) DefaultDBPath() string {
 	return ""
 }
 
+// DatabaseNotice opens dbPath and reports anything the user should know about
+// how it opened: "" when it opened read-write in place (the ordinary case), a
+// sentence when the app is running against its own writable copy or has had
+// to fall back to read-only. An error means the database could not be opened
+// at all -- most usefully, that another program is holding it, named.
+//
+// Bound because the frontend cannot tell any of this from a path string, and
+// the alternative is a user watching every panel fail with a DuckDB message.
+func (a *App) DatabaseNotice(dbPath string) (string, error) {
+	if dbPath == "" {
+		return "", nil
+	}
+	if _, err := data.InitDB(dbPath); err != nil {
+		return "", err
+	}
+	return data.Status().Reason, nil
+}
+
 // writablePath is resolveAppPath for a file about to be CREATED. It differs
 // in one case: when no candidate directory exists at all -- a packaged app
 // whose library is embedded rather than on disk -- it creates the per-user

@@ -21,6 +21,7 @@ function defaultFontSize(): number {
 }
 import Editor from "@monaco-editor/react";
 import {
+    DatabaseNotice,
     DefaultDBPath,
     FileExists,
     FindLuaPathInConfig,
@@ -274,6 +275,26 @@ function App() {
             cancelled = true;
         };
     }, []);
+
+    // How the database opened, once there is one. Read-write in place says
+    // nothing; the app running against its own copy, or read-only because the
+    // file cannot be written, says so once rather than letting the user
+    // discover it when a fetch fails. Failing to open at all is an error --
+    // usually another program holding the file, which the message names.
+    useEffect(() => {
+        if (!dbPath) return;
+        let cancelled = false;
+        DatabaseNotice(dbPath)
+            .then((notice) => {
+                if (!cancelled && notice) setStatusMsg(notice);
+            })
+            .catch((e: any) => {
+                if (!cancelled) setErrorMsg(`${e?.message ?? e}`);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [dbPath]);
 
     useEffect(() => {
         writeStored(FONT_STORAGE_KEY, String(fontSize));

@@ -15,6 +15,7 @@ import (
 var (
 	db     *sql.DB
 	dbDSN  string
+	dbStat DBStatus
 	initMu sync.Mutex
 )
 
@@ -22,13 +23,17 @@ var (
 // shared handle. Re-initializing with the same path is a no-op returning the
 // existing handle; a new path closes the old handle first so the process
 // doesn't accumulate file locks.
+//
+// The open itself is openDatabase's: read-write in place when the file allows
+// it (every database a user owns), a per-user writable copy when it does not,
+// and read-only as the last resort. Status() says which of those happened.
 func InitDB(dataSourceName string) (*sql.DB, error) {
 	initMu.Lock()
 	defer initMu.Unlock()
 	if db != nil && dataSourceName == dbDSN {
 		return db, nil
 	}
-	next, err := sql.Open("duckdb", dataSourceName)
+	next, status, err := openDatabase(dataSourceName)
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +41,20 @@ func InitDB(dataSourceName string) (*sql.DB, error) {
 		db.Close()
 	}
 	db = next
+	// Keyed on what was ASKED for, not on what was opened: a second call with
+	// the same path must not remake the decision (and, on the copy path, must
+	// not re-stat gigabytes to find out it already did).
 	dbDSN = dataSourceName
+	dbStat = status
 	return db, nil
+}
+
+// Status describes the open database: the file behind the handle, whether it
+// can be written, and why not when it cannot. Zero-valued before InitDB.
+func Status() DBStatus {
+	initMu.Lock()
+	defer initMu.Unlock()
+	return dbStat
 }
 
 // ListTickers returns the distinct ticker symbols available in the price
@@ -417,6 +434,12 @@ type Bar struct {
 func UpsertBars(ticker string, bars []Bar) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
+	}
+	// Refused here rather than three statements into a transaction, so the
+	// message names the reason writes are off instead of DuckDB's complaint
+	// about the attach mode.
+	if st := Status(); st.ReadOnly() {
+		return fmt.Errorf("cannot store %s: %s", ticker, st.Reason)
 	}
 	if len(bars) == 0 {
 		return fmt.Errorf("no bars to store")

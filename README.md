@@ -77,6 +77,35 @@ where it is (`DefaultDBPath`) instead of assuming `../stock_data.db`; when
 nothing is found the header reads **Choose DB…** rather than naming a file that
 is not there.
 
+### How the database is opened
+
+DuckDB is single-writer *and* single-opener, and a shipped database is often
+not writable at all, so `data.InitDB` tries three things in order and
+`data.Status()` reports which one happened:
+
+| what it finds | what it does | `Status().Mode` |
+|---|---|---|
+| a file it can write (every checkout) | opens it in place — unchanged | `read-write`, no notice |
+| a file it cannot write (`/usr/share`, `/opt`, an AppImage mount, `chmod 444`) | copies it once to `~/.local/share/backtester/` and opens the copy | `read-write`, with a notice naming the copy |
+| that, but the copy is impossible too | opens the original with `access_mode=read_only` | `read-only`, with a notice saying why |
+
+Nothing is ever copied out from under a database you own: the copy happens
+only on the branch where the file refused a read-write open. An existing copy
+is reused whenever the source it was made from is unchanged — tracked by a
+`<name>.db.source` stamp beside it, so bars you fetch *into* the copy are not
+wiped by the next launch.
+
+Read-only is a real mode, not a failure: everything reads normally and only
+writing stops. `UpsertBars` refuses up front with the reason rather than
+letting DuckDB complain about the attach mode halfway through.
+
+If another program already holds the database — a second window, a CLI run, a
+Python loader — DuckDB refuses the attach in both modes. The app turns its
+message into a sentence naming the program and PID to close, instead of
+showing `IO Error: Could not set lock on file …: Conflicting lock is held in
+…` at the user. In the desktop app the notice arrives through
+`DatabaseNotice`, which the header calls whenever the database changes.
+
 ## Long-history benchmark assets
 
 `add_collections.py` populates `stock_data_optimized` with index / asset-class

@@ -9,6 +9,8 @@ export function CheckConfig(arg1:string,arg2:string):Promise<main.RunOutput>;
 
 export function CriterionMetrics():Promise<Array<string>>;
 
+export function DatabaseNotice(arg1:string):Promise<string>;
+
 export function DefaultDBPath():Promise<string>;
 
 export function FileExists(arg1:string):Promise<boolean>;

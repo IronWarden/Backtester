@@ -14,6 +14,10 @@ export function CriterionMetrics() {
   return window['go']['main']['App']['CriterionMetrics']();
 }
 
+export function DatabaseNotice(arg1) {
+  return window['go']['main']['App']['DatabaseNotice'](arg1);
+}
+
 export function DefaultDBPath() {
   return window['go']['main']['App']['DefaultDBPath']();
 }

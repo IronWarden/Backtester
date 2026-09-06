@@ -630,6 +630,19 @@ preference to the built-in. Same directory for the Anthropic API key: the
 first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
+
+THE DATABASE CAN BE OPEN IN ONE OF THREE WAYS, and the app says so when it is
+not the ordinary one. A file it can write is opened in place, silently. A file
+it cannot write (installed under /usr/share or /opt, an AppImage mount, chmod
+444) is copied once to ~/.local/share/backtester/ and the copy is opened, so
+fetching new data still works; the copy is reused on later launches, so data
+fetched into it survives. If the copy is impossible too the original is opened
+read-only: everything reads normally and only writing stops -- if a user
+reports that fetching data fails on an otherwise working app, this is the
+first thing to check. DuckDB also allows only one program to hold a database
+at a time, so "already open in <program> (PID n)" means exactly that: close
+the other window, CLI run or Python loader. Never suggest deleting a lock
+file; there is none.
 strategy_library.toml in the project root runs all of them side by side.
 Match the universe to the family: per-ticker signal strategies (trend,
 breakout, rsi, bollinger) want a basket of individual stocks; allocation

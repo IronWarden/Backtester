@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"my-backtester/src/apppath"
+	"my-backtester/src/data"
 )
 
 // tempConfigHome redirects the per-user config directory into the test's own
@@ -125,5 +126,39 @@ func TestDefaultDBPath(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if got := a.DefaultDBPath(); got != "" {
 		t.Errorf("DefaultDBPath = %q with no database anywhere, want \"\"", got)
+	}
+}
+
+// DatabaseNotice is the frontend's only way to learn how the database opened.
+// Silence is the ordinary case; a sentence means the app is not running
+// against the file the user pointed at, or cannot write to it.
+func TestDatabaseNoticeIsSilentOnAnOrdinaryDatabase(t *testing.T) {
+	if got, err := (&App{}).DatabaseNotice(""); got != "" || err != nil {
+		t.Fatalf("DatabaseNotice(\"\") = %q, %v; want no notice and no error", got, err)
+	}
+
+	path := filepath.Join(t.TempDir(), "own.db")
+	if _, err := data.InitDB(path); err != nil {
+		t.Fatalf("creating a scratch database: %v", err)
+	}
+	got, err := (&App{}).DatabaseNotice(path)
+	if err != nil {
+		t.Fatalf("DatabaseNotice: %v", err)
+	}
+	if got != "" {
+		t.Errorf("DatabaseNotice = %q, want silence for a database opened as asked", got)
+	}
+}
+
+// A database that cannot be opened at all reaches the user as an error, not
+// as an empty notice -- otherwise every panel fails separately with DuckDB's
+// own wording.
+func TestDatabaseNoticeReportsAnUnopenableFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "not-a-database.db")
+	if err := os.WriteFile(path, []byte("this is not a duckdb file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&App{}).DatabaseNotice(path); err == nil {
+		t.Fatal("a file that is not a database opened without complaint")
 	}
 }
