@@ -631,6 +631,13 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+WHEN TWO PORTFOLIOS COVER DIFFERENT WINDOWS, a note under the equity chart
+names both spans and says the two are not comparable. Nothing is refused --
+running two windows deliberately is legitimate -- but if a user asks you to
+explain why one portfolio beat another, check their windows first: a longer one
+has been through market conditions the other never saw, and that alone can be
+the whole difference.
+
 A RUN WARNS ABOUT DEFECTIVE PRICE SERIES. Every holding is checked against the
 data_quality audit before the workers start, and each unusable or suspect one
 gets a console warning naming the defect (negative closes, a stalled feed, a

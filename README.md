@@ -2296,6 +2296,20 @@ The rules it follows are what keep it honest, and each is pinned by a test:
   "-11.6% a year" — the one character that reverses a sentence is the first
   one a reader skips.
 
+### When two portfolios do not cover the same window
+
+Each portfolio runs over its own window — decided by what its own holdings
+cover — which is correct and occasionally deliberate. But the results draw them
+as two lines on one chart and two rows in one table, and that reads as a
+comparison. Two return series over different periods are not one: a 2009–2020
+portfolio beating a 2015–2020 one has mostly told you that it held through the
+recovery.
+
+So when the plotted portfolios' windows differ, a note under the chart names
+the spans and says why they are not comparable. It refuses nothing and changes
+no number — running two windows on purpose is legitimate, and the app should
+say what it is showing rather than decide for you.
+
 ### Basics, or everything
 
 The metrics table has two views, chosen in its header:

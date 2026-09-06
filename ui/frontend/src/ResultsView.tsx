@@ -684,6 +684,10 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
 
   const tipOnLeft = hover !== null && hover.px > width * 0.62;
 
+  // Computed for the plotted set, not for every result: a portfolio with no
+  // curve is not on the chart the note sits under.
+  const windowNote = differingWindows(plottable);
+
   const benchmarked = hasBenchmark(results);
 
   const contributing = hasCashflows(results);
@@ -829,6 +833,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
               </div>
             )}
           </div>
+          {windowNote && <div className="panel-note">{windowNote}</div>}
           <div className="chart-wrap" ref={wrapRef}>
             <svg
               className="equity-chart"
@@ -1729,6 +1734,34 @@ function StrategyPlots({ results }: { results: main.RunResult[] }) {
         ))}
       </div>
     </Collapsible>
+  );
+}
+
+// Two portfolios drawn as two lines on one chart read as a comparison. Each
+// genuinely runs over its own window, which is correct -- a portfolio's window
+// is decided by what its own holdings cover -- but two return series over
+// different periods are not comparable, and nothing on the panel said so. A
+// 2009-2020 portfolio beating a 2015-2020 one has mostly told you that it held
+// through the recovery.
+//
+// A note, not a refusal: running two windows on purpose is legitimate.
+// Exported so the smoke run exercises the decision rather than a copy of it.
+export function differingWindows(results: main.RunResult[]): string {
+  const spans = results
+    .filter((r) => (r.dates ?? []).length > 0)
+    .map((r) => ({
+      name: r.portfolioName,
+      from: r.dates[0],
+      to: r.dates[r.dates.length - 1],
+    }));
+  if (spans.length < 2) return "";
+  const first = spans[0];
+  if (spans.every((s) => s.from === first.from && s.to === first.to)) return "";
+  const listed = spans.map((s) => `${s.name} ${s.from} → ${s.to}`).join(" · ");
+  return (
+    `These portfolios cover different windows — ${listed}. ` +
+    "Two return series over different periods are not comparable: the longer " +
+    "one has been through market conditions the other never saw."
   );
 }
 

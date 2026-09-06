@@ -18,7 +18,7 @@ import { renderToString } from "react-dom/server";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import ResultsView from "./ResultsView";
+import ResultsView, { differingWindows } from "./ResultsView";
 import ConsolePanel from "./ConsolePanel";
 import SimpleFormView from "./SimpleForm";
 import { CRITERION_OPS, buildToml, buildHypothesis } from "./buildToml";
@@ -332,6 +332,56 @@ check("a strategy may be a library name or a path", () => {
     // And the portfolio's fallback name is the script's, not the whole path.
     if (!absolute.includes('Name = "idea"')) {
         throw new Error(`an unnamed portfolio was named from the path:\n${absolute}`);
+    }
+});
+
+// Two lines on one chart read as a comparison, and two return series over
+// different periods are not one. The note says so; it does not refuse the run,
+// because running two windows on purpose is legitimate.
+check("differing windows are called out, identical ones are not", () => {
+    const span = (name: string, from: string, to: string) =>
+        main.RunResult.createFrom({
+            portfolioName: name,
+            dates: [from, "2016-06-01", to],
+            equityCurve: [1, 2, 3],
+        });
+
+    const same = differingWindows([
+        span("A", "2015-01-02", "2020-12-31"),
+        span("B", "2015-01-02", "2020-12-31"),
+    ]);
+    if (same !== "") {
+        throw new Error(`identical windows produced a note: ${same}`);
+    }
+
+    const differing = differingWindows([
+        span("Long", "2009-01-02", "2020-12-31"),
+        span("Short", "2015-01-02", "2020-12-31"),
+    ]);
+    for (const want of ["Long 2009-01-02", "Short 2015-01-02", "not comparable"]) {
+        if (!differing.includes(want)) {
+            throw new Error(`the note is missing ${want}: ${differing}`);
+        }
+    }
+
+    // A different END is just as incomparable as a different start, and is the
+    // easier one to miss: two runs "to today" that ended on different days.
+    const endsDiffer = differingWindows([
+        span("A", "2015-01-02", "2020-12-31"),
+        span("B", "2015-01-02", "2021-06-30"),
+    ]);
+    if (endsDiffer === "") {
+        throw new Error("two windows ending on different days produced no note");
+    }
+
+    // One portfolio has nothing to be incomparable with, and a result with no
+    // days is not on the chart at all.
+    if (differingWindows([span("A", "2015-01-02", "2020-12-31")]) !== "") {
+        throw new Error("a single portfolio was compared with itself");
+    }
+    const noDates = main.RunResult.createFrom({ portfolioName: "empty", dates: [] });
+    if (differingWindows([noDates, span("A", "2015-01-02", "2020-12-31")]) !== "") {
+        throw new Error("a result with no days was treated as a window");
     }
 });
 
