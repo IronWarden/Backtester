@@ -102,15 +102,25 @@ func CheckLuaScript(source, name string, params map[string]any) int {
 	L.SetGlobal("tickers", tickersTbl)
 	L.SetGlobal("params", goToLua(L, params))
 
+	// Installed after the API is registered and before the script runs, so
+	// everything the engine provides counts as known and everything the script
+	// invents has to be assigned before it is read.
+	installStrictGlobals(L)
+
 	L.Push(chunk)
 	if err := L.PCall(0, lua.MultRet, nil); err != nil {
 		fail("%v", err)
 		return errors
 	}
 
-	stepFn, ok := L.GetGlobal("step").(*lua.LFunction)
+	// RawGetString, not GetGlobal: the strict metatable is installed, and a
+	// plain lookup of a missing "step" would raise through it rather than
+	// return nil -- turning the clearest finding this check has into a stack
+	// trace.
+	stepValue := L.G.Global.RawGetString("step")
+	stepFn, ok := stepValue.(*lua.LFunction)
 	if !ok {
-		if L.GetGlobal("step") == lua.LNil {
+		if stepValue == lua.LNil {
 			fail("%s defines no global 'step': the engine calls step(day) once "+
 				"per trading day, and a script without one never trades", name)
 		} else {
@@ -124,14 +134,20 @@ func CheckLuaScript(source, name string, params map[string]any) int {
 		L.Push(stepFn)
 		L.Push(lua.LNumber(day))
 		if err := L.PCall(1, 0, nil); err != nil {
-			// A warning, not an error: this ran against invented prices with
-			// no fundamentals, so a script that needs either can raise here
-			// and still be correct in a real run. Saying what it ran against
-			// is the difference between a useful warning and a confusing one.
-			diagf("warn", name,
-				"step(%d) raised while checking against %d days of synthetic "+
-					"prices for %s (no fundamentals, no real dates): %v",
-				day, checkHistoryDays, strings.Join(p.Tickers, " and "), err)
+			// A name that does not exist is a defect whatever the data was, so
+			// it is an error and says so plainly. Everything else is a
+			// warning: this ran against invented prices with no fundamentals,
+			// so a script that needs either can raise here and still be
+			// correct in a real run, and saying what it ran against is the
+			// difference between a useful warning and a confusing one.
+			if strings.Contains(err.Error(), strictMarker) {
+				fail("%v", err)
+			} else {
+				diagf("warn", name,
+					"step(%d) raised while checking against %d days of synthetic "+
+						"prices for %s (no fundamentals, no real dates): %v",
+					day, checkHistoryDays, strings.Join(p.Tickers, " and "), err)
+			}
 			return errors
 		}
 	}
@@ -228,4 +244,121 @@ func checkPortfolio(params map[string]any) *Portfolio {
 		Tickers:              checkTickers,
 		StrategyParams:       params,
 	}
+}
+
+// Strict globals: reading a name nothing ever defined is an error, not nil.
+//
+// This is Lua's own worst trap for someone learning it. `smaa(t, day, 20)` is
+// a call on nil and raises, which at least surfaces; `local n = my_thresold`
+// is simply nil, forever, and a strategy that quietly never trades looks
+// exactly like a strategy that decided not to. The engine cannot tell the
+// difference either, so the result is a flat equity curve and no complaint
+// anywhere.
+//
+// A metatable on the globals table closes it. __index only fires for keys the
+// table does not have, so every registered global and the whole standard
+// library are untouched; only a name nothing defined reaches it. __newindex
+// declares, so a script assigning its own state keeps working -- `state = {}`
+// then reading `state` is fine, in that order.
+//
+// It is installed HERE ONLY, in the checker. A real run is left exactly as it
+// was: a config that ran yesterday produces identical numbers today, and the
+// script that relies on reading an undefined global as nil still does. That is
+// the cautious half of the decision; the loud half is that the check now says
+// so before the run rather than after it.
+const strictMarker = "unknown name "
+
+func installStrictGlobals(L *lua.LState) {
+	known := knownGlobalNames(L)
+	mt := L.NewTable()
+	L.SetField(mt, "__index", L.NewFunction(func(l *lua.LState) int {
+		key := l.Get(2)
+		name, ok := key.(lua.LString)
+		if !ok {
+			// A non-string key on the globals table is not a typo anyone can
+			// act on; behave as Lua would.
+			l.Push(lua.LNil)
+			return 1
+		}
+		l.RaiseError("%s%q%s", strictMarker, string(name), didYouMean(string(name), known))
+		return 0
+	}))
+	L.SetField(mt, "__newindex", L.NewFunction(func(l *lua.LState) int {
+		l.RawSet(l.CheckTable(1), l.Get(2), l.Get(3))
+		return 0
+	}))
+	L.SetMetatable(L.G.Global, mt)
+}
+
+// knownGlobalNames is everything defined at the moment strict mode goes on:
+// the engine's API and Lua's own standard library.
+func knownGlobalNames(L *lua.LState) []string {
+	var names []string
+	L.G.Global.ForEach(func(k, _ lua.LValue) {
+		if s, ok := k.(lua.LString); ok {
+			names = append(names, string(s))
+		}
+	})
+	sort.Strings(names)
+	return names
+}
+
+// didYouMean suggests the closest real name, or says nothing. A wrong
+// suggestion is worse than none -- it sends the reader looking at the wrong
+// line -- so the distance has to be small relative to the word, and only the
+// single best candidate is offered.
+func didYouMean(name string, known []string) string {
+	best, bestDist := "", 0
+	limit := len(name) / 3
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 3 {
+		limit = 3
+	}
+	for _, candidate := range known {
+		d := editDistance(name, candidate)
+		if d > limit {
+			continue
+		}
+		if best == "" || d < bestDist {
+			best, bestDist = candidate, d
+		}
+	}
+	if best == "" {
+		return ` -- nothing defines it. Assign it once before reading it if you meant to.`
+	}
+	return fmt.Sprintf(` -- did you mean %q?`, best)
+}
+
+// editDistance is Levenshtein, over the small vocabulary of global names.
+func editDistance(a, b string) int {
+	ar, br := []rune(a), []rune(b)
+	prev := make([]int, len(br)+1)
+	cur := make([]int, len(br)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ar); i++ {
+		cur[0] = i
+		for j := 1; j <= len(br); j++ {
+			cost := 1
+			if ar[i-1] == br[j-1] {
+				cost = 0
+			}
+			cur[j] = min3(cur[j-1]+1, prev[j]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(br)]
+}
+
+func min3(a, b, c int) int {
+	if b < a {
+		a = b
+	}
+	if c < a {
+		a = c
+	}
+	return a
 }

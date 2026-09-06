@@ -636,7 +636,12 @@ requires step(day) and runs it for three days against a synthetic two-ticker
 history -- no database, no backtest. Errors: a syntax error with its line, no
 step, a step that is not a function, an empty file. Warnings: anything the dry
 run raised (which may be the check's plain data rather than a real bug -- it
-has no fundamentals), and a [portfolio.Params] key the script never reads. Tell
+has no fundamentals), and a [portfolio.Params] key the script never reads.
+The check also runs the script with STRICT GLOBALS: reading a name nothing
+defines is an error there ("unknown name \"smaa\" -- did you mean \"sma\"?"),
+where ordinary Lua would return nil and the strategy would quietly never
+trade. Strictness applies to the check only -- a real run is unchanged, so
+never tell a user that a run will reject an undefined global. Tell
 a user to check a script before running it; it is instant and it catches the
 mistakes that otherwise cost a full run to find.
 

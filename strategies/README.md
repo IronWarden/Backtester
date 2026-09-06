@@ -104,7 +104,11 @@ script, requires `step(day)`, and runs it for three days against synthetic
 prices — no database, no backtest. A typo inside the body is found there
 instead of on day 0 of a real run. It reports a syntax error, a missing or
 non-function `step`, anything the dry run raises, and a `[portfolio.Params]`
-key the script never reads.
+key the script never reads — and, because it runs the body with strict
+globals, a name nothing defines: *unknown name "smaa" — did you mean "sma"?*
+Reading an undefined global is silently `nil` in ordinary Lua, which is how a
+strategy ends up quietly never trading. Only the check is strict; a real run
+behaves exactly as it always has.
 
 **The editor knows all of this.** In the app's Lua tab, typing offers every
 global with its signature and a one-line explanation, and hovering a name shows

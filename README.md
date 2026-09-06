@@ -2156,6 +2156,21 @@ raise here while being perfectly correct in a real run. Only the unambiguous
 failures are errors — a syntax error with its line, no `step` at all, a `step`
 that is not a function, an empty file.
 
+**A name nothing defines is an error, not `nil`.** While the check runs, the
+globals table carries a metatable that raises on reading a name the engine
+never registered and the script never assigned, with the closest real name
+offered: *unknown name "smaa" — did you mean "sma"?* This is Lua's worst trap
+for a beginner. `smaa(t, day, 20)` is a call on nil and at least raises; `local
+n = my_thresold` is simply nil, forever, and a strategy that quietly never
+trades looks exactly like one that decided not to.
+
+It is installed **in the check only**. A real run is untouched: a config that
+ran yesterday produces identical numbers today, and a script that relies on
+reading an undefined global as nil still does. Assigning a global declares it,
+so a script keeping its own state (`held = false`, then reading `held`) is
+unaffected — as is the whole standard library, since the metatable only ever
+sees names the table does not have.
+
 It also reports a `[portfolio.Params]` key the script never reads, which in a
 sweep means every trial ran identical settings. The reverse is deliberately not
 reported: `params.period or 20` is ordinary Lua.
