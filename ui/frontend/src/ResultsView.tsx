@@ -436,13 +436,19 @@ export function visibleColumn(view: MetricsView, key: string): boolean {
 function Collapsible({
   id,
   title,
+  defaultOpen = false,
   children,
 }: {
   id: string;
   title: string;
+  // What the panel does before the user has ever touched it. Every panel here
+  // defaults closed except the reading guide, which is worth exactly one
+  // showing: open the first time, and closed for good once it has been read
+  // and collapsed.
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(() => readPanelState()[id] ?? false);
+  const [open, setOpen] = useState(() => readPanelState()[id] ?? defaultOpen);
   function toggle() {
     setOpen((prev) => {
       writePanelOpen(id, !prev);
@@ -688,6 +694,57 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
 
   return (
     <div className="results-view">
+      {/* Open the first time, closed once collapsed. The tooltips explain
+          every column, but a beginner does not know to hover, and nothing
+          else on the page says which of these panels decides whether the idea
+          was any good. Static text: it states no number, so it cannot
+          disagree with one. */}
+      <Collapsible id="how-to-read" title="How to read this" defaultOpen>
+        <div className="how-to-read">
+          <p>
+            <b>The sentence at the top is the result.</b> Every figure in it
+            comes from the table below — it is the same run said in words, not
+            a summary that rounds or a second opinion.
+          </p>
+          <p>
+            <b>“Does this survive the obvious objections?” is the part that
+            decides things.</b> A strategy is not good because it made money;
+            it is good because it beat the alternatives you already had.
+          </p>
+          <ul>
+            <li>
+              <b>Beat the baseline?</b> The baseline is an equal-weight
+              buy-and-hold of <i>the same tickers</i>, over the same days, with
+              the same costs. A <b>NO</b> here means the strategy lost to
+              simply holding what it traded — the rules earned nothing, however
+              good the return looks.
+            </li>
+            <li>
+              <b>Better than random timing?</b> The same trades, shuffled onto
+              random days, many times over. A <b>NO</b> means the timing was
+              indistinguishable from luck.
+            </li>
+            <li>
+              <b>How many trials was this picked from?</b> Search enough
+              settings and one of them looks brilliant by accident. The
+              deflated Sharpe beside it is what the number is worth after
+              accounting for the search.
+            </li>
+          </ul>
+          <p>
+            <b>Of the numbers, three answer most questions:</b> the annual
+            return, the max drawdown — the deepest hole the account was ever
+            in, which is what actually decides whether a strategy gets
+            abandoned partway through — and how both compare to the benchmark
+            row at the bottom of the table.
+          </p>
+          <p>
+            The metrics table opens on <b>Basics</b>. <b>Everything</b> is the
+            full set, and every column explains itself on hover.
+          </p>
+        </div>
+      </Collapsible>
+
       {/* What happened, in a sentence, before any of the numbers. Written by
           the engine (backtest.Sentence), not assembled here: the app, the
           -pages export and the assistant then say the same thing about the

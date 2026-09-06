@@ -270,10 +270,11 @@ const ALL_PANELS = {
     monthly: true,
 };
 
-function withPanelsOpen<T>(fn: () => T): T {
-    const store = new Map<string, string>([
-        ["backtester-results-panels", JSON.stringify(ALL_PANELS)],
-    ]);
+// Renders with a fake localStorage holding `entries`, which is how a panel's
+// remembered state is exercised: node has no storage, so without this every
+// render is a first visit.
+function withStorage<T>(entries: Record<string, string>, fn: () => T): T {
+    const store = new Map<string, string>(Object.entries(entries));
     Object.defineProperty(globalThis, "localStorage", {
         value: {
             getItem: (k: string) => store.get(k) ?? null,
@@ -290,6 +291,53 @@ function withPanelsOpen<T>(fn: () => T): T {
         delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
     }
 }
+
+function withPanelsOpen<T>(fn: () => T): T {
+    return withStorage(
+        { "backtester-results-panels": JSON.stringify(ALL_PANELS) },
+        fn,
+    );
+}
+
+// The reading guide is the one panel that opens itself, and only until it has
+// been collapsed once. Both halves matter: a guide nobody sees explains
+// nothing, and a guide that reopens every run is the app nagging.
+check("the reading guide opens on a first visit and stays shut after", () => {
+    const { results, verdicts } = load("plain");
+    const render = (entries: Record<string, string>) =>
+        withStorage(entries, () =>
+            renderToString(
+                <ResultsView results={results} fontSize={16} verdicts={verdicts} />,
+            ),
+        );
+    const first = render({});
+    if (!first.includes("How to read this")) {
+        throw new Error("the reading guide is not on the results at all");
+    }
+    // Its body, not just its title: a title with no body is the failure the
+    // defaultOpen exists to prevent.
+    // Phrases that exist only in the guide. "Beat the baseline?" would also
+    // match the verdict card of the same name, and a marker that can be
+    // satisfied by another panel proves nothing about this one.
+    for (const marker of [
+        "the rules earned nothing",
+        "deepest hole the account was ever in",
+        "indistinguishable from luck",
+    ]) {
+        if (!first.includes(marker)) {
+            throw new Error(`the guide rendered closed on a first visit: no "${marker}"`);
+        }
+    }
+    const afterCollapsing = render({
+        "backtester-results-panels": JSON.stringify({ "how-to-read": false }),
+    });
+    if (afterCollapsing.includes("the rules earned nothing")) {
+        throw new Error("the guide reopened itself after being collapsed");
+    }
+    if (!afterCollapsing.includes("How to read this")) {
+        throw new Error("collapsing the guide removed it instead of closing it");
+    }
+});
 
 check("every collapsible panel renders when opened", () => {
     const { results, verdicts } = load("full");

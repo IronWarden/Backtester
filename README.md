@@ -2125,6 +2125,16 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### "How to read this"
+
+The first panel on the results is a collapsible reading guide, open the first
+time and closed for good once you collapse it. It states no number — it says
+what the panels around it mean: that the sentence at the top is the same run
+in words, that the *"Does this survive the obvious objections?"* cards are what
+decide whether the idea was worth anything (a **NO** against the baseline means
+the strategy lost to simply holding what it traded), and which three numbers
+answer most questions.
+
 ### What happened, in a sentence
 
 Above every result, before any number, the app writes what the run actually

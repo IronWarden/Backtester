@@ -631,6 +631,13 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+THE RESULTS OPEN WITH A COLLAPSIBLE "HOW TO READ THIS" GUIDE, open on a first
+visit and closed once collapsed. It explains the headline sentence, the three
+verdict cards (beat the baseline, better than random timing, how many trials
+it was picked from) and which numbers to read first. If a user asks what a
+result means, that panel is the vocabulary they have already seen -- answer in
+the same terms rather than introducing new ones.
+
 EVERY RESULT CARRIES A ONE-SENTENCE HEADLINE, in RunResult.headline, written
 by backtest.Sentence and shown above the numbers: what the money did over what
 period, the worst fall and the longest stretch underwater, money paid in or
