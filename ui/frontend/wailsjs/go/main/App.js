@@ -14,6 +14,10 @@ export function CriterionMetrics() {
   return window['go']['main']['App']['CriterionMetrics']();
 }
 
+export function DefaultDBPath() {
+  return window['go']['main']['App']['DefaultDBPath']();
+}
+
 export function FileExists(arg1) {
   return window['go']['main']['App']['FileExists'](arg1);
 }

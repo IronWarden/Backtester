@@ -1,8 +1,12 @@
 package backtest
 
 import (
+	"bytes"
 	"fmt"
+	"io/fs"
+	"my-backtester/src/apppath"
 	"my-backtester/src/data"
+	"my-backtester/strategies"
 	"os"
 	"path/filepath"
 	"sort"
@@ -30,6 +34,11 @@ type LuaStrategy struct {
 	Path   string
 	Spec   string
 	Params map[string]any
+	// source is the script text, read once when the strategy is built. The
+	// embedded library has no file to re-open at Step time, and reading at
+	// construction fails a missing script immediately rather than on the
+	// first simulated day.
+	source []byte
 
 	L      *lua.LState
 	stepFn *lua.LFunction
@@ -41,17 +50,44 @@ func NewLuaStrategy(
 	if path == "" {
 		return nil, fmt.Errorf("lua script path required")
 	}
-	resolved, err := resolveLuaPath(path)
+	resolved, source, err := loadLuaScript(path)
 	if err != nil {
 		return nil, fmt.Errorf("lua script %q: %w", path, err)
 	}
-	return &LuaStrategy{Path: resolved, Spec: path, Params: params}, nil
+	return &LuaStrategy{
+		Path: resolved, Spec: path, Params: params, source: source,
+	}, nil
 }
 
-// resolveLuaPath locates a script relative to the working directory or to a
-// parent of it. The CLI runs from the repo root while the desktop app runs
-// from ui/, so a config saying "lua:strategies/foo.lua" must work from
-// both without the user hand-editing "../" prefixes per launcher.
+// loadLuaScript returns the location to display for a script and its source.
+// The on-disk library wins wherever one exists -- the working directory
+// first, exactly as before, then the app's own directories -- and the copy
+// embedded in the binary answers when nothing on disk does. That fallback is
+// what lets a config saying "lua:strategies/rsi.lua" run from a binary
+// launched anywhere, which is the case that used to fail outright.
+func loadLuaScript(path string) (string, []byte, error) {
+	resolved, err := resolveLuaPath(path)
+	if err == nil {
+		source, readErr := os.ReadFile(resolved)
+		if readErr != nil {
+			return "", nil, readErr
+		}
+		return resolved, source, nil
+	}
+	if source, ok := strategies.Source(path); ok {
+		// Displayed as written: there is no file to point at, and the spec is
+		// what the user would edit to change it.
+		return path, source, nil
+	}
+	return "", nil, err
+}
+
+// resolveLuaPath locates a script ON DISK. The CLI runs from the repo root
+// while the desktop app runs from ui/, so a config saying
+// "lua:strategies/foo.lua" must work from both without the user hand-editing
+// "../" prefixes per launcher; apppath keeps that working-directory walk and
+// adds the per-user library and the executable's own directory after it, so
+// an installed binary finds a library it did not have to be launched inside.
 func resolveLuaPath(path string) (string, error) {
 	if filepath.IsAbs(path) {
 		if _, err := os.Stat(path); err != nil {
@@ -59,20 +95,12 @@ func resolveLuaPath(path string) (string, error) {
 		}
 		return path, nil
 	}
-	candidates := []string{
-		path,
-		filepath.Join("..", path),
-		filepath.Join("..", "..", path),
+	if resolved, ok := apppath.Resolve(path); ok {
+		return resolved, nil
 	}
-	var firstErr error
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c, nil
-		} else if firstErr == nil {
-			firstErr = err
-		}
-	}
-	return "", firstErr
+	// The error names the path as the config wrote it; the candidate list is
+	// long now and reporting all of it would bury the one that matters.
+	return "", &fs.PathError{Op: "open", Path: path, Err: fs.ErrNotExist}
 }
 
 // Name reports the spec as the user wrote it, so results stay labelled the
@@ -136,7 +164,17 @@ func (s *LuaStrategy) init(
 
 	warnUnreadParams(p, s.Path, s.Params)
 
-	if err := L.DoFile(s.Path); err != nil {
+	// Loaded from source rather than DoFile'd: a script may come from the
+	// embedded library, which has no file to open. The chunk is named with
+	// s.Path either way, so a Lua error still points at the script the user
+	// recognises.
+	chunk, err := L.Load(bytes.NewReader(s.source), s.Path)
+	if err != nil {
+		L.Close()
+		return fmt.Errorf("loading %q: %w", s.Path, err)
+	}
+	L.Push(chunk)
+	if err := L.PCall(0, lua.MultRet, nil); err != nil {
 		L.Close()
 		return fmt.Errorf("loading %q: %w", s.Path, err)
 	}

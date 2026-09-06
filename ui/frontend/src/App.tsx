@@ -21,6 +21,7 @@ function defaultFontSize(): number {
 }
 import Editor from "@monaco-editor/react";
 import {
+    DefaultDBPath,
     FileExists,
     FindLuaPathInConfig,
     PickConfigFile,
@@ -36,6 +37,7 @@ import type {
     SimpleForm as SimpleFormData,
     HypothesisForm as HypothesisFormData,
 } from "./buildToml";
+import { chipLabel } from "./paths";
 import ResultsView from "./ResultsView";
 import ErrorBoundary from "./ErrorBoundary";
 import { readStoredNumber, writeStored } from "./storage";
@@ -54,14 +56,13 @@ const FONT_STORAGE_KEY = "backtester-font-size-v2";
 const CHAT_WIDTH_STORAGE_KEY = "backtester-chat-width";
 const DEFAULT_CHAT_WIDTH = 432;
 
-// Last path segment, for compact chips ("/a/b/config.toml" -> "config.toml").
-const baseName = (p: string) => p.split(/[\\/]/).pop() || p;
-
 type Tab = "toml" | "lua";
 type Mode = "simple" | "advanced" | "data";
 
-// Default DB path, relative to the app's working directory (ui/). Points at
-// the bundled database so simple-mode users can run without picking a file.
+// Fallback DB path, relative to the app's working directory (ui/). The real
+// answer comes from Go (DefaultDBPath), which knows where the binary lives;
+// this is only what the field holds for the instant before that resolves, and
+// it is the path a checkout has always used.
 const DEFAULT_DB_PATH = "../stock_data.db";
 
 // Path used for the Lua tab when the TOML doesn't pin a specific lua: script.
@@ -254,6 +255,23 @@ function App() {
         return () => {
             document.removeEventListener("wheel", onWheel, { capture: true });
             document.removeEventListener("keydown", onKey, true);
+        };
+    }, []);
+
+    // Ask Go where the bundled database actually is. The frontend cannot know:
+    // "../stock_data.db" is its location relative to ui/ and nowhere else, so
+    // a binary launched from anywhere but the checkout opened a path that did
+    // not exist. An empty answer means no database was found, and the header
+    // then asks for one instead of naming a file that isn't there.
+    useEffect(() => {
+        let cancelled = false;
+        DefaultDBPath()
+            .then((p) => {
+                if (!cancelled) setDbPath(p);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
         };
     }, []);
 
@@ -506,7 +524,7 @@ function App() {
                 >
                     <span className="db-ico">⛁</span>
                     <span className="db-name">
-                        {dbPath ? baseName(dbPath) : "Choose DB…"}
+                        {chipLabel(dbPath, "Choose DB…")}
                     </span>
                 </button>
                 <button
@@ -550,13 +568,13 @@ function App() {
                                 className="path-chip"
                                 title={tomlPath || "Config not saved to disk yet"}
                             >
-                                toml · {tomlPath ? baseName(tomlPath) : "unsaved"}
+                                toml · {chipLabel(tomlPath, "unsaved")}
                             </span>
                             <span
                                 className="path-chip"
                                 title={luaPath || "No Lua script"}
                             >
-                                lua · {luaPath ? baseName(luaPath) : "none"}
+                                lua · {chipLabel(luaPath, "none")}
                             </span>
                         </div>
                         <button

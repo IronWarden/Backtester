@@ -25,6 +25,8 @@ package backtest
 
 import (
 	"fmt"
+	"my-backtester/src/apppath"
+	"my-backtester/strategies"
 	"os"
 	"path/filepath"
 	"sort"
@@ -187,6 +189,35 @@ func LoadGallery(dir string) ([]StrategyCard, error) {
 			return nil, fmt.Errorf("reading %s: %w", path, err)
 		}
 		cards = append(cards, ParseStrategyCard(filepath.Base(path), string(source)))
+	}
+	return cards, nil
+}
+
+// LoadLibrary returns the gallery from wherever the shipped library actually
+// is: the on-disk directory when the app can find one -- so a script the user
+// edits shows its own description -- and the copy embedded in the binary
+// otherwise. An installed app used to get an empty gallery here, which is the
+// same bug as an unresolvable "lua:strategies/..." wearing a different hat.
+func LoadLibrary() ([]StrategyCard, error) {
+	if dir, ok := apppath.ResolveDir(strategies.Dir); ok {
+		cards, err := LoadGallery(dir)
+		if err == nil && len(cards) > 0 {
+			return cards, nil
+		}
+	}
+	return loadEmbeddedGallery()
+}
+
+// loadEmbeddedGallery parses the library compiled into the binary.
+func loadEmbeddedGallery() ([]StrategyCard, error) {
+	names := strategies.Names()
+	cards := make([]StrategyCard, 0, len(names))
+	for _, name := range names {
+		source, ok := strategies.Source(name)
+		if !ok {
+			return nil, fmt.Errorf("reading embedded %s", name)
+		}
+		cards = append(cards, ParseStrategyCard(name, string(source)))
 	}
 	return cards, nil
 }

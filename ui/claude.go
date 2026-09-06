@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"my-backtester/src/apppath"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,13 +47,26 @@ func parseEnvFile(path string) map[string]string {
 	return out
 }
 
-// loadClaudeKey finds the API key: environment first, then the project's
-// .env (cwd and repo root), matching where FRED_API_KEY already lives.
+// claudeKeyFiles lists the .env files an API key may live in, in the order
+// they win: the per-user config directory first because that is the one
+// SaveClaudeKey writes and so the most recently set, then the project's own
+// .env in the working directory and at the repo root, where FRED_API_KEY
+// already lives and where a checkout has always kept this key.
+func claudeKeyFiles() []string {
+	var paths []string
+	if dir, err := apppath.ConfigDir(); err == nil {
+		paths = append(paths, filepath.Join(dir, ".env"))
+	}
+	return append(paths, ".env", filepath.Join(repoRoot(), ".env"))
+}
+
+// loadClaudeKey finds the API key: environment first, then the .env files
+// above.
 func loadClaudeKey() string {
 	if k := os.Getenv("ANTHROPIC_API_KEY"); k != "" {
 		return k
 	}
-	for _, p := range []string{".env", filepath.Join(repoRoot(), ".env")} {
+	for _, p := range claudeKeyFiles() {
 		if k := parseEnvFile(p)["ANTHROPIC_API_KEY"]; k != "" {
 			return k
 		}
@@ -66,15 +80,22 @@ func (a *App) HasClaudeKey() bool {
 	return loadClaudeKey() != ""
 }
 
-// SaveClaudeKey persists the key into the project's .env (updating an
-// existing ANTHROPIC_API_KEY line or appending one), alongside the other
-// keys the project keeps there.
+// SaveClaudeKey persists the key into a .env (updating an existing
+// ANTHROPIC_API_KEY line or appending one).
+//
+// Which .env depends on where the app is: a checkout keeps the key beside the
+// other project keys, exactly as before, but an installed binary may sit
+// somewhere the user cannot write -- /opt, /usr/share, a read-only AppImage
+// mount -- and silently failing to save the key someone just typed is the
+// worst of the available behaviours. So the project .env wins only when it is
+// really there, and otherwise the key goes to the per-user config directory,
+// which loadClaudeKey reads first.
 func (a *App) SaveClaudeKey(key string) error {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return fmt.Errorf("key is empty")
 	}
-	envPath := filepath.Join(repoRoot(), ".env")
+	envPath := claudeKeyDestination()
 	var lines []string
 	if b, err := os.ReadFile(envPath); err == nil {
 		lines = strings.Split(strings.TrimRight(string(b), "\n"), "\n")
@@ -90,6 +111,22 @@ func (a *App) SaveClaudeKey(key string) error {
 		lines = append(lines, "ANTHROPIC_API_KEY="+key)
 	}
 	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0600)
+}
+
+// claudeKeyDestination picks the .env SaveClaudeKey writes: an existing
+// project .env if there is one, else the per-user config directory.
+func claudeKeyDestination() string {
+	projectEnv := filepath.Join(repoRoot(), ".env")
+	if _, err := os.Stat(projectEnv); err == nil {
+		return projectEnv
+	}
+	dir, err := apppath.ConfigDir()
+	if err != nil {
+		// No home directory to fall back on. The project path is still the
+		// best guess, and its write error names the real problem.
+		return projectEnv
+	}
+	return filepath.Join(dir, ".env")
 }
 
 // anthropicTools wraps the shared tool schemas in the Messages API

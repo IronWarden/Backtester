@@ -47,6 +47,36 @@ cd ui/frontend && npm install && npm run build
 
 Do not "fix" this by committing `dist`. The engine itself needs no such step: `go build ./src/...` works on a bare clone.
 
+### Where the app looks for its files
+
+Nothing has to be launched from a particular directory. Both binaries resolve
+the strategy library, the database and `config.toml` through `src/apppath`,
+which searches in this order and takes the first hit:
+
+1. the working directory, then its parent, then its parent — the walk this
+   project has always done, so a checkout behaves exactly as it did (the CLI
+   runs from `src/`, the desktop app from `ui/`, and `../strategies` is right
+   for both);
+2. `~/.config/backtester` — the per-user directory, where a packaged app saves
+   a script and the API key;
+3. the executable's own directory and its parent, with symlinks resolved, so a
+   binary installed under `/opt` or reached through `$PATH` finds what was
+   installed beside it.
+
+The **strategy library is embedded in the binary** (`strategies/embed.go`, the
+way `ui` embeds `frontend/dist`), so `Strategy = "lua:strategies/rsi.lua"`
+resolves even when no `strategies/` directory exists anywhere. The embedded
+copy is always the last answer: a script on disk with the same name wins, which
+is what keeps editing one in the Lua tab working. Saving a script from the Lua
+tab writes to the on-disk library when there is one and to
+`~/.config/backtester/strategies/` when there is not — where the engine then
+finds it ahead of the built-in copy of the same name.
+
+The database is the one thing that can genuinely be missing. The UI asks Go
+where it is (`DefaultDBPath`) instead of assuming `../stock_data.db`; when
+nothing is found the header reads **Choose DB…** rather than naming a file that
+is not there.
+
 ## Long-history benchmark assets
 
 `add_collections.py` populates `stock_data_optimized` with index / asset-class
@@ -2268,9 +2298,15 @@ open (even unsaved) in the editors.
   **Insert into … editor** button, so a generated config or strategy lands
   directly in the corresponding editor tab.
 - Setup: Claude models need an Anthropic API key — set
-  `ANTHROPIC_API_KEY` in the repo-root `.env` (or the environment), or
-  paste it into the panel's first-run form, which writes that `.env`
-  entry for you. Local Ollama models need no key at all.
+  `ANTHROPIC_API_KEY` in the environment or a `.env`, or paste it into the
+  panel's first-run form, which writes it for you. The form writes the
+  repo-root `.env` when there is one (a checkout, alongside the other project
+  keys) and `~/.config/backtester/.env` when there is not — an installed
+  binary may sit somewhere unwritable, and silently failing to save a key
+  someone just typed is the worst available behaviour. Reads go the other way
+  round: environment, then `~/.config/backtester/.env`, then the project's,
+  so the last key you saved is the one in use. Local Ollama models need no
+  key at all.
 - Local-model notes: the request pins `num_ctx` to 16384 (Ollama's default
   is too small for the embedded context) and sends a leaner system prompt;
   "thinking" models have thinking disabled for snappier replies.

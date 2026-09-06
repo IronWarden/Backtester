@@ -10,7 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"my-backtester/src/apppath"
 	"my-backtester/src/data"
+	"my-backtester/strategies"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -66,16 +68,14 @@ var claudeModels = []ModelOption{
 // Send while busy; this is the backend-side guarantee.
 var chatMu sync.Mutex
 
-// repoRoot resolves the project root. The app runs with cwd ui/ (dev and
-// packaged alike — DEFAULT_DB_PATH is ../stock_data.db), but fall back to
-// "." so a binary launched from the repo root still finds its files.
+// repoRoot resolves the project root: the directory holding strategies/, the
+// Python loaders and (in a checkout) .env. The app runs with cwd ui/ in dev,
+// but an installed binary can be launched from anywhere, so the search is
+// apppath's — working directory first, then the executable's own directory —
+// and the ".." it falls back to when no library is found anywhere is exactly
+// what this function used to return in that case.
 func repoRoot() string {
-	for _, dir := range []string{"..", "."} {
-		if _, err := os.Stat(filepath.Join(dir, "strategies")); err == nil {
-			return dir
-		}
-	}
-	return ".."
+	return apppath.Root()
 }
 
 // ---------------------------------------------------------------------------
@@ -175,10 +175,23 @@ func userConfigsContext() string {
 		}
 	}
 
-	luas, _ := filepath.Glob(filepath.Join(root, "strategies", "*.lua"))
-	sort.Strings(luas)
-	if len(luas) > 0 {
+	if lib := luaLibraryContext(); lib != "" {
 		b.WriteString("\nLua strategy library (strategies/):\n")
+		b.WriteString(lib)
+	}
+	return b.String()
+}
+
+// luaLibraryContext inlines the strategy library's source. It reads the
+// directory on disk when there is one — the user may have edited a script,
+// and the edited version is the one a run would load — and the copy embedded
+// in the binary otherwise. Without that fallback a packaged app would tell
+// the assistant the library is empty, and it would answer accordingly.
+func luaLibraryContext() string {
+	var b strings.Builder
+	if dir, ok := apppath.ResolveDir(strategies.Dir); ok {
+		luas, _ := filepath.Glob(filepath.Join(dir, "*.lua"))
+		sort.Strings(luas)
 		for _, p := range luas {
 			raw, err := os.ReadFile(p)
 			if err != nil {
@@ -187,6 +200,17 @@ func userConfigsContext() string {
 			fmt.Fprintf(&b, "\n--- strategies/%s ---\n%s\n",
 				filepath.Base(p), clipText(string(raw), maxConfigFileChars))
 		}
+	}
+	if b.Len() > 0 {
+		return b.String()
+	}
+	for _, name := range strategies.Names() {
+		raw, ok := strategies.Source(name)
+		if !ok {
+			continue
+		}
+		fmt.Fprintf(&b, "\n--- strategies/%s ---\n%s\n",
+			name, clipText(string(raw), maxConfigFileChars))
 	}
 	return b.String()
 }
@@ -387,7 +411,7 @@ Strategy spec strings:
 - "greedy" or "equalWeights"            -> buy-and-hold with that sizing
 - "buyAndHold:<greedy|equalWeights>"    -> same, explicit form
 - "smaCross:<short>:<long>:<buyType>"   -> SMA crossover (e.g. "smaCross:50:200:equalWeights")
-- "lua:<path>"                          -> Lua script (path relative to app cwd, e.g. "lua:strategies/rsi.lua")
+- "lua:<path>"                          -> Lua script (e.g. "lua:strategies/rsi.lua"; a relative path is looked up in the working directory and its parents, then ~/.config/backtester, then beside the binary, and finally in the library compiled into the app — so the shipped strategies resolve wherever the app was launched from)
 - Omitting Strategy uses the Lua script currently open in the app's Lua tab.
 Sizing: "greedy" pours all remaining cash into each ticker in order;
 "equalWeights" splits cash evenly across the portfolio's tickers.
@@ -597,6 +621,15 @@ behavior none of them cover, and start from the closest file.
 - Allocation: rebalance, risk_parity, momentum_rotation
 - Trend: trend_following, sma_cross, donchian_breakout
 - Mean reversion: rsi, bollinger_reversion
+The library is compiled into the app as well as living in strategies/, so a
+"lua:strategies/<file>" spec resolves however the app was launched. A script
+on disk always wins over the built-in copy of the same name, and saving one
+from the Lua tab writes to strategies/ when that directory exists and to
+~/.config/backtester/strategies/ otherwise — which the engine then loads in
+preference to the built-in. Same directory for the Anthropic API key: the
+first-run form writes the repo-root .env in a checkout and
+~/.config/backtester/.env when there is none. If the header says "Choose DB…"
+no database was found next to the app, and the user has to pick one.
 strategy_library.toml in the project root runs all of them side by side.
 Match the universe to the family: per-ticker signal strategies (trend,
 breakout, rsi, bollinger) want a basket of individual stocks; allocation

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"my-backtester/src/apppath"
 	"my-backtester/src/backtest"
 	"my-backtester/src/data"
 	"net/http"
@@ -108,7 +109,7 @@ func main() {
 			"splits, and the baseline/chance/trial-count checks together",
 	)
 	flag.StringVar(
-		&configPath, "config", "../config.toml",
+		&configPath, "config", resolveOrDefault("config.toml", "../config.toml"),
 		"Path to portfolio TOML config",
 	)
 	flag.Parse()
@@ -208,7 +209,7 @@ func main() {
 	// The gallery is documentation: no database, no config, so it answers
 	// before either is opened and works on a machine with neither.
 	if listStrats {
-		cards, err := backtest.LoadGallery("../strategies")
+		cards, err := backtest.LoadLibrary()
 		if err != nil {
 			log.Fatalf("reading the strategy gallery: %v", err)
 		}
@@ -216,7 +217,9 @@ func main() {
 		return
 	}
 
-	duckDBPath := "../stock_data.db"
+	// Resolved rather than assumed: "../stock_data.db" is where the database
+	// sits relative to src/, and the CLI is not always run from there.
+	duckDBPath := resolveOrDefault("stock_data.db", "../stock_data.db")
 	_, err := data.InitDB(duckDBPath)
 	if err != nil {
 		log.Fatalf("Failed to open DuckDB: %v", err)
@@ -402,4 +405,15 @@ func campaignTrialCount(campaign string) (int, error) {
 	}
 	defer reg.Close()
 	return reg.CampaignTrials(campaign)
+}
+
+// resolveOrDefault finds a file the app ships with, falling back to the path
+// this program assumed before it could be launched from outside the checkout.
+// The fallback matters: it is what the -config flag's help text shows, and a
+// user who has always typed "../config.toml" should keep seeing it.
+func resolveOrDefault(name, fallback string) string {
+	if p, ok := apppath.Resolve(name); ok {
+		return p
+	}
+	return fallback
 }

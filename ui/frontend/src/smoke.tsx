@@ -33,6 +33,7 @@ import {
     buildExample,
     exampleHypothesis,
 } from "./examples";
+import { chipLabel } from "./paths";
 import { readStored, readStoredNumber, readStoredObject, writeStored } from "./storage";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { backtest, main } from "../wailsjs/go/models";
@@ -311,6 +312,30 @@ for (const [label, fs] of [
         );
     });
 }
+
+// The header chips. The database one can now read "Choose DB…" for real: the
+// path comes from Go (DefaultDBPath), and an app launched with no database
+// beside it gets an empty string rather than the "../stock_data.db" the
+// frontend used to hardcode. A chip that rendered that empty path would name
+// a file that does not exist and offer no way out.
+check("chipLabel names a file, or asks for one", () => {
+    const cases: [string, string, string][] = [
+        ["/home/u/data/stock_data.db", "Choose DB…", "stock_data.db"],
+        ["C:\\Users\\u\\stock_data.db", "Choose DB…", "stock_data.db"],
+        ["stock_data.db", "Choose DB…", "stock_data.db"],
+        ["", "Choose DB…", "Choose DB…"],
+        ["", "unsaved", "unsaved"],
+    ];
+    for (const [path, empty, want] of cases) {
+        const got = chipLabel(path, empty);
+        if (got !== want) {
+            throw new Error(
+                `chipLabel(${JSON.stringify(path)}, ${JSON.stringify(empty)}) ` +
+                    `= ${JSON.stringify(got)}, want ${JSON.stringify(want)}`,
+            );
+        }
+    }
+});
 
 // buildToml is what turns the Backtest tab into a config, so a change here
 // silently changes every run started from the form. Pure function, no DOM --

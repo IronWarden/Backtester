@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"my-backtester/src/apppath"
 	"my-backtester/src/backtest"
 	"my-backtester/src/data"
+	"my-backtester/strategies"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -334,12 +336,54 @@ func loadStrategyGallery(dir string) []backtest.StrategyCard {
 // here is what lets the UI name a strategy in the user's language instead
 // of making them read Lua.
 //
-// NOTE: this reads the library at repoRoot(), which is NOT the directory
-// the engine opens a "lua:strategies/..." spec from — that resolution is
-// relative to the process working directory. See T86 in TASKS.md; a picker
-// built on these cards would emit specs the engine cannot load.
+// The library is looked up the same way the engine looks up a
+// "lua:strategies/..." spec (apppath, then the copy embedded in the binary),
+// so the cards describe the scripts a run would actually load rather than a
+// directory that happens to sit next to the process.
 func (a *App) ListStrategies() []backtest.StrategyCard {
-	return loadStrategyGallery(filepath.Join(repoRoot(), "strategies"))
+	cards, err := backtest.LoadLibrary()
+	if err != nil || cards == nil {
+		return []backtest.StrategyCard{}
+	}
+	return cards
+}
+
+// DefaultDBPath returns the bundled database if the app can find one, and ""
+// if it cannot. The frontend used to hardcode "../stock_data.db", which is
+// the file's location relative to ui/ and nowhere else: launched from
+// anywhere but the checkout the app opened a path that did not exist and
+// every panel reported an unopenable database. Returning "" instead leaves
+// the UI on "Choose DB…", which is a question the user can answer.
+func (a *App) DefaultDBPath() string {
+	if p, ok := apppath.Resolve("stock_data.db"); ok {
+		return p
+	}
+	return ""
+}
+
+// writablePath is resolveAppPath for a file about to be CREATED. It differs
+// in one case: when no candidate directory exists at all -- a packaged app
+// whose library is embedded rather than on disk -- it creates the per-user
+// library and puts the file there, instead of returning a relative path that
+// would land beside the binary in a directory the user may not own.
+func writablePath(path string) string {
+	resolved := resolveAppPath(path)
+	if filepath.IsAbs(resolved) {
+		return resolved
+	}
+	if dir := filepath.Dir(resolved); dir != "." {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return resolved
+		}
+	}
+	if !strings.HasPrefix(filepath.ToSlash(path), strategies.Dir+"/") {
+		return resolved
+	}
+	dir, err := apppath.UserStrategiesDir()
+	if err != nil {
+		return resolved
+	}
+	return filepath.Join(dir, filepath.Base(path))
 }
 
 // CriterionMetrics returns the metric names a pre-registered hypothesis may
@@ -500,15 +544,18 @@ func (a *App) PickLuaFile() (string, error) {
 //     belongs in the library the gallery lists, not in a new directory beside
 //     the binary;
 //   - failing all that, the path as given, so nothing new can fail to write.
+//
+// The candidate list comes from apppath, so it now ends at the per-user
+// library and the executable's own directory rather than at "../..". That is
+// what makes the Lua tab work in a packaged app: the built-in library has no
+// directory on disk, so a save falls through to ~/.config/backtester (created
+// by NewScriptDir before the write), and the saved copy is found first
+// afterwards because it precedes the embedded library in the search.
 func resolveAppPath(path string) string {
 	if path == "" || filepath.IsAbs(path) {
 		return path
 	}
-	candidates := []string{
-		path,
-		filepath.Join("..", path),
-		filepath.Join("..", "..", path),
-	}
+	candidates := apppath.Candidates(path)
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
 			return c
@@ -528,6 +575,13 @@ func (a *App) ReadFile(path string) (string, error) {
 	}
 	b, err := os.ReadFile(resolveAppPath(path))
 	if err != nil {
+		// A shipped strategy has no file on disk in a packaged app, and the
+		// Lua tab opening empty on one is how a user concludes the library is
+		// missing. Reading the embedded copy shows the script; saving it
+		// writes their own, which then wins (see writablePath).
+		if src, ok := strategies.Source(path); ok {
+			return string(src), nil
+		}
 		return "", err
 	}
 	return string(b), nil
@@ -542,7 +596,7 @@ func (a *App) WriteFile(path, content string) error {
 	}
 	// Resolved so a save lands on the file the engine reads. Without this the
 	// Lua tab wrote a second, shadowing copy under ui/ -- see resolveAppPath.
-	path = resolveAppPath(path)
+	path = writablePath(path)
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("mkdir %q: %w", dir, err)
@@ -558,7 +612,13 @@ func (a *App) FileExists(path string) bool {
 		return false
 	}
 	info, err := os.Stat(resolveAppPath(path))
-	return err == nil && !info.IsDir()
+	if err == nil {
+		return !info.IsDir()
+	}
+	// True for a script that exists only inside the binary: ReadFile can
+	// serve it, which is what this question is asked to decide.
+	_, embedded := strategies.Source(path)
+	return embedded
 }
 
 var luaStrategyRe = regexp.MustCompile(`Strategy\s*=\s*"lua:([^"]+)"`)
