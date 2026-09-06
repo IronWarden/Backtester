@@ -68,11 +68,6 @@ type RunResult struct {
 	// Plots is whatever the strategy recorded with plot(), for the results
 	// panel to draw. Empty for every strategy that never calls it.
 	Plots []backtest.PlotSeries `json:"plots"`
-	// Headline is what this result did, in a sentence, from backtest.Sentence.
-	// Computed in Go rather than assembled in the frontend so the app, the
-	// -pages export and the assistant all say the same thing about the same
-	// run. Empty for a run that simulated nothing.
-	Headline string `json:"headline"`
 	// EquityCurve is the portfolio's daily total value; Dates are the
 	// matching trading days (YYYY-MM-DD), 1:1 with EquityCurve. The frontend
 	// plots these as the equity-curve chart.
@@ -327,7 +322,6 @@ func (a *App) RunBacktest(
 		results = append(results, RunResult{
 			PortfolioName:         r.PortfolioName,
 			Strategy:              r.Strategy,
-			Headline:              backtest.Sentence(r),
 			Plots:                 r.Plots,
 			SharpeRatio:           r.Metrics.SharpeRatio,
 			SortinoRatio:          r.Metrics.SortinoRatio,

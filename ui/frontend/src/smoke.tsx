@@ -96,39 +96,6 @@ const cashflowForm: SimpleForm = {
 
 console.log("frontend smoke render");
 
-// The sentence above the numbers. It comes from Go (backtest.Sentence), so
-// the only thing to check here is that it is rendered and that a result
-// without one produces no empty panel -- an unexplained blank strip above the
-// results would read as something having failed to load.
-check("the headline sentence is rendered, and silence is silent", () => {
-    const { results, verdicts } = load("plain");
-    const base = results[0] as main.RunResult;
-    const sentence = "$10,000 became $12,500 over 3 years — 7.7% a year.";
-    const withHeadline = renderToString(
-        <ResultsView
-            results={[main.RunResult.createFrom({ ...base, headline: sentence })]}
-            fontSize={16}
-            verdicts={verdicts}
-        />,
-    );
-    if (!withHeadline.includes("7.7% a year")) {
-        throw new Error("the headline sentence never reached the DOM");
-    }
-    const without = renderToString(
-        <ResultsView
-            results={[main.RunResult.createFrom({ ...base, headline: "" })]}
-            fontSize={16}
-            verdicts={verdicts}
-        />,
-    );
-    if (without.includes("headlines")) {
-        throw new Error(
-            "a result with no headline still rendered the headline panel — an " +
-                "empty strip above the results reads as a failure to load",
-        );
-    }
-});
-
 // The metric table has two views, and every cell in it -- header, portfolio
 // row, benchmark row -- is gated on the same show(key). If one of the three
 // disagrees, the row does not come out short: every later value slides one
@@ -604,46 +571,6 @@ check("the completion list leads with step and keeps engine order", () => {
         throw new Error(
             `sortText breaks past nine entries: ${resorted.map((i) => i.label).join(",")}`,
         );
-    }
-});
-
-// The reading guide is the one panel that opens itself, and only until it has
-// been collapsed once. Both halves matter: a guide nobody sees explains
-// nothing, and a guide that reopens every run is the app nagging.
-check("the reading guide opens on a first visit and stays shut after", () => {
-    const { results, verdicts } = load("plain");
-    const render = (entries: Record<string, string>) =>
-        withStorage(entries, () =>
-            renderToString(
-                <ResultsView results={results} fontSize={16} verdicts={verdicts} />,
-            ),
-        );
-    const first = render({});
-    if (!first.includes("How to read this")) {
-        throw new Error("the reading guide is not on the results at all");
-    }
-    // Its body, not just its title: a title with no body is the failure the
-    // defaultOpen exists to prevent.
-    // Phrases that exist only in the guide. "Beat the baseline?" would also
-    // match the verdict card of the same name, and a marker that can be
-    // satisfied by another panel proves nothing about this one.
-    for (const marker of [
-        "the rules earned nothing",
-        "deepest hole the account was ever in",
-        "indistinguishable from luck",
-    ]) {
-        if (!first.includes(marker)) {
-            throw new Error(`the guide rendered closed on a first visit: no "${marker}"`);
-        }
-    }
-    const afterCollapsing = render({
-        "backtester-results-panels": JSON.stringify({ "how-to-read": false }),
-    });
-    if (afterCollapsing.includes("the rules earned nothing")) {
-        throw new Error("the guide reopened itself after being collapsed");
-    }
-    if (!afterCollapsing.includes("How to read this")) {
-        throw new Error("collapsing the guide removed it instead of closing it");
     }
 });
 

@@ -1487,56 +1487,6 @@ button.primary:hover:not(:disabled),
   color: var(--text-1, var(--text-2));
 }
 
-/* The reading guide. Prose, so it gets a reading measure and real line
-   height rather than the dense metric layout around it. */
-.how-to-read {
-  padding: 0.2em 0.9em 0.9em;
-  max-width: 82ch;
-  font-size: 0.88em;
-  line-height: 1.6;
-  color: var(--text-2);
-}
-
-.how-to-read p {
-  margin: 0.7em 0 0;
-}
-
-.how-to-read ul {
-  margin: 0.5em 0 0;
-  padding-left: 1.2em;
-}
-
-.how-to-read li {
-  margin: 0.35em 0;
-}
-
-.how-to-read b {
-  color: var(--text-1, var(--text-2));
-}
-
-/* The result in English, above every number it summarises. A reading measure
-   and ordinary body size, because this is the one thing on the results panel
-   meant to be read as a sentence rather than scanned as a figure. */
-.headlines {
-  padding: 0.7em 0.9em;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5em;
-}
-
-.headline-line {
-  margin: 0;
-  max-width: 78ch;
-  font-size: 0.95em;
-  line-height: 1.55;
-  color: var(--text-1, var(--text-2));
-}
-
-.headline-who {
-  font-weight: 600;
-  margin-right: 0.4em;
-}
-
 /* Basics / Everything, in the Metrics panel head. A two-button segmented
    control rather than a "show more" link: both views are named, so the short
    one reads as a choice and not as the table having failed to load. Pushed to

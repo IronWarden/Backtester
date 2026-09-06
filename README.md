@@ -2287,61 +2287,6 @@ runs under a two-second deadline, because hanging the app is the one failure a
 checker must not have. Every one of the twelve shipped strategies passes it,
 which is what `TestCheckPassesEveryShippedStrategy` exists to keep true.
 
-### "How to read this"
-
-The first panel on the results is a collapsible reading guide, open the first
-time and closed for good once you collapse it. It states no number — it says
-what the panels around it mean: that the sentence at the top is the same run
-in words, that the *"Does this survive the obvious objections?"* cards are what
-decide whether the idea was worth anything (a **NO** against the baseline means
-the strategy lost to simply holding what it traded), and which three numbers
-answer most questions.
-
-### What happened, in a sentence
-
-Above every result, before any number, the app writes what the run actually
-did:
-
-> $100,000 became $184,300 over 4 years — 16.5% a year. The worst fall was
-> 34%, and the longest stretch below a previous high was 14 months. Holding
-> $SP500 instead would have made 14.2% a year, so this was 2.3 points ahead.
-
-It is `backtest.Sentence` (`src/backtest/headline.go`), so the desktop app,
-the `-pages` export and the assistant all say the same thing about the same
-run, and the sentence cannot drift from the table beneath it. It derives
-nothing: every figure in it is one the engine already computed.
-
-The rules it follows are what keep it honest, and each is pinned by a test:
-
-- **a window under a year is never annualized** — a 3% month annualizes to
-  43% a year, and that is not a thing that happened. The total is stated
-  instead, and the benchmark is compared on its total too, since a total
-  against an annualized figure is not a comparison.
-- **recovery is never asserted, only its absence.** The result carries the
-  deepest few drawdowns, not all of them, so "it recovered" is not knowable
-  from there while "it had not made that back by the end" is.
-- **money paid in is named.** "$100,000 became $184,300" reads as performance
-  when a third of it was deposits.
-- **a plan that ran out of money leads with it.** For a decumulation backtest
-  that is the result, not a footnote.
-- **no minus sign carries the meaning.** "a loss of 11.6% a year", never
-  "-11.6% a year" — the one character that reverses a sentence is the first
-  one a reader skips.
-
-### When two portfolios do not cover the same window
-
-Each portfolio runs over its own window — decided by what its own holdings
-cover — which is correct and occasionally deliberate. But the results draw them
-as two lines on one chart and two rows in one table, and that reads as a
-comparison. Two return series over different periods are not one: a 2009–2020
-portfolio beating a 2015–2020 one has mostly told you that it held through the
-recovery.
-
-So when the plotted portfolios' windows differ, a note under the chart names
-the spans and says why they are not comparable. It refuses nothing and changes
-no number — running two windows on purpose is legitimate, and the app should
-say what it is showing rather than decide for you.
-
 ### Basics, or everything
 
 The metrics table has two views, chosen in its header:

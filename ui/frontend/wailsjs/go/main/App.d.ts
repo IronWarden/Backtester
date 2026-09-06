@@ -25,11 +25,11 @@ export function ListChatModels():Promise<Array<main.ModelOption>>;
 
 export function ListStrategies():Promise<Array<backtest.StrategyCard>>;
 
+export function ListTickers(arg1:string):Promise<Array<string>>;
+
 export function LuaAPI():Promise<Array<backtest.LuaGlobal>>;
 
 export function LuaSkeletons():Promise<Array<backtest.LuaSkeleton>>;
-
-export function ListTickers(arg1:string):Promise<Array<string>>;
 
 export function PickConfigFile():Promise<string>;
 
@@ -45,10 +45,10 @@ export function RunUserQuery(arg1:string,arg2:string):Promise<main.QueryResult>;
 
 export function SaveClaudeKey(arg1:string):Promise<void>;
 
-export function Version():Promise<string>;
-
 export function TickerDateRanges(arg1:string):Promise<Record<string, Array<string>>>;
 
 export function TickerNames(arg1:string):Promise<Record<string, string>>;
+
+export function Version():Promise<string>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

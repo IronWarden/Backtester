@@ -46,16 +46,16 @@ export function ListStrategies() {
   return window['go']['main']['App']['ListStrategies']();
 }
 
+export function ListTickers(arg1) {
+  return window['go']['main']['App']['ListTickers'](arg1);
+}
+
 export function LuaAPI() {
   return window['go']['main']['App']['LuaAPI']();
 }
 
 export function LuaSkeletons() {
   return window['go']['main']['App']['LuaSkeletons']();
-}
-
-export function ListTickers(arg1) {
-  return window['go']['main']['App']['ListTickers'](arg1);
 }
 
 export function PickConfigFile() {
@@ -94,10 +94,10 @@ export function TickerNames(arg1) {
   return window['go']['main']['App']['TickerNames'](arg1);
 }
 
-export function WriteFile(arg1, arg2) {
-  return window['go']['main']['App']['WriteFile'](arg1, arg2);
-}
-
 export function Version() {
   return window['go']['main']['App']['Version']();
+}
+
+export function WriteFile(arg1, arg2) {
+  return window['go']['main']['App']['WriteFile'](arg1, arg2);
 }

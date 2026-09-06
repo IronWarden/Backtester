@@ -696,22 +696,6 @@ when a user asks what is available, the answer is "start typing" as much as it
 is a list -- and if a name you are about to suggest is not in the Lua API
 section below, it does not exist.
 
-THE RESULTS OPEN WITH A COLLAPSIBLE "HOW TO READ THIS" GUIDE, open on a first
-visit and closed once collapsed. It explains the headline sentence, the three
-verdict cards (beat the baseline, better than random timing, how many trials
-it was picked from) and which numbers to read first. If a user asks what a
-result means, that panel is the vocabulary they have already seen -- answer in
-the same terms rather than introducing new ones.
-
-EVERY RESULT CARRIES A ONE-SENTENCE HEADLINE, in RunResult.headline, written
-by backtest.Sentence and shown above the numbers: what the money did over what
-period, the worst fall and the longest stretch underwater, money paid in or
-taken out, and the benchmark comparison. Quote it rather than re-deriving
-prose from the metrics table -- it is the same wording the -pages export
-uses. It never annualizes a window under a year, never claims a drawdown
-recovered (only that it did not), and leads with a plan that ran out of money.
-A run that simulated nothing has an empty headline.
-
 THE METRICS TABLE HAS TWO VIEWS, chosen in its header and remembered:
 "Basics" (portfolio, strategy, final value, profit, Sharpe, max drawdown,
 annual %, plus Contributed / Missed W/D / Confidence / Alpha % when the run

@@ -137,6 +137,44 @@ export namespace backtest {
 		    return a;
 		}
 	}
+	export class LuaGlobal {
+	    name: string;
+	    signature: string;
+	    kind: string;
+	    returns: string;
+	    summary: string;
+	    group: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LuaGlobal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.signature = source["signature"];
+	        this.kind = source["kind"];
+	        this.returns = source["returns"];
+	        this.summary = source["summary"];
+	        this.group = source["group"];
+	    }
+	}
+	export class LuaSkeleton {
+	    name: string;
+	    summary: string;
+	    source: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LuaSkeleton(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.summary = source["summary"];
+	        this.source = source["source"];
+	    }
+	}
 	export class PeriodReturn {
 	    period: string;
 	    returnPct: number;
@@ -177,22 +215,6 @@ export namespace backtest {
 		    return a;
 		}
 	}
-	export class LuaSkeleton {
-	    name: string;
-	    summary: string;
-	    source: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new LuaSkeleton(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.summary = source["summary"];
-	        this.source = source["source"];
-	    }
-	}
 	export class PlotPoint {
 	    day: number;
 	    value: number;
@@ -221,23 +243,23 @@ export namespace backtest {
 	        this.points = this.convertValues(source["points"], PlotPoint);
 	    }
 	
-	    convertValues(a: any, classs: any, asMap: boolean = false): any {
-	        if (!a) {
-	            return a;
-	        }
-	        if (a.slice && a.map) {
-	            return (a as any[]).map((elem) => this.convertValues(elem, classs));
-	        } else if ("object" === typeof a) {
-	            if (asMap) {
-	                for (const key of Object.keys(a)) {
-	                    a[key] = new classs(a[key]);
-	                }
-	                return a;
-	            }
-	            return new classs(a);
-	        }
-	        return a;
-	    }
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class RollingPoint {
 	    // Go type: time
@@ -330,28 +352,6 @@ export namespace backtest {
 	        this.bootstrapLow = source["bootstrapLow"];
 	        this.bootstrapHigh = source["bootstrapHigh"];
 	        this.computed = source["computed"];
-	    }
-	}
-	export class LuaGlobal {
-	    name: string;
-	    signature: string;
-	    kind: string;
-	    returns: string;
-	    summary: string;
-	    group: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new LuaGlobal(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.signature = source["signature"];
-	        this.kind = source["kind"];
-	        this.returns = source["returns"];
-	        this.summary = source["summary"];
-	        this.group = source["group"];
 	    }
 	}
 	export class StrategyCard {
@@ -645,7 +645,6 @@ export namespace main {
 	    downCapture: number;
 	    initialCapital: number;
 	    finalValue: number;
-	    headline: string;
 	    plots: backtest.PlotSeries[];
 	    equityCurve: number[];
 	    dates: string[];
@@ -696,7 +695,6 @@ export namespace main {
 	        this.downCapture = source["downCapture"];
 	        this.initialCapital = source["initialCapital"];
 	        this.finalValue = source["finalValue"];
-	        this.headline = source["headline"];
 	        this.plots = this.convertValues(source["plots"], backtest.PlotSeries);
 	        this.equityCurve = source["equityCurve"];
 	        this.dates = source["dates"];
