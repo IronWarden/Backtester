@@ -631,6 +631,14 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+THE LUA EDITOR COMPLETES AND EXPLAINS THE STRATEGY API. Every global is
+offered as you type, with its signature and a one-line description, and hover
+shows the same; "step" is the first completion on an empty file. The list comes
+from backtest.LuaAPI, which a test pins to the engine's own SetGlobal calls. So
+when a user asks what is available, the answer is "start typing" as much as it
+is a list -- and if a name you are about to suggest is not in the Lua API
+section below, it does not exist.
+
 THE RESULTS OPEN WITH A COLLAPSIBLE "HOW TO READ THIS" GUIDE, open on a first
 visit and closed once collapsed. It explains the headline sentence, the three
 verdict cards (beat the baseline, better than random timing, how many trials

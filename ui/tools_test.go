@@ -188,6 +188,25 @@ func TestSystemPromptDocumentsEveryMetric(t *testing.T) {
 	}
 }
 
+// The Lua globals now have one authority — backtest.LuaAPI, pinned by a test
+// there to the engine's own SetGlobal calls — so the prompt's hand-written
+// listing can be checked against it. The failure this prevents is specific and
+// has happened in the metric case already: the assistant writes strategies, so
+// a global it has never heard of is one it will never use, and worse, one it
+// may replace with something plausible that does not exist.
+func TestSystemPromptDocumentsEveryLuaGlobal(t *testing.T) {
+	for _, g := range backtest.LuaAPI() {
+		if !strings.Contains(appReference, g.Name) {
+			t.Errorf("appReference never mentions the Lua global %q — the "+
+				"assistant cannot write a strategy that uses it", g.Name)
+		}
+		if !strings.Contains(leanReference, g.Name) {
+			t.Errorf("leanReference never mentions the Lua global %q — a local "+
+				"model will not know it exists", g.Name)
+		}
+	}
+}
+
 // Config knobs have the same drift problem as metrics, and a worse failure
 // mode: the assistant writes the TOML, so a field it does not know about is a
 // field the user never gets offered. Keyed by field name rather than reflected

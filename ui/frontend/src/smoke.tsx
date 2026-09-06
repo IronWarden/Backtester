@@ -34,6 +34,14 @@ import {
     exampleHypothesis,
 } from "./examples";
 import { chipLabel } from "./paths";
+import {
+    argsOf,
+    detailFor,
+    documentation,
+    findGlobal,
+    luaSuggestions,
+    snippetFor,
+} from "./luaApi";
 import { parseSession } from "./session";
 import type { Session } from "./session";
 import { readStored, readStoredNumber, readStoredObject, writeStored } from "./storage";
@@ -298,6 +306,125 @@ function withPanelsOpen<T>(fn: () => T): T {
         fn,
     );
 }
+
+// The Lua editor's completion. The descriptions come from Go and a test there
+// pins them to the engine's own SetGlobal calls; what is checked here is the
+// part that turns a signature into something an editor can insert -- because a
+// snippet with the arguments in the wrong order teaches the wrong API more
+// convincingly than no completion at all.
+const luaApiFixture = [
+    backtest.LuaGlobal.createFrom({
+        name: "sma",
+        signature: "sma(ticker, day, period)",
+        kind: "function",
+        returns: "number",
+        summary: "Mean close over [day-period, day).",
+        group: "Indicators",
+    }),
+    backtest.LuaGlobal.createFrom({
+        name: "cash",
+        signature: "cash()",
+        kind: "function",
+        returns: "number",
+        summary: "Uninvested buying power.",
+        group: "Account and orders",
+    }),
+    backtest.LuaGlobal.createFrom({
+        name: "log",
+        signature: "log(...)",
+        kind: "function",
+        summary: "Say something the run console will show.",
+        group: "Context",
+    }),
+    backtest.LuaGlobal.createFrom({
+        name: "tickers",
+        signature: "tickers",
+        kind: "value",
+        summary: "1-indexed table of the portfolio's ticker strings.",
+        group: "Context",
+    }),
+];
+
+check("a signature becomes a snippet with the arguments in order", () => {
+    const cases: [string, string][] = [
+        ["sma", "sma(${1:ticker}, ${2:day}, ${3:period})"],
+        ["cash", "cash()"],
+        // Any number of values, so there is no argument to tab to.
+        ["log", "log($0)"],
+        // A value is inserted as itself: `tickers()` would be a call on a table.
+        ["tickers", "tickers"],
+    ];
+    for (const [name, want] of cases) {
+        const g = findGlobal(luaApiFixture, name);
+        if (!g) throw new Error(`${name} missing from the fixture`);
+        const got = snippetFor(g);
+        if (got !== want) {
+            throw new Error(`snippetFor(${name}) = ${got}, want ${want}`);
+        }
+    }
+    if (argsOf("corr(a, b, day, n)").join("|") !== "a|b|day|n") {
+        throw new Error(`argsOf did not split the arguments: ${argsOf("corr(a, b, day, n)")}`);
+    }
+    if (argsOf("tickers").length !== 0 || argsOf("cash()").length !== 0) {
+        throw new Error("a value and a no-argument call must yield no arguments");
+    }
+});
+
+check("hover explains exactly the name under the cursor", () => {
+    if (findGlobal(luaApiFixture, "sm") || findGlobal(luaApiFixture, "smaa")) {
+        throw new Error("hover matched a name that is not a global");
+    }
+    const doc = documentation(findGlobal(luaApiFixture, "sma")!);
+    for (const want of ["sma(ticker, day, period)", "number", "Mean close"]) {
+        if (!doc.includes(want)) throw new Error(`hover text is missing ${want}:\n${doc}`);
+    }
+    // A function with nothing to return says nothing about returns rather than
+    // claiming an empty one.
+    if (documentation(findGlobal(luaApiFixture, "log")!).includes("Returns")) {
+        throw new Error("a function with no return value advertised one");
+    }
+    if (!detailFor(findGlobal(luaApiFixture, "cash")!).includes("→ number")) {
+        throw new Error("the completion detail line lost its return type");
+    }
+});
+
+check("the completion list leads with step and keeps engine order", () => {
+    const items = luaSuggestions(luaApiFixture);
+    if (items[0].label !== "step") {
+        throw new Error(`first suggestion is ${items[0].label}; a blank file needs step first`);
+    }
+    if (items.length !== luaApiFixture.length + 1) {
+        throw new Error(`${items.length} suggestions for ${luaApiFixture.length} globals`);
+    }
+    const sorted = [...items].sort((a, b) => a.sortText.localeCompare(b.sortText));
+    if (sorted.map((i) => i.label).join(",") !== items.map((i) => i.label).join(",")) {
+        throw new Error(
+            "sortText does not reproduce the engine's grouping — the list would " +
+                "come out alphabetised instead of grouped",
+        );
+    }
+    if (luaSuggestions([]).length !== 1) {
+        throw new Error("with no API loaded the list should still offer step, and nothing else");
+    }
+    // With four entries any sortText scheme looks right; the real API has 34,
+    // and an unpadded index sorts 10 before 9.
+    const many = Array.from({ length: 12 }, (_, i) =>
+        backtest.LuaGlobal.createFrom({
+            name: `g${i}`,
+            signature: `g${i}()`,
+            kind: "function",
+            summary: "x",
+            group: "Context",
+        }),
+    );
+    const order = luaSuggestions(many);
+    const resorted = [...order].sort((a, b) => a.sortText.localeCompare(b.sortText));
+    if (resorted.map((i) => i.label).join(",") !== order.map((i) => i.label).join(",")) {
+        throw new Error(
+            `sortText breaks past nine entries: ${resorted.map((i) => i.label).join(",")}`,
+        );
+    }
+});
 
 // The reading guide is the one panel that opens itself, and only until it has
 // been collapsed once. Both halves matter: a guide nobody sees explains

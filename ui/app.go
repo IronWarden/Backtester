@@ -410,6 +410,16 @@ func writablePath(path string) string {
 	return filepath.Join(dir, filepath.Base(path))
 }
 
+// LuaAPI returns the strategy API the engine actually registers, so the Lua
+// editor can complete and explain it. Bound rather than mirrored in the
+// frontend for the reason CriterionMetrics is: a hand-copied list is how an
+// editor ends up offering a global that does not exist, and the user finds out
+// on day 0 of a run. A test in the engine pins the list to the SetGlobal calls
+// themselves.
+func (a *App) LuaAPI() []backtest.LuaGlobal {
+	return backtest.LuaAPI()
+}
+
 // CriterionMetrics returns the metric names a pre-registered hypothesis may
 // test, straight from the engine's own table. Bound rather than mirrored in
 // the frontend on purpose: a hand-copied list is how the UI ends up offering

@@ -266,6 +266,28 @@ export namespace backtest {
 	        this.computed = source["computed"];
 	    }
 	}
+	export class LuaGlobal {
+	    name: string;
+	    signature: string;
+	    kind: string;
+	    returns: string;
+	    summary: string;
+	    group: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LuaGlobal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.signature = source["signature"];
+	        this.kind = source["kind"];
+	        this.returns = source["returns"];
+	        this.summary = source["summary"];
+	        this.group = source["group"];
+	    }
+	}
 	export class StrategyCard {
 	    File: string;
 	    Idea: string;

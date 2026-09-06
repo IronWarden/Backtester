@@ -42,6 +42,10 @@ export function ListStrategies() {
   return window['go']['main']['App']['ListStrategies']();
 }
 
+export function LuaAPI() {
+  return window['go']['main']['App']['LuaAPI']();
+}
+
 export function ListTickers(arg1) {
   return window['go']['main']['App']['ListTickers'](arg1);
 }

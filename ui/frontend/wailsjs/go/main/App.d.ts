@@ -23,6 +23,8 @@ export function ListChatModels():Promise<Array<main.ModelOption>>;
 
 export function ListStrategies():Promise<Array<backtest.StrategyCard>>;
 
+export function LuaAPI():Promise<Array<backtest.LuaGlobal>>;
+
 export function ListTickers(arg1:string):Promise<Array<string>>;
 
 export function PickConfigFile():Promise<string>;

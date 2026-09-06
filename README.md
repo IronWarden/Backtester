@@ -2125,6 +2125,21 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### The Lua editor knows the strategy API
+
+The app's Lua tab completes and explains all 34 globals a strategy can call:
+type `sm` and get `sma(ticker, day, period)` with its documentation, accept it
+and the cursor lands on the first argument. Hovering any name shows the same
+card. On an empty file the first completion is `step`, the one function every
+strategy defines.
+
+The descriptions are served by the engine (`backtest.LuaAPI`), not copied into
+the frontend, and `TestLuaAPICoversEveryGlobal` parses the package for its own
+`SetGlobal` calls and fails if the two sets differ in either direction. A
+global added to the engine cannot ship without its documentation, and the
+editor can never offer one that does not exist — which would be worse than
+offering nothing, since you would only find out on day 0 of a run.
+
 ### "How to read this"
 
 The first panel on the results is a collapsible reading guide, open the first

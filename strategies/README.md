@@ -99,6 +99,15 @@ interesting across asset classes — e.g. `["$SP500", "$CASH"]`.
 
 ## Writing your own
 
+**The editor knows all of this.** In the app's Lua tab, typing offers every
+global with its signature and a one-line explanation, and hovering a name shows
+the same thing — the list is served by the engine itself (`backtest.LuaAPI`),
+and a test pins it to the `SetGlobal` calls that register them, so what the
+editor offers is exactly what a script can call. `step` is the first
+completion on an empty file. The table below is the same surface, for reading
+away from the app.
+
+
 A strategy is a Lua file defining one global function, `step(day)`, called
 once per trading day with `day` counting from 0. Everything below is a
 global provided by the engine; there is nothing to import.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const BASE_FONT_SIZE = 16;
 const MIN_FONT_SIZE = 9;
@@ -22,6 +22,7 @@ function defaultFontSize(): number {
 import Editor from "@monaco-editor/react";
 import {
     DatabaseNotice,
+    LuaAPI,
     DefaultDBPath,
     FileExists,
     FindLuaPathInConfig,
@@ -39,6 +40,7 @@ import type {
     HypothesisForm as HypothesisFormData,
 } from "./buildToml";
 import { chipLabel } from "./paths";
+import { registerLuaLanguageSupport } from "./luaEditor";
 import ResultsView from "./ResultsView";
 import ErrorBoundary from "./ErrorBoundary";
 import { readStoredNumber, writeStored } from "./storage";
@@ -278,6 +280,27 @@ function App() {
         return () => {
             document.removeEventListener("wheel", onWheel, { capture: true });
             document.removeEventListener("keydown", onKey, true);
+        };
+    }, []);
+
+    // The Lua API the engine actually registers, for the editor's completion
+    // and hover. Fetched once: it cannot change while the app is running, and
+    // an editor that completes a global the engine does not have is worse than
+    // one that completes nothing.
+    // A ref, not state: nothing renders from it. The completion provider is
+    // registered once when Monaco mounts and reads this at the moment a list
+    // is requested, so the API arriving later needs no re-render and no
+    // re-registration.
+    const luaApiRef = useRef<backtest.LuaGlobal[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        LuaAPI()
+            .then((api) => {
+                if (!cancelled) luaApiRef.current = api ?? [];
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
         };
     }, []);
 
@@ -691,6 +714,14 @@ function App() {
                             theme="backtester-dark"
                             value={value}
                             onChange={(v) => setValue(v ?? "")}
+                            // The providers are registered against the Monaco
+                            // instance, not the editor, so this runs on every
+                            // mount and registerLuaLanguageSupport is
+                            // idempotent -- registering twice would offer
+                            // every completion twice.
+                            onMount={(_editor, monaco) =>
+                                registerLuaLanguageSupport(monaco, () => luaApiRef.current)
+                            }
                             options={{
                                 minimap: { enabled: false },
                                 fontSize,
