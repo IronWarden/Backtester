@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { backtest, main } from "../wailsjs/go/models";
-import { readStoredObject, writeStored } from "./storage";
+import { readStored, readStoredObject, writeStored } from "./storage";
 
 // Categorical palette (dark-surface steps), assigned by portfolio index in
 // fixed slot order. Validated against the #1a1a19 card surface for CVD
@@ -382,6 +382,57 @@ function writePanelOpen(id: string, open: boolean) {
   writeStored(PANEL_STATE_KEY, JSON.stringify({ ...readPanelState(), [id]: open }));
 }
 
+// Which metric columns the table shows at rest.
+//
+// The table is honest and complete -- around twenty numeric columns, more once
+// a benchmark, a sweep or a contribution schedule is involved -- and that is
+// exactly what makes a first result unreadable: nothing on screen says which
+// numbers answer the question that was asked. So the table has two views. The
+// full one is what it has always shown; the basic one keeps the six columns a
+// first run is actually about, and hides the rest behind one click. Nothing is
+// removed, and a hidden column is still one hover from its definition.
+//
+// The keys are the single source of truth: the header, the portfolio rows and
+// the benchmark rows all ask `show(key)`, so a column cannot appear in one and
+// not the other. `TestMetricTableColumnsLineUp` in smoke.tsx counts the cells
+// of both views to prove it.
+// One rule decides membership: a column stays in Basics if hiding it would
+// make a visible one misleading. Profit without Contributed reads as
+// investment return when it is partly money paid in; a swept Sharpe without
+// Confidence reads as edge when it may be selection; a plan that ran out of
+// money says so in Missed W/D and nowhere else. The four conditional ones only
+// render when their run produced them, so naming them here costs nothing on a
+// plain run.
+const BASIC_COLUMNS = new Set([
+  "portfolio",
+  "strategy",
+  "finalValue",
+  "profit",
+  "sharpe",
+  "maxDrawdown",
+  "annualReturn",
+  "contributed",
+  "missedWD",
+  "confidence",
+  "alpha",
+]);
+
+const METRICS_VIEW_KEY = "backtester-metrics-view";
+
+export type MetricsView = "basic" | "full";
+
+// Basics on a first visit: someone who has never seen the table is exactly
+// who the wall of columns costs the most.
+function readMetricsView(): MetricsView {
+  return readStored(METRICS_VIEW_KEY) === "full" ? "full" : "basic";
+}
+
+// visibleColumn is exported for the smoke run, which needs the same predicate
+// the table uses rather than a copy of the rule.
+export function visibleColumn(view: MetricsView, key: string): boolean {
+  return view === "full" || BASIC_COLUMNS.has(key);
+}
+
 function Collapsible({
   id,
   title,
@@ -419,6 +470,10 @@ function Collapsible({
 export default function ResultsView({ results, fontSize, verdicts }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
+  // Which metric columns to show. Remembered like the collapsible panels, so
+  // a user who wants everything asks for it once.
+  const [metricsView, setMetricsView] = useState<MetricsView>(readMetricsView);
+  const show = (key: string) => visibleColumn(metricsView, key);
   const [hover, setHover] = useState<Hover | null>(null);
 
   // Only portfolios with a real curve can be plotted.
@@ -821,84 +876,129 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
       <div className="panel">
         <div className="panel-head">
           <span className="panel-title">Metrics</span>
+          {/* Not a "show more" link: both views are named, so the basic one
+              reads as a choice rather than as the table failing to load. */}
+          <div className="metrics-view" role="group" aria-label="Metric columns">
+            {(["basic", "full"] as MetricsView[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={`metrics-view-btn ${metricsView === v ? "on" : ""}`}
+                aria-pressed={metricsView === v}
+                title={
+                  v === "basic"
+                    ? "The six numbers a first run is about"
+                    : "Every metric the engine computed"
+                }
+                onClick={() => {
+                  setMetricsView(v);
+                  writeStored(METRICS_VIEW_KEY, v);
+                }}
+              >
+                {v === "basic" ? "Basics" : "Everything"}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="table-scroll">
           <table>
             <thead>
+              {/* Every cell in this table -- header, portfolio row, benchmark
+                  row -- is gated on the same show(key), so a column cannot
+                  appear in one and be missing from another. That failure is
+                  not a gap in a row: it slides every later value one column
+                  left, printing a number under the wrong label. It has
+                  happened once already; see the benchmark row below. */}
               <tr>
-                <th>Portfolio</th>
-                <th>Strategy</th>
-                <th className="num">Final value</th>
-                <th className="num">Profit</th>
-                <th className="num">Sharpe</th>
-                <th className="num">Sortino</th>
-                <th
-                  className="num"
-                  title="Annual return per unit of worst decline; 0 means it never declined"
-                >
-                  Calmar
-                </th>
-                <th className="num">Max DD %</th>
-                <th
-                  className="num"
-                  title="Longest run of calendar days below a previous peak"
-                >
-                  Underwater
-                </th>
-                <th className="num">Annual %</th>
-                <th
-                  className="num"
-                  title="Annual % with inflation divided out (CPI). An em dash means CPI does not cover both ends of the window — it is published a month in arrears — not that real growth was zero."
-                >
-                  Real %
-                </th>
-                <th className="num">Std Dev</th>
-                <th className="num">Turnover</th>
-                <th className="num" title="Mean invested fraction of the book">
-                  Exposure %
-                </th>
-                <th
-                  className="num"
-                  title="Share of day x ticker x declared-metric cells that had a published figure. Blank unless the config declares Fundamentals."
-                >
-                  Fund Cov %
-                </th>
-                <th className="num" title="Share of simulated days holding anything">
-                  In Market %
-                </th>
-                <th className="num">Avg Corr</th>
-                <th className="num">Coint Pairs</th>
+                {show("portfolio") && <th>Portfolio</th>}
+                {show("strategy") && <th>Strategy</th>}
+                {show("finalValue") && <th className="num">Final value</th>}
+                {show("profit") && <th className="num">Profit</th>}
+                {show("sharpe") && <th className="num">Sharpe</th>}
+                {show("sortino") && <th className="num">Sortino</th>}
+                {show("calmar") && (
+                  <th
+                    className="num"
+                    title="Annual return per unit of worst decline; 0 means it never declined"
+                  >
+                    Calmar
+                  </th>
+                )}
+                {show("maxDrawdown") && <th className="num">Max DD %</th>}
+                {show("underwater") && (
+                  <th
+                    className="num"
+                    title="Longest run of calendar days below a previous peak"
+                  >
+                    Underwater
+                  </th>
+                )}
+                {show("annualReturn") && <th className="num">Annual %</th>}
+                {show("realAnnual") && (
+                  <th
+                    className="num"
+                    title="Annual % with inflation divided out (CPI). An em dash means CPI does not cover both ends of the window — it is published a month in arrears — not that real growth was zero."
+                  >
+                    Real %
+                  </th>
+                )}
+                {show("stdDev") && <th className="num">Std Dev</th>}
+                {show("turnover") && <th className="num">Turnover</th>}
+                {show("exposure") && (
+                  <th className="num" title="Mean invested fraction of the book">
+                    Exposure %
+                  </th>
+                )}
+                {show("fundCov") && (
+                  <th
+                    className="num"
+                    title="Share of day x ticker x declared-metric cells that had a published figure. Blank unless the config declares Fundamentals."
+                  >
+                    Fund Cov %
+                  </th>
+                )}
+                {show("inMarket") && (
+                  <th className="num" title="Share of simulated days holding anything">
+                    In Market %
+                  </th>
+                )}
+                {show("avgCorr") && <th className="num">Avg Corr</th>}
+                {show("cointPairs") && <th className="num">Coint Pairs</th>}
                 {contributing && (
                   <>
-                    <th
-                      className="num"
-                      title="Net money paid in by the [portfolio.Cashflow] schedule — deposits positive, withdrawals negative. Already subtracted from Profit."
-                    >
-                      Contributed
-                    </th>
-                    <th
-                      className="num"
-                      title="Scheduled withdrawals that could not be funded even after selling everything. Non-zero means the portfolio ran out of money."
-                    >
-                      Missed W/D
-                    </th>
+                    {show("contributed") && (
+                      <th
+                        className="num"
+                        title="Net money paid in by the [portfolio.Cashflow] schedule — deposits positive, withdrawals negative. Already subtracted from Profit."
+                      >
+                        Contributed
+                      </th>
+                    )}
+                    {show("missedWD") && (
+                      <th
+                        className="num"
+                        title="Scheduled withdrawals that could not be funded even after selling everything. Non-zero means the portfolio ran out of money."
+                      >
+                        Missed W/D
+                      </th>
+                    )}
                   </>
                 )}
                 {swept && (
                   <>
-                    <th className="num">Trials</th>
-                    <th className="num">Luck bar</th>
-                    <th className="num">Confidence</th>
+                    {show("trials") && <th className="num">Trials</th>}
+                    {show("luckBar") && <th className="num">Luck bar</th>}
+                    {show("confidence") && <th className="num">Confidence</th>}
                   </>
                 )}
                 {benchmarked && (
                   <>
-                    <th className="num">Alpha %</th>
-                    <th className="num">Beta</th>
-                    <th className="num">Track Err</th>
-                    <th className="num">Info Ratio</th>
-                    <th className="num">Up Cap %</th>
-                    <th className="num">Down Cap %</th>
+                    {show("alpha") && <th className="num">Alpha %</th>}
+                    {show("beta") && <th className="num">Beta</th>}
+                    {show("trackErr") && <th className="num">Track Err</th>}
+                    {show("infoRatio") && <th className="num">Info Ratio</th>}
+                    {show("upCap") && <th className="num">Up Cap %</th>}
+                    {show("downCap") && <th className="num">Down Cap %</th>}
                   </>
                 )}
               </tr>
@@ -908,76 +1008,128 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                 const p = profit(r);
                 return (
                   <tr key={i}>
-                    <td>
-                      <Swatch index={i} inline />
-                      {r.portfolioName}
-                    </td>
-                    <td className="strategy" title={r.strategy}>
-                      {r.strategy}
-                    </td>
-                    <td className="num">{fmtDollars(r.finalValue)}</td>
-                    <td className={`num ${p && p.abs < 0 ? "neg" : "pos"}`}>
-                      {p
-                        ? `${p.abs >= 0 ? "+" : "−"}${fmtDollars(Math.abs(p.abs))}`
-                        : "—"}
-                    </td>
-                    <td className="num">{r.sharpeRatio.toFixed(2)}</td>
-                    <td className="num">{r.sortinoRatio.toFixed(2)}</td>
-                    <td className="num">{r.calmarRatio.toFixed(2)}</td>
-                    <td className="num">{r.maxDrawdown.toFixed(2)}</td>
-                    <td className="num">{r.longestUnderwaterDays}</td>
-                    <td className="num">{r.annualReturn.toFixed(2)}</td>
+                    {show("portfolio") && (
+                      <td>
+                        <Swatch index={i} inline />
+                        {r.portfolioName}
+                      </td>
+                    )}
+                    {show("strategy") && (
+                      <td className="strategy" title={r.strategy}>
+                        {r.strategy}
+                      </td>
+                    )}
+                    {show("finalValue") && (
+                      <td className="num">{fmtDollars(r.finalValue)}</td>
+                    )}
+                    {show("profit") && (
+                      <td className={`num ${p && p.abs < 0 ? "neg" : "pos"}`}>
+                        {p
+                          ? `${p.abs >= 0 ? "+" : "−"}${fmtDollars(Math.abs(p.abs))}`
+                          : "—"}
+                      </td>
+                    )}
+                    {show("sharpe") && (
+                      <td className="num">{r.sharpeRatio.toFixed(2)}</td>
+                    )}
+                    {show("sortino") && (
+                      <td className="num">{r.sortinoRatio.toFixed(2)}</td>
+                    )}
+                    {show("calmar") && (
+                      <td className="num">{r.calmarRatio.toFixed(2)}</td>
+                    )}
+                    {show("maxDrawdown") && (
+                      <td className="num">{r.maxDrawdown.toFixed(2)}</td>
+                    )}
+                    {show("underwater") && (
+                      <td className="num">{r.longestUnderwaterDays}</td>
+                    )}
+                    {show("annualReturn") && (
+                      <td className="num">{r.annualReturn.toFixed(2)}</td>
+                    )}
                     {/* Zero means "CPI did not reach both ends of this
                         window", not "no real growth" — opposite claims, so it
                         must not render as 0.00. */}
-                    <td className="num">{fmtReal(r.realAnnualReturn)}</td>
-                    <td className="num">{r.standardDev.toFixed(4)}</td>
-                    <td className="num">{r.turnover.toFixed(2)}</td>
-                    <td className="num">{r.avgExposure.toFixed(1)}</td>
+                    {show("realAnnual") && (
+                      <td className="num">{fmtReal(r.realAnnualReturn)}</td>
+                    )}
+                    {show("stdDev") && (
+                      <td className="num">{r.standardDev.toFixed(4)}</td>
+                    )}
+                    {show("turnover") && (
+                      <td className="num">{r.turnover.toFixed(2)}</td>
+                    )}
+                    {show("exposure") && (
+                      <td className="num">{r.avgExposure.toFixed(1)}</td>
+                    )}
                     {/* Blank rather than 0.0 when no Fundamentals were
                         declared: a zero here would read as "the data was
                         missing" rather than "this run never asked for it". */}
-                    <td className="num">
-                      {(r.fundamentalCoverage ?? 0) > 0
-                        ? r.fundamentalCoverage.toFixed(1)
-                        : "—"}
-                    </td>
-                    <td className="num">{r.timeInMarket.toFixed(1)}</td>
-                    <td className="num">{r.avgCorrelation.toFixed(2)}</td>
-                    <td className="num">{r.cointegratedPairs}</td>
+                    {show("fundCov") && (
+                      <td className="num">
+                        {(r.fundamentalCoverage ?? 0) > 0
+                          ? r.fundamentalCoverage.toFixed(1)
+                          : "—"}
+                      </td>
+                    )}
+                    {show("inMarket") && (
+                      <td className="num">{r.timeInMarket.toFixed(1)}</td>
+                    )}
+                    {show("avgCorr") && (
+                      <td className="num">{r.avgCorrelation.toFixed(2)}</td>
+                    )}
+                    {show("cointPairs") && (
+                      <td className="num">{r.cointegratedPairs}</td>
+                    )}
                     {contributing && (
                       <>
-                        <td className="num">{fmtDollars(r.netContributions ?? 0)}</td>
+                        {show("contributed") && (
+                          <td className="num">{fmtDollars(r.netContributions ?? 0)}</td>
+                        )}
                         {/* A missed withdrawal is not a statistic, it is the
                             result: the plan ran out of money. Coloured as the
                             negative it is. */}
-                        <td className={`num ${(r.withdrawalsMissed ?? 0) > 0 ? "neg" : ""}`}>
-                          {r.withdrawalsMissed ?? 0}
-                        </td>
+                        {show("missedWD") && (
+                          <td className={`num ${(r.withdrawalsMissed ?? 0) > 0 ? "neg" : ""}`}>
+                            {r.withdrawalsMissed ?? 0}
+                          </td>
+                        )}
                       </>
                     )}
                     {swept && (
                       <>
-                        <td className="num">{r.trials}</td>
-                        <td className="num">{r.expectedMaxSharpe.toFixed(2)}</td>
+                        {show("trials") && <td className="num">{r.trials}</td>}
+                        {show("luckBar") && (
+                          <td className="num">{r.expectedMaxSharpe.toFixed(2)}</td>
+                        )}
                         {/* Confidence below 0.5 means the headline Sharpe is
                             more likely selection bias than edge, so it is
                             coloured as a negative rather than left neutral. */}
-                        <td
-                          className={`num ${r.deflatedSharpe < 0.5 ? "neg" : "pos"}`}
-                        >
-                          {r.deflatedSharpe.toFixed(2)}
-                        </td>
+                        {show("confidence") && (
+                          <td
+                            className={`num ${r.deflatedSharpe < 0.5 ? "neg" : "pos"}`}
+                          >
+                            {r.deflatedSharpe.toFixed(2)}
+                          </td>
+                        )}
                       </>
                     )}
                     {benchmarked && (
                       <>
-                        <td className="num">{r.alpha.toFixed(2)}</td>
-                        <td className="num">{r.beta.toFixed(2)}</td>
-                        <td className="num">{r.trackingError.toFixed(4)}</td>
-                        <td className="num">{r.informationRatio.toFixed(2)}</td>
-                        <td className="num">{r.upCapture.toFixed(1)}</td>
-                        <td className="num">{r.downCapture.toFixed(1)}</td>
+                        {show("alpha") && <td className="num">{r.alpha.toFixed(2)}</td>}
+                        {show("beta") && <td className="num">{r.beta.toFixed(2)}</td>}
+                        {show("trackErr") && (
+                          <td className="num">{r.trackingError.toFixed(4)}</td>
+                        )}
+                        {show("infoRatio") && (
+                          <td className="num">{r.informationRatio.toFixed(2)}</td>
+                        )}
+                        {show("upCap") && (
+                          <td className="num">{r.upCapture.toFixed(1)}</td>
+                        )}
+                        {show("downCap") && (
+                          <td className="num">{r.downCapture.toFixed(1)}</td>
+                        )}
                       </>
                     )}
                   </tr>
@@ -991,61 +1143,78 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                   against itself. */}
               {benchmarkRows.map((b) => (
                 <tr key={`bench-${b.ticker}`} className="benchmark-row">
-                  <td>
-                    <Swatch color={BENCHMARK_COLOR} inline />
-                    {b.ticker}
-                  </td>
-                  <td className="strategy">benchmark</td>
-                  <td className="num">{fmtDollars(b.finalValue)}</td>
-                  <td className={`num ${b.profit < 0 ? "neg" : "pos"}`}>
-                    {`${b.profit >= 0 ? "+" : "−"}${fmtDollars(Math.abs(b.profit))}`}
-                  </td>
-                  {/* Cell for cell against the header, in header order. The
-                      four BenchmarkStats carries land in their own columns and
-                      everything else is an em dash. This row used to emit five
-                      cells too few, which did not leave the row short — it
-                      slid every value left, printing max drawdown under Calmar
-                      and annual return under Max DD %. A number under the
-                      wrong label is worse than no number. */}
-                  <td className="num">{b.stats.sharpeRatio.toFixed(2)}</td>
-                  <td className="num">—</td>{/* Sortino */}
+                  {show("portfolio") && (
+                    <td>
+                      <Swatch color={BENCHMARK_COLOR} inline />
+                      {b.ticker}
+                    </td>
+                  )}
+                  {show("strategy") && <td className="strategy">benchmark</td>}
+                  {show("finalValue") && (
+                    <td className="num">{fmtDollars(b.finalValue)}</td>
+                  )}
+                  {show("profit") && (
+                    <td className={`num ${b.profit < 0 ? "neg" : "pos"}`}>
+                      {`${b.profit >= 0 ? "+" : "−"}${fmtDollars(Math.abs(b.profit))}`}
+                    </td>
+                  )}
+                  {/* Cell for cell against the header, in header order, and
+                      gated on the same show(key) so the two cannot disagree.
+                      The four BenchmarkStats carries land in their own columns
+                      and everything else is an em dash. This row used to emit
+                      five cells too few, which did not leave the row short —
+                      it slid every value left, printing max drawdown under
+                      Calmar and annual return under Max DD %. A number under
+                      the wrong label is worse than no number. */}
+                  {show("sharpe") && (
+                    <td className="num">{b.stats.sharpeRatio.toFixed(2)}</td>
+                  )}
+                  {show("sortino") && <td className="num">—</td>}
                   {/* Calmar is annual return over worst decline, and the
                       engine has a rule for the zero-drawdown case. Deriving it
                       here would risk printing a figure that disagrees with the
                       column it sits in. */}
-                  <td className="num">—</td>{/* Calmar */}
-                  <td className="num">{b.stats.maxDrawdown.toFixed(2)}</td>
-                  <td className="num">—</td>{/* Underwater */}
-                  <td className="num">{b.stats.annualReturn.toFixed(2)}</td>
-                  <td className="num">{fmtReal(b.stats.realAnnualReturn)}</td>
-                  <td className="num">{b.stats.standardDev.toFixed(4)}</td>
-                  <td className="num">—</td>{/* Turnover */}
-                  <td className="num">—</td>{/* Exposure % */}
-                  <td className="num">—</td>{/* Fund Cov % */}
-                  <td className="num">—</td>{/* In Market % */}
-                  <td className="num">—</td>{/* Avg Corr */}
-                  <td className="num">—</td>{/* Coint Pairs */}
+                  {show("calmar") && <td className="num">—</td>}
+                  {show("maxDrawdown") && (
+                    <td className="num">{b.stats.maxDrawdown.toFixed(2)}</td>
+                  )}
+                  {show("underwater") && <td className="num">—</td>}
+                  {show("annualReturn") && (
+                    <td className="num">{b.stats.annualReturn.toFixed(2)}</td>
+                  )}
+                  {show("realAnnual") && (
+                    <td className="num">{fmtReal(b.stats.realAnnualReturn)}</td>
+                  )}
+                  {show("stdDev") && (
+                    <td className="num">{b.stats.standardDev.toFixed(4)}</td>
+                  )}
+                  {show("turnover") && <td className="num">—</td>}
+                  {show("exposure") && <td className="num">—</td>}
+                  {show("fundCov") && <td className="num">—</td>}
+                  {show("inMarket") && <td className="num">—</td>}
+                  {show("avgCorr") && <td className="num">—</td>}
+                  {show("cointPairs") && <td className="num">—</td>}
                   {contributing && (
                     <>
-                      <td className="num">—</td>{/* Contributed */}
-                      <td className="num">—</td>{/* Missed W/D */}
+                      {show("contributed") && <td className="num">—</td>}
+                      {show("missedWD") && <td className="num">—</td>}
                     </>
                   )}
                   {swept && (
                     <>
-                      <td className="num">—</td>
-                      <td className="num">—</td>
-                      <td className="num">—</td>
+                      {show("trials") && <td className="num">—</td>}
+                      {show("luckBar") && <td className="num">—</td>}
+                      {show("confidence") && <td className="num">—</td>}
                     </>
                   )}
                   {benchmarked && (
                     <>
-                      <td className="num">—</td>
-                      <td className="num">—</td>
-                      <td className="num">—</td>
-                      <td className="num">—</td>
-                      <td className="num">—</td>
-                      <td className="num">—</td>
+                      {show("alpha") && <td className="num">—</td>}
+                      {show("beta") && <td className="num">—</td>}
+                      {show("trackErr") && <td className="num">—</td>}
+                      {show("infoRatio") && <td className="num">—</td>}
+                      {show("upCap") && <td className="num">—</td>}
+                      {show("downCap") && <td className="num">—</td>}
                     </>
                   )}
                 </tr>

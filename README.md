@@ -2125,6 +2125,26 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### Basics, or everything
+
+The metrics table has two views, chosen in its header:
+
+- **Basics** — final value, profit, annual %, max drawdown, Sharpe, and the
+  strategy and portfolio names. Plus, whenever the run produced them,
+  *Contributed*, *Missed W/D*, *Confidence* and *Alpha %*.
+- **Everything** — the full table, exactly as it has always been.
+
+The four extras in Basics are not a judgement call about importance. They are
+there because hiding them makes a visible column lie: Profit without
+*Contributed* reads as investment return when part of it is money paid in; a
+swept Sharpe without *Confidence* reads as edge when it may be selection; and
+a withdrawal plan that ran out of money says so in *Missed W/D* and nowhere
+else.
+
+The choice is remembered, and Basics is what a first run shows. Nothing is
+removed by it — every hidden column is one click away, with its definition
+still on hover.
+
 ### The form is remembered between launches
 
 Everything on the Backtest tab — the portfolio cards, holdings, allocations,

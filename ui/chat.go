@@ -631,6 +631,16 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+THE METRICS TABLE HAS TWO VIEWS, chosen in its header and remembered:
+"Basics" (portfolio, strategy, final value, profit, Sharpe, max drawdown,
+annual %, plus Contributed / Missed W/D / Confidence / Alpha % when the run
+produced them) and "Everything" (the full table). Basics is the default. If a
+user says a metric is "missing" from the results, they are almost certainly in
+Basics -- tell them to click Everything rather than doubting the run. The four
+conditional columns stay in Basics because hiding them would make a visible
+column lie: profit without contributions reads as performance, a swept Sharpe
+without Confidence reads as edge.
+
 THE BACKTEST TAB IS REMEMBERED BETWEEN LAUNCHES: portfolio cards, holdings,
 allocations, window, strategy, benchmark, contributions and the pre-registered
 claim are saved as the user edits them and restored on the next launch.

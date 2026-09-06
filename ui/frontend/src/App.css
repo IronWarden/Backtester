@@ -1388,6 +1388,41 @@ button.primary:hover:not(:disabled),
   color: var(--text-3);
 }
 
+/* Basics / Everything, in the Metrics panel head. A two-button segmented
+   control rather than a "show more" link: both views are named, so the short
+   one reads as a choice and not as the table having failed to load. Pushed to
+   the right of the title, and it wraps with the head on a narrow window. */
+.metrics-view {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.metrics-view-btn {
+  background: var(--bg-inset);
+  color: var(--text-3);
+  border: 0;
+  padding: 0.15em 0.75em;
+  font-size: 0.78em;
+  line-height: 1.5;
+}
+
+.metrics-view-btn + .metrics-view-btn {
+  border-left: 1px solid var(--border-strong);
+}
+
+.metrics-view-btn:hover {
+  color: var(--text-1);
+}
+
+.metrics-view-btn.on {
+  background: var(--accent-soft);
+  color: var(--text-1);
+  font-weight: 600;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;

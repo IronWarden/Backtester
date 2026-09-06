@@ -88,6 +88,97 @@ const cashflowForm: SimpleForm = {
 
 console.log("frontend smoke render");
 
+// The metric table has two views, and every cell in it -- header, portfolio
+// row, benchmark row -- is gated on the same show(key). If one of the three
+// disagrees, the row does not come out short: every later value slides one
+// column left and prints under the wrong label, which has happened here once
+// already. So both views are rendered and their cells counted.
+//
+// The view is read from storage, which node does not provide, so a fake one is
+// installed for the duration -- the same path the app takes, not a way around
+// it.
+function withStoredView<T>(view: string, fn: () => T): T {
+    const had = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+        value: { getItem: () => view, setItem: () => {} },
+        configurable: true,
+    });
+    try {
+        return fn();
+    } finally {
+        if (had) Object.defineProperty(globalThis, "localStorage", had);
+        else delete (globalThis as Record<string, unknown>).localStorage;
+    }
+}
+
+// The metrics table is the first one on the page; the other tables live in
+// collapsible panels that render nothing while closed.
+function firstTable(html: string): string {
+    const start = html.indexOf("<table");
+    const end = html.indexOf("</table>", start);
+    if (start < 0 || end < 0) throw new Error("no metrics table was rendered");
+    return html.slice(start, end);
+}
+
+function cellCounts(table: string): { headers: number; rows: number[] } {
+    const rows = table
+        .split("<tr")
+        .slice(1)
+        .map((row) => (row.match(/<td[ >]/g) ?? []).length)
+        .filter((n) => n > 0);
+    // <th[ >] and not <th, because <thead> matches the latter and quietly
+    // adds a header that no row can have a cell for.
+    return { headers: (table.match(/<th[ >]/g) ?? []).length, rows };
+}
+
+check("both metric views line up cell for cell", () => {
+    const { results, verdicts } = load("full");
+    for (const view of ["basic", "full"]) {
+        const html = withStoredView(view, () =>
+            renderToString(
+                <ResultsView results={results} fontSize={16} verdicts={verdicts} />,
+            ),
+        );
+        const { headers, rows } = cellCounts(firstTable(html));
+        if (headers === 0 || rows.length === 0) {
+            throw new Error(`${view}: rendered a table with no ${headers === 0 ? "headers" : "rows"}`);
+        }
+        for (const [i, n] of rows.entries()) {
+            if (n !== headers) {
+                throw new Error(
+                    `${view} view: row ${i} has ${n} cells against ${headers} headers — ` +
+                        "a column is gated in one place and not the other, so every " +
+                        "value after it prints under the wrong label",
+                );
+            }
+        }
+    }
+});
+
+// Basics has to be genuinely shorter, and Everything has to be the whole
+// table: a toggle that changes nothing is worse than no toggle.
+check("Basics hides columns that Everything shows", () => {
+    const { results, verdicts } = load("full");
+    const count = (view: string) =>
+        cellCounts(
+            firstTable(
+                withStoredView(view, () =>
+                    renderToString(
+                        <ResultsView results={results} fontSize={16} verdicts={verdicts} />,
+                    ),
+                ),
+            ),
+        ).headers;
+    const basic = count("basic");
+    const full = count("full");
+    if (basic >= full) {
+        throw new Error(`Basics shows ${basic} columns and Everything ${full}`);
+    }
+    if (basic < 6) {
+        throw new Error(`Basics shows only ${basic} columns; the six a first run is about should survive`);
+    }
+});
+
 // Money paid in is not money the strategy made. Without netting it out, the
 // Profit column reports a decade of contributions as performance.
 check("profit excludes contributions", () => {
