@@ -200,6 +200,53 @@ func ClassifyQuality(s QualityStats) Quality {
 	return QualityGood
 }
 
+// QualityReason names the WORST defect found, in the same order
+// ClassifyQuality weighs them, so the sentence always explains the verdict it
+// accompanies rather than some lesser finding that happens to read well. Pure,
+// like the classifier, and empty for a series with nothing worth saying about.
+//
+// It exists because "suspect" on its own is a warning nobody can act on: the
+// useful part is which defect, how much of it, and what it does to a number.
+func QualityReason(s QualityStats) string {
+	switch {
+	case s.Bars < MinBars:
+		return fmt.Sprintf(
+			"only %d bars, too few to compute an annualized figure from", s.Bars)
+	case s.NonPositiveCloses > 0:
+		return fmt.Sprintf(
+			"%d bars priced at or below zero, so any return computed across the "+
+				"sign change is arithmetic nonsense that reads as an ordinary "+
+				"extreme move", s.NonPositiveCloses)
+	case share(s.ImpossibleBars, s.Bars) > ImpossibleShareUnusable:
+		return fmt.Sprintf(
+			"%d of %d bars contradict themselves (High < Low, or Close outside "+
+				"the day's range) — that share points at the feed, not at a bad day",
+			s.ImpossibleBars, s.Bars)
+	case s.MaxJump > MaxJumpUnusable:
+		return fmt.Sprintf(
+			"a single-day move of %.0f%%, which is a data error rather than a price",
+			s.MaxJump*100)
+	case s.ImpossibleBars > 0:
+		return fmt.Sprintf(
+			"%d bars contradict themselves (High < Low, or Close outside the "+
+				"day's range)", s.ImpossibleBars)
+	case s.LongestFlatRun >= FlatRunSuspect:
+		return fmt.Sprintf(
+			"%d consecutive identical closes, which is a stalled feed rather than "+
+				"a quiet stock — an indicator over it produces confident nonsense",
+			s.LongestFlatRun)
+	case share(s.MissingDays, s.ExpectedDays) > MissingShareSuspect:
+		return fmt.Sprintf("%d of %d market days missing from its own span",
+			s.MissingDays, s.ExpectedDays)
+	case s.BigJumps >= BigJumpsSuspect:
+		return fmt.Sprintf("%d single-day moves over %.0f%%, the largest %.0f%%",
+			s.BigJumps, BigJumpReturn*100, s.MaxJump*100)
+	case s.DuplicateBars > 0:
+		return fmt.Sprintf("%d duplicate bars", s.DuplicateBars)
+	}
+	return ""
+}
+
 // TickerQuality pairs a verdict with the evidence, so a warning can say why.
 type TickerQuality struct {
 	Verdict Quality

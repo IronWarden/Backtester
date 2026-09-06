@@ -800,8 +800,22 @@ The full audit, with every query and the twenty worst tickers per category, is i
 recomputed from the stored statistics by `src/data.ClassifyQuality`, so the
 thresholds — which are judgement calls, named and reasoned about in
 `src/data/data_quality.go` — can be changed without re-running the audit.
-**Nothing currently refuses to trade an `unusable` series**; wiring that in
-changes existing results, so it is a decision rather than a fix.
+**A run now says so.** Before the workers start, every holding is looked up in
+the audit and each `unusable` or `suspect` one produces a console warning
+naming the defect — *"VHI cannot support a backtest according to the data
+audit: 5,429 bars priced at or below zero, so any return computed across the
+sign change is arithmetic nonsense that reads as an ordinary extreme move.
+Nothing is excluded — this run includes it, and its numbers include whatever
+the bars do."*
+
+**Nothing refuses to trade an `unusable` series**, and that is deliberate:
+excluding one changes the numbers every existing config produces, and an
+engine that silently drops a holding is worse than either alternative.
+Refusing is a 1.0 decision, to be made once there is feedback from people who
+are not the author. Benchmarks are not checked — nobody chose the bars behind
+`$SP500`, and a warning you cannot act on is noise. A ticker the audit has
+never seen is unexamined rather than condemned, and a database with no
+`data_quality` table says so once per session and carries on.
 
 ### Every ticker must cover the whole window
 
@@ -2096,6 +2110,8 @@ something to say. It shows only diagnostics a user can act on:
 | `error` | a portfolio that simulated nothing — no tickers, or no trading day covered by all of them, with each ticker's real range named |
 | `warn` | fewer days simulated than the window covers, and which ticker is short |
 | `warn` | a benchmark with no data, or one not covering every trading day |
+| `warn` | a holding the data audit calls `unusable` or `suspect`, naming the defect — see *What is wrong with the bars themselves*. Nothing is excluded; the run includes it |
+| `info` | this database has no `data_quality` table, so no holding was checked (said once per session) |
 | `warn` | an in-sample/out-of-sample split with too few days either side to score |
 
 Each row carries the level, the portfolio it belongs to, and the message. The

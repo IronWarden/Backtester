@@ -600,6 +600,9 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 	)
 	prefetchFundamentals(portfolios, startTime, endTime)
 	prefetchDelistings(portfolios)
+	// Before the workers start, so the warning is read alongside the config
+	// rather than buried under a run's own diagnostics.
+	warnDataQuality(portfolios)
 
 	numWorkers := runtime.NumCPU()
 	totalJobs := len(portfolios)

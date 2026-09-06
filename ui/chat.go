@@ -631,6 +631,15 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+A RUN WARNS ABOUT DEFECTIVE PRICE SERIES. Every holding is checked against the
+data_quality audit before the workers start, and each unusable or suspect one
+gets a console warning naming the defect (negative closes, a stalled feed, a
+500% day, missing days). NOTHING IS EXCLUDED: the run includes the ticker and
+its numbers include whatever the bars do -- so if a user asks why a result
+looks absurd and the console named a bad series, that is very likely the
+answer. Benchmarks are not checked, an unaudited ticker is unexamined rather
+than condemned, and a database with no data_quality table says so once.
+
 THE LUA TAB OFFERS THREE STARTING SHAPES on an unmodified buffer ("A signal,
 per ticker", "Rebalance on a schedule", "Rank and hold the top few"), each
 runnable as written with one TODO, saved to strategies/my_strategy.lua. And
