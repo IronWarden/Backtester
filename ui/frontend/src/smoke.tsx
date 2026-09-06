@@ -307,6 +307,61 @@ function withPanelsOpen<T>(fn: () => T): T {
     );
 }
 
+// What the strategy plotted. The panel is collapsible, so the render has to
+// open it; the shape checks are that a series starting late starts late and a
+// flat series does not divide by a zero range.
+check("plotted series are drawn, late starts and all", () => {
+    const { results, verdicts } = load("plain");
+    const base = results[0] as main.RunResult;
+    const withPlots = main.RunResult.createFrom({
+        ...base,
+        dates: ["2020-01-02", "2020-01-03", "2020-01-06", "2020-01-07"],
+        plots: [
+            { name: "sma50", points: [{ day: 2, value: 10 }, { day: 3, value: 12 }] },
+            // A flat series is a real answer: an indicator that never moved.
+            { name: "flat", points: [{ day: 0, value: 5 }, { day: 3, value: 5 }] },
+        ],
+    });
+    const html = withStorage(
+        { "backtester-results-panels": JSON.stringify({ plots: true }) },
+        () =>
+            renderToString(
+                <ResultsView results={[withPlots]} fontSize={16} verdicts={verdicts} />,
+            ),
+    );
+    if (!html.includes("What the strategy plotted")) {
+        throw new Error("the plots panel did not render");
+    }
+    for (const name of ["sma50", "flat"]) {
+        if (!html.includes(name)) throw new Error(`series ${name} is missing`);
+    }
+    if (html.includes("NaN")) {
+        throw new Error("a NaN reached the DOM — a flat series divided by its own range");
+    }
+    // The late series must start two thirds of the way along (day 2 of 3),
+    // not at the left edge.
+    const poly = html.match(/points="([^"]+)"/g) ?? [];
+    if (poly.length < 2) throw new Error(`drew ${poly.length} polylines, want 2`);
+    const late = poly[0] ?? "";
+    if (!late.includes('points="400,')) {
+        throw new Error(`a series starting on day 2 of 3 was drawn from ${late}`);
+    }
+
+    // A result that plotted nothing shows no panel rather than an empty one.
+    // Spelled out rather than taken from the fixture: fixtures.go fills every
+    // field, so the "plain" result plots two series like everything else.
+    const without = renderToString(
+        <ResultsView
+            results={[main.RunResult.createFrom({ ...base, plots: [] })]}
+            fontSize={16}
+            verdicts={verdicts}
+        />,
+    );
+    if (without.includes("What the strategy plotted")) {
+        throw new Error("the plots panel rendered for a run that plotted nothing");
+    }
+});
+
 // A console row that knows where it happened offers to go there. The message
 // has always said "sma_cross.lua:41"; the reader had to find line 41 by hand.
 check("a console row with a position offers to open it", () => {

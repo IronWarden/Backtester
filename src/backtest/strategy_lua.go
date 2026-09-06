@@ -34,6 +34,9 @@ type LuaStrategy struct {
 	Path   string
 	Spec   string
 	Params map[string]any
+	// curDay is the day Step is currently executing, so plot() can record a
+	// value against it without the script passing a day it might get wrong.
+	curDay int
 	// source is the script text, read once when the strategy is built. The
 	// embedded library has no file to re-open at Step time, and reading at
 	// construction fails a missing script immediately rather than on the
@@ -123,6 +126,9 @@ func (s *LuaStrategy) Close() {
 func (s *LuaStrategy) Step(
 	p *Portfolio, hist map[string][]data.AssetData, day int,
 ) {
+	// Set before init, not after: a script that plots from its top level is
+	// plotting on the first simulated day, which is this one.
+	s.curDay = day
 	if s.L == nil {
 		if err := s.init(p, hist); err != nil {
 			diagf("error", p.Pname, "lua strategy %q init: %v", s.Path, err)
@@ -154,6 +160,7 @@ func (s *LuaStrategy) init(
 	registerOHLCV(L, hist)
 	registerTrading(L, p, hist, s.Path)
 	registerLogging(L, p, s.Path)
+	registerPlot(L, p, &s.curDay)
 	registerWindow(L, p, hist)
 	// Additive only — see strategy_lua_signals.go. No global registered above
 	// is replaced, so every existing script behaves exactly as it did.
@@ -433,6 +440,35 @@ func registerLogging(L *lua.LState, p *Portfolio, script string) {
 		}
 		diagf("info", p.Pname, "lua strategy %q: %s",
 			script, strings.Join(parts, " "))
+		return 0
+	}))
+}
+
+// registerPlot exposes plot(name, value): one value per series per day, drawn
+// on the results panel against the same window as the equity curve.
+//
+// It records the CURRENT day rather than taking one as an argument, so a
+// script cannot plot a value against a day it was not computed on -- which
+// would put a line on the chart that never happened.
+func registerPlot(L *lua.LState, p *Portfolio, currentDay *int) {
+	L.SetGlobal("plot", L.NewFunction(func(L *lua.LState) int {
+		name := strings.TrimSpace(L.ToString(1))
+		if name == "" {
+			// Silently ignoring it would leave the user staring at a results
+			// panel with no series and no reason given.
+			diagf("warn", p.Pname,
+				"plot() needs a series name as its first argument; "+
+					"plot(\"sma50\", value)")
+			return 0
+		}
+		value, ok := L.Get(2).(lua.LNumber)
+		if !ok {
+			diagf("warn", p.Pname,
+				"plot(%q, ...) needs a number as its second argument, got %s",
+				name, L.Get(2).Type().String())
+			return 0
+		}
+		p.plots.record(name, *currentDay, float64(value))
 		return 0
 	}))
 }

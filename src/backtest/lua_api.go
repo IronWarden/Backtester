@@ -81,6 +81,11 @@ var luaAPI = []LuaGlobal{
 		Group:   LuaGroupContext,
 		Summary: "Say something the run console will show. Any number of values, joined with spaces like print.",
 	},
+	{
+		Name: "plot", Signature: "plot(name, value)", Kind: "function",
+		Group:   LuaGroupContext,
+		Summary: "Record a number for today, drawn on the results panel against the same days as the equity curve — the way to SEE what the strategy is reacting to. One value per name per day (the last call wins), at most 8 names.",
+	},
 
 	// Prices ----------------------------------------------------------------
 	{

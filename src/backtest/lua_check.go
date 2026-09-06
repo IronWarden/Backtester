@@ -86,10 +86,14 @@ func CheckLuaScript(source, name string, params map[string]any) int {
 
 	hist := checkHistory()
 	p := checkPortfolio(params)
+	checkDay := 0
 	registerIndicators(L, hist)
 	registerOHLCV(L, hist)
 	registerTrading(L, p, hist, name)
 	registerLogging(L, p, name)
+	// The dry run walks days 0..checkDays; plot records against whichever it
+	// is on, exactly as a real run does.
+	registerPlot(L, p, &checkDay)
 	registerWindow(L, p, hist)
 	registerSignals(L, hist)
 	registerCrossSection(L, p)
@@ -131,6 +135,7 @@ func CheckLuaScript(source, name string, params map[string]any) int {
 	}
 
 	for day := 0; day < checkDays; day++ {
+		checkDay = day
 		L.Push(stepFn)
 		L.Push(lua.LNumber(day))
 		if err := L.PCall(1, 0, nil); err != nil {

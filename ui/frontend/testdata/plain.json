@@ -27,6 +27,34 @@
       "downCapture": 1.25,
       "initialCapital": 1.25,
       "finalValue": 1.25,
+      "plots": [
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        },
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        }
+      ],
       "headline": "2021-03-04",
       "equityCurve": [
         1.25,

@@ -631,6 +631,13 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+A STRATEGY CAN DRAW ITS OWN NUMBERS with plot(name, value): one value per name
+per day (last call wins), at most 8 names, rendered as small charts under "What
+the strategy plotted" on the same days as the equity curve. Suggest it whenever
+a user asks why a strategy did something -- plotting the signal is faster than
+reasoning about it. It is separate charts rather than lines on the equity chart
+because that axis is in dollars. It changes no metric.
+
 CONSOLE ROWS THAT NAME A LUA POSITION ARE CLICKABLE: the script and line are
 parsed out of the message, shown as "sma_cross.lua:41", and clicking opens that
 script at that line (loading it first if it is not the one open). The same

@@ -38,6 +38,10 @@ type Portfolio struct {
 	Exposure []float64
 	// Regimes slices the run by the market environment its universe was in.
 	Regimes RegimeBreakdown
+	// plots is what the strategy recorded with plot(), for the results panel
+	// to draw. A per-run RESULT like Trades and DailyReturns, so Clone leaves
+	// it empty; unexported because nothing outside the engine writes it.
+	plots plotRecorder
 	// Robustness is what survived re-running under more friction and from
 	// shifted start dates. Empty unless RobustnessChecks is on.
 	Robustness Robustness

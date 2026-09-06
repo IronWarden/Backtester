@@ -2140,6 +2140,23 @@ global added to the engine cannot ship without its documentation, and the
 editor can never offer one that does not exist — which would be worse than
 offering nothing, since you would only find out on day 0 of a run.
 
+### Seeing what the strategy saw: `plot()`
+
+A strategy can record a number per day with `plot(name, value)`, and each name
+becomes a small chart under **What the strategy plotted**, drawn against the
+same days as the equity curve. It is how a person finds out *why* a run did
+what it did — the moving average being crossed, the z-score being waited on —
+without reading it out of a thousand `log()` lines.
+
+Separate charts rather than extra lines on the equity curve, deliberately:
+that axis is in dollars, and an RSI between 0 and 100 drawn on a $184,000 axis
+is a flat line along the bottom.
+
+One value per name per day (the last call wins), at most 8 names, series start
+where you start plotting them, and NaN/infinity are dropped. Both bounds report
+themselves once in the console rather than silently losing data. Nothing here
+reaches a metric: it is an instrument, not a measurement.
+
 ### An error you can click
 
 Every diagnostic that carries a Lua position — a raised error, a syntax error,

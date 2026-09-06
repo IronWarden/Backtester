@@ -1304,6 +1304,8 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
         </div>
       </div>
 
+      <StrategyPlots results={results} />
+
       {results.some((r) => (r.walkForward?.windows ?? []).length > 0) && (
         <Collapsible id="walk-forward" title="Walk-forward windows">
           <div className="table-scroll">
@@ -1638,6 +1640,98 @@ const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 // good year"; this answers whether the year was steady or was one good month,
 // which is the same question the deflated Sharpe asks of a sweep and the one a
 // single annual figure hides most effectively.
+// What the strategy plotted.
+//
+// log() could always say things; nothing could show a NUMBER over time. The
+// moving average a script is crossing, the z-score it is waiting on, the
+// exposure it thinks it is carrying -- those are what explain a run, and
+// reading them out of a thousand console lines is not seeing them.
+//
+// One chart per series rather than extra lines on the equity chart, which is
+// in dollars: an RSI between 0 and 100 drawn on a $184,000 axis is a flat line
+// at the bottom, and giving each series its own axis on a shared chart is how
+// two lines end up looking like they cross when they do not.
+function PlotChart({
+  series,
+  dates,
+}: {
+  series: backtest.PlotSeries;
+  dates: string[];
+}) {
+  const pts = series.points ?? [];
+  if (pts.length === 0) return null;
+
+  const values = pts.map((p) => p.value);
+  let lo = Math.min(...values);
+  let hi = Math.max(...values);
+  // A flat series is a real answer (an indicator that never moved), so it is
+  // drawn down the middle rather than dividing by a zero range.
+  if (hi - lo < 1e-12) {
+    lo -= 1;
+    hi += 1;
+  }
+  // The x axis is the run's days, not the plotted points: a series that starts
+  // on day 200 must start 200 days in, not at the left edge.
+  const lastDay = Math.max(dates.length - 1, pts[pts.length - 1].day, 1);
+  const W = 600;
+  const H = 64;
+  const x = (day: number) => (day / lastDay) * W;
+  const y = (v: number) => H - ((v - lo) / (hi - lo)) * H;
+  const d = pts.map((p) => `${x(p.day)},${y(p.value)}`).join(" ");
+  const fmt = (v: number) =>
+    Math.abs(v) >= 1000 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(4);
+
+  return (
+    <div className="plot-chart">
+      <div className="plot-head">
+        <span className="plot-name">{series.name}</span>
+        <span className="plot-range">
+          {fmt(lo)} … {fmt(hi)} · last {fmt(values[values.length - 1])}
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="plot-svg"
+        role="img"
+        aria-label={`${series.name}: ${pts.length} points`}
+      >
+        <polyline
+          points={d}
+          fill="none"
+          // Without this the non-uniform viewBox stretch would thin the line
+          // horizontally and fatten it vertically.
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function StrategyPlots({ results }: { results: main.RunResult[] }) {
+  const withPlots = results.filter((r) => (r.plots ?? []).length > 0);
+  if (withPlots.length === 0) return null;
+  return (
+    <Collapsible id="plots" title="What the strategy plotted">
+      <div className="plots">
+        {withPlots.map((r) => (
+          <div className="plot-group" key={r.portfolioName}>
+            {withPlots.length > 1 && (
+              <div className="plot-owner">
+                <Swatch index={results.indexOf(r)} inline />
+                {r.portfolioName}
+              </div>
+            )}
+            {(r.plots ?? []).map((s) => (
+              <PlotChart key={s.name} series={s} dates={r.dates ?? []} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </Collapsible>
+  );
+}
+
 function MonthGrid({
   result,
   color,

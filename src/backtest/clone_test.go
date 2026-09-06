@@ -61,13 +61,16 @@ var clonePolicy = map[string]string{
 	// Deliberately reset: a clone starts the run over, so anything the
 	// simulation produces begins empty. Carrying these would mean a worker
 	// resuming someone else's half-finished run.
-	"BuyingPower":          "reset",
-	"Positions":            "reset",
-	"Baseline":             "reset",
-	"Trades":               "reset",
-	"openLots":             "reset",
-	"TradeStats":           "reset",
-	"Exposure":             "reset",
+	"BuyingPower": "reset",
+	"Positions":   "reset",
+	"Baseline":    "reset",
+	"Trades":      "reset",
+	"openLots":    "reset",
+	"TradeStats":  "reset",
+	"Exposure":    "reset",
+	// plot() output is a per-run result like Trades: the clone is starting
+	// the run over, so it starts with nothing plotted.
+	"plots":                "reset",
 	"Regimes":              "reset",
 	"Robustness":           "reset",
 	"Significance":         "reset",

@@ -232,7 +232,38 @@ accident.
 | `target_weights(day, {T = fraction, …})` | Move the whole book to those fractions of equity: sells run first so the proceeds fund the buys, and buys are clamped to available cash. A ticker absent from the table is a target of **zero**, so `target_weights(day, {})` goes to cash. |
 | `rank(day, fn)` | Score every ticker with `fn(ticker, day)` and return `{ {ticker=…, value=…}, … }` **sorted strongest first**. Tickers whose `fn` returns `nil` are left out rather than ranked last. |
 | `log(...)` | Say something the run console will show. Any number of values, rendered as `tostring` would and joined with spaces, like `print`. |
+| `plot(name, value)` | Record a number for today. Each name becomes a small chart on the results panel, drawn against the same days as the equity curve — the way to *see* what the strategy is reacting to rather than reading it out of a thousand log lines. |
 | `num_days()` | Trading days in this run. `day` is 0-based, so **the last day is `num_days() - 1`**. |
+
+### Seeing what the strategy saw
+
+```lua
+function step(day)
+  local t = tickers[1]
+  local fast, slow = sma(t, day, 20), sma(t, day, 50)
+  plot("fast", fast)
+  plot("slow", slow)
+  plot("spread", fast - slow)
+  ...
+end
+```
+
+Three charts appear under **What the strategy plotted**, on the same days as
+the equity curve, each on its own vertical scale — which is why they are
+separate charts and not extra lines on the equity chart: an RSI between 0 and
+100 drawn on a $184,000 axis is a flat line along the bottom.
+
+Rules worth knowing:
+
+- **One value per name per day**, and the last call wins. A `plot()` inside a
+  loop over tickers therefore records the loop's final value, not one point
+  per ticker — give each ticker its own name if that is what you want.
+- **At most 8 names.** Past that the extra names are ignored and the console
+  says so once.
+- **A series starts where you start plotting it.** An indicator with 200 days
+  of warm-up simply has no line before day 200, rather than a line at zero.
+- `nil`, NaN and infinities are dropped rather than drawn.
+- It changes no number the engine reports. It is an instrument, not a metric.
 
 ### Shorting
 

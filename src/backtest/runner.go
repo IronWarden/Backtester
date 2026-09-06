@@ -94,6 +94,10 @@ type Result struct {
 	// Two entries, in-sample first. The out-of-sample one is the figure that
 	// carries information about a swept or hand-tuned parameter set.
 	Splits []SegmentStats
+	// Plots is what the strategy recorded with plot(), in the order it first
+	// plotted each name. Empty for every strategy that never calls it, which
+	// is every strategy written before it existed.
+	Plots []PlotSeries
 }
 
 // topDrawdowns is how many peak-to-trough declines a Result carries. Enough
@@ -374,6 +378,7 @@ func runOne(
 	// After the portfolio's own metrics, since the comparison reads them.
 	p.Baseline = equalWeightBaseline(p, windowed, dataLen, riskFreeRates)
 	p.TradeStats = SummarizeTrades(p.Trades, p.Positions)
+	p.plots.reportLimits(p.Pname)
 	p.applySignificance(windowed, dataLen)
 	p.applyRegimes(windowed, dataLen)
 	p.applyRobustness(windowed, dataLen, riskFreeRates)
@@ -658,6 +663,7 @@ func Run(portfolios []*Portfolio, output *OutputConfig) ([]Result, error) {
 					Robustness:     p.Robustness,
 					Regimes:        p.Regimes,
 					Splits:         p.Splits,
+					Plots:          p.plots.series(),
 					Trials:         p.Trials,
 					TrialGroup:     p.TrialGroup,
 					returnSkew:     stat.Skew(returns, nil),

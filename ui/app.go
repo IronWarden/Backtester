@@ -64,6 +64,9 @@ type RunResult struct {
 	// the frontend can show the profit in dollars alongside the percentages.
 	InitialCapital float64 `json:"initialCapital"`
 	FinalValue     float64 `json:"finalValue"`
+	// Plots is whatever the strategy recorded with plot(), for the results
+	// panel to draw. Empty for every strategy that never calls it.
+	Plots []backtest.PlotSeries `json:"plots"`
 	// Headline is what this result did, in a sentence, from backtest.Sentence.
 	// Computed in Go rather than assembled in the frontend so the app, the
 	// -pages export and the assistant all say the same thing about the same
@@ -324,6 +327,7 @@ func (a *App) RunBacktest(
 			PortfolioName:         r.PortfolioName,
 			Strategy:              r.Strategy,
 			Headline:              backtest.Sentence(r),
+			Plots:                 r.Plots,
 			SharpeRatio:           r.Metrics.SharpeRatio,
 			SortinoRatio:          r.Metrics.SortinoRatio,
 			MaxDrawdown:           r.Metrics.MaxDrawdown,
