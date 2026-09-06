@@ -8,6 +8,7 @@ import (
 	"my-backtester/src/apppath"
 	"my-backtester/src/backtest"
 	"my-backtester/src/data"
+	"my-backtester/src/version"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -16,6 +17,7 @@ import (
 
 func main() {
 	var (
+		showVersion bool
 		debug       bool
 		configPath  string
 		scanSignals bool
@@ -112,7 +114,18 @@ func main() {
 		&configPath, "config", resolveOrDefault("config.toml", "../config.toml"),
 		"Path to portfolio TOML config",
 	)
+	flag.BoolVar(
+		&showVersion, "version", false,
+		"Print the build's version and exit",
+	)
 	flag.Parse()
+
+	// Before anything else opens a database or reads a config: a build a user
+	// cannot identify is a bug report nobody can act on.
+	if showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if debug {
 		file, err := os.OpenFile(

@@ -15,6 +15,38 @@ A concurrent Go backtesting engine that simulates one or more portfolios over hi
 - **`src/backtest/correlation.go`** — cross-asset correlation over the fetched history.
 - **`ui/`** — the Wails desktop app: backtest runs, a SQL console, quotes, screening, and the AI assistant.
 
+## Version, platform, and what a release contains
+
+The build names itself: `Backtester 0.1.0-beta.1 · linux/amd64` beside the app's
+name in the header, and from the CLI:
+
+```bash
+cd src && go run . -version
+```
+
+Quote it in a bug report — a report that cannot name a build is very hard to
+act on. The constant lives in `src/version/version.go` and nowhere else;
+`package.sh` reads it, and the release script stamps the commit in with
+`-ldflags "-X my-backtester/src/version.Commit=$(git rev-parse --short HEAD)"`.
+`CHANGELOG.md` says what each release changed.
+
+**The beta is Linux only.** The desktop build needs `-tags webkit2_41`; the
+`ui/build/darwin` and `ui/build/windows` directories are Wails scaffolding that
+has never been built or tested, and a report from either is answered
+differently from one that says `linux/amd64`.
+
+`./package.sh` assembles a release directory. What ships and why:
+
+| file | why it has to be there |
+|---|---|
+| `backtester` | the binary, with the frontend and the Lua library embedded |
+| `LICENSE` | the software's terms, which end at 1.0 |
+| `DATA-LICENSE.md` | the data's terms, deliberately stricter than the software's, plus the defect inventory |
+| `THIRD-PARTY-NOTICES.txt` | **required**: shipping the binary without it breaks the MIT and BSD terms of everything it links |
+| `CHANGELOG.md`, `README.md` | what changed, and how to use it |
+| `strategies/` | readable, editable copies — the binary carries its own, and an on-disk script of the same name wins |
+| `stock_data.db` | only with `--with-db`, since it is ~2.9 GB and a package is usually assembled several times before it is right |
+
 ## Prerequisites
 
 - Go 1.24+ (module pinned to `go 1.24.4`).

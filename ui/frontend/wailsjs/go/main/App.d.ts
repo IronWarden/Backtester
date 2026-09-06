@@ -45,6 +45,8 @@ export function RunUserQuery(arg1:string,arg2:string):Promise<main.QueryResult>;
 
 export function SaveClaudeKey(arg1:string):Promise<void>;
 
+export function Version():Promise<string>;
+
 export function TickerDateRanges(arg1:string):Promise<Record<string, Array<string>>>;
 
 export function TickerNames(arg1:string):Promise<Record<string, string>>;

@@ -1388,6 +1388,15 @@ button.primary:hover:not(:disabled),
   color: var(--text-3);
 }
 
+/* The build's version, beside the name. Quiet, and always visible: a beta bug
+   report that cannot name a build is very hard to act on. */
+.brand-version {
+  font-size: 0.7em;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.15em;
+}
+
 /* Starting shapes for a blank Lua file, above the editor. Reuses the chip
    styling the date and criterion presets use — it is the same kind of offer:
    one click that fills something in, made where there is nothing to lose. */

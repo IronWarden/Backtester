@@ -25,6 +25,7 @@ import {
     DatabaseNotice,
     LuaAPI,
     LuaSkeletons,
+    Version,
     DefaultDBPath,
     FileExists,
     FindLuaPathInConfig,
@@ -309,11 +310,27 @@ function App() {
     // The text as last loaded from or saved to disk. A buffer equal to it has
     // no unsaved work in it, which is what makes replacing it safe.
     const [luaPristine, setLuaPristine] = useState<string>("");
+    // What this build calls itself, for the header. A beta bug report that
+    // cannot name a build is very hard to act on, so it is on screen rather
+    // than in an About box nobody opens.
+    const [appVersion, setAppVersion] = useState<string>("");
     useEffect(() => {
         let cancelled = false;
         LuaAPI()
             .then((api) => {
                 if (!cancelled) luaApiRef.current = api ?? [];
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        Version()
+            .then((v) => {
+                if (!cancelled) setAppVersion(v);
             })
             .catch(() => {});
         return () => {
@@ -720,6 +737,14 @@ function App() {
                         <rect x="11.5" y="1" width="3.5" height="14" rx="1" />
                     </svg>
                     <span className="brand-name">Backtester</span>
+                    {appVersion && (
+                        <span
+                            className="brand-version"
+                            title="Quote this in a bug report"
+                        >
+                            {appVersion}
+                        </span>
+                    )}
                 </div>
                 {/* Named for what each mode operates on, not for how hard it
                     is: "Simple/Advanced" reads as a hierarchy, and a user who

@@ -6,6 +6,7 @@ import (
 	"my-backtester/src/apppath"
 	"my-backtester/src/backtest"
 	"my-backtester/src/data"
+	"my-backtester/src/version"
 	"my-backtester/strategies"
 	"os"
 	"path/filepath"
@@ -486,6 +487,13 @@ func writablePath(path string) string {
 // themselves.
 func (a *App) LuaAPI() []backtest.LuaGlobal {
 	return backtest.LuaAPI()
+}
+
+// Version is what this build calls itself, for the header chip and for a bug
+// report to quote. Bound rather than baked into the frontend so one constant
+// in Go is the only place a release number lives.
+func (a *App) Version() string {
+	return version.Short()
 }
 
 // LuaSkeletons returns the starting shapes the Lua tab offers on a blank

@@ -631,6 +631,12 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+THIS IS A BETA, AND IT NAMES ITSELF. The version is beside the app's name in
+the header and from "-version" on the CLI; ask a user to quote it when they
+report something. The beta is LINUX ONLY -- the macOS and Windows directories
+are untested Wails scaffolding -- and the licence's terms end at 1.0.
+CHANGELOG.md lists what each release changed and what is knowingly missing.
+
 WHEN TWO PORTFOLIOS COVER DIFFERENT WINDOWS, a note under the equity chart
 names both spans and says the two are not comparable. Nothing is refused --
 running two windows deliberately is legitimate -- but if a user asks you to

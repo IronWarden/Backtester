@@ -97,3 +97,7 @@ export function TickerNames(arg1) {
 export function WriteFile(arg1, arg2) {
   return window['go']['main']['App']['WriteFile'](arg1, arg2);
 }
+
+export function Version() {
+  return window['go']['main']['App']['Version']();
+}

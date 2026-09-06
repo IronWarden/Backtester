@@ -63,5 +63,10 @@ analysis/
 # unattended agent can read them; never tracked, so they stay out of PRs.
 CLAUDE.md
 TASKS.md
+TASKS-ARCHIVE.md
 AGENT_LOG.md
 .claude/
+
+# Release directories assembled by package.sh: a copy of the binary, the
+# licences, and optionally a 2.9 GB database. Never committed.
+dist/
