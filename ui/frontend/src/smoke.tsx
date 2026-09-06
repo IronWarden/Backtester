@@ -307,6 +307,54 @@ function withPanelsOpen<T>(fn: () => T): T {
     );
 }
 
+// A console row that knows where it happened offers to go there. The message
+// has always said "sma_cross.lua:41"; the reader had to find line 41 by hand.
+check("a console row with a position offers to open it", () => {
+    const positioned = backtest.Diagnostic.createFrom({
+        level: "error",
+        portfolio: "P",
+        message: "lua strategy: strategies/sma_cross.lua:41: attempt to compare nil with number",
+        script: "strategies/sma_cross.lua",
+        line: 41,
+    });
+    const plain = backtest.Diagnostic.createFrom({
+        level: "warn",
+        portfolio: "P",
+        message: "benchmark $SP500 covers only part of the window",
+        script: "",
+        line: 0,
+    });
+
+    const withJump = renderToString(
+        <ConsolePanel
+            diagnostics={[positioned, plain]}
+            fontSize={16}
+            onJump={() => {}}
+        />,
+    );
+    if (!withJump.includes("sma_cross.lua:41")) {
+        throw new Error("the position chip never rendered");
+    }
+    if ((withJump.match(/console-jump/g) ?? []).length !== 1) {
+        throw new Error(
+            "a diagnostic with no script offered a jump — it would open " +
+                "whatever file happened to be in the editor",
+        );
+    }
+
+    // Without a handler there is nothing to jump to, and a dead link is worse
+    // than plain text.
+    const withoutJump = renderToString(
+        <ConsolePanel diagnostics={[positioned]} fontSize={16} />,
+    );
+    if (withoutJump.includes("console-jump")) {
+        throw new Error("a jump chip rendered with no handler behind it");
+    }
+    if (!withoutJump.includes("attempt to compare nil")) {
+        throw new Error("the message itself went missing");
+    }
+});
+
 // The Lua editor's completion. The descriptions come from Go and a test there
 // pins them to the engine's own SetGlobal calls; what is checked here is the
 // part that turns a signature into something an editor can insert -- because a

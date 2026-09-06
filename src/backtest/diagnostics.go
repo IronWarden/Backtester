@@ -20,6 +20,8 @@ package backtest
 import (
 	"fmt"
 	"log"
+	"regexp"
+	"strconv"
 )
 
 // Diagnostic is one thing that went wrong in a way the user can act on.
@@ -35,6 +37,48 @@ type Diagnostic struct {
 	// should still know which portfolio it came from.
 	Portfolio string `json:"portfolio"`
 	Message   string `json:"message"`
+	// Script and Line are where in a Lua script this happened, parsed out of
+	// the message when it carries a position. Zero for everything else, which
+	// is most diagnostics -- a config warning belongs to no line of anything.
+	//
+	// They exist so the console row can be clicked: the message already said
+	// "sma_cross.lua:41:", and the reader still had to find line 41 by hand.
+	Script string `json:"script"`
+	Line   int    `json:"line"`
+}
+
+// luaPositionRe finds a Lua error's position: the interpreter writes
+// "path/to/script.lua:41:" at the front of what it raises, and the same string
+// appears mid-message when the engine wraps it ("lua strategy %q step day=3:
+// sma_cross.lua:41: attempt to ...").
+//
+// It insists on the .lua suffix. Without that it would match a bare "12:30:"
+// in some future message and send the editor to line 30 of nothing.
+var luaPositionRe = regexp.MustCompile(`([^\s"'()]+\.lua):(\d+):`)
+
+// luaParsePositionRe is the OTHER format, and the one that matters most: a
+// compile error is written "mine.lua line:3(column:3) near 'end': syntax
+// error", which shares no punctuation with a raised error. Missing it would
+// mean the one finding whose line is certain -- the parser's -- is the one
+// nothing could jump to.
+var luaParsePositionRe = regexp.MustCompile(`([^\s"'()]+\.lua) line:(\d+)`)
+
+// ScriptPosition extracts the script and line a message points at. The FIRST
+// position wins: gopher-lua appends a stack traceback whose frames carry the
+// same file at other lines, and the first is where it actually went wrong.
+func ScriptPosition(message string) (script string, line int, ok bool) {
+	for _, re := range []*regexp.Regexp{luaPositionRe, luaParsePositionRe} {
+		m := re.FindStringSubmatch(message)
+		if m == nil {
+			continue
+		}
+		n, err := strconv.Atoi(m[2])
+		if err != nil || n <= 0 {
+			continue
+		}
+		return m[1], n, true
+	}
+	return "", 0, false
 }
 
 // Diagnostics receives user-facing diagnostics. Nil by default, so nothing is
@@ -53,6 +97,11 @@ func diagf(level, portfolio, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	log.Print(msg)
 	if sink := Diagnostics; sink != nil {
-		sink(Diagnostic{Level: level, Portfolio: portfolio, Message: msg})
+		d := Diagnostic{Level: level, Portfolio: portfolio, Message: msg}
+		// Parsed once, here, rather than by each host that displays a
+		// diagnostic: the position is a property of the message, and a second
+		// parser in the frontend would be a second thing to get wrong.
+		d.Script, d.Line, _ = ScriptPosition(msg)
+		sink(d)
 	}
 }

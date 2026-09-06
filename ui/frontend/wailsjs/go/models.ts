@@ -76,6 +76,8 @@ export namespace backtest {
 	    level: string;
 	    portfolio: string;
 	    message: string;
+	    script: string;
+	    line: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Diagnostic(source);
@@ -86,6 +88,8 @@ export namespace backtest {
 	        this.level = source["level"];
 	        this.portfolio = source["portfolio"];
 	        this.message = source["message"];
+	        this.script = source["script"];
+	        this.line = source["line"];
 	    }
 	}
 	export class Drawdown {

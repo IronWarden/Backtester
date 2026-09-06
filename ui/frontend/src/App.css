@@ -1388,6 +1388,25 @@ button.primary:hover:not(:disabled),
   color: var(--text-3);
 }
 
+/* The position chip on a console row: "sma_cross.lua:41", clickable, opening
+   the script at that line. Styled as a link rather than a button so it reads
+   as part of the message it belongs to. */
+.console-jump {
+  background: none;
+  border: 0;
+  padding: 0 0.35em 0 0;
+  font-family: var(--mono, monospace);
+  font-size: 0.95em;
+  color: var(--accent, var(--text-2));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.console-jump:hover {
+  color: var(--text-1, var(--text-2));
+}
+
 /* The reading guide. Prose, so it gets a reading measure and real line
    height rather than the dense metric layout around it. */
 .how-to-read {

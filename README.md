@@ -2140,6 +2140,21 @@ global added to the engine cannot ship without its documentation, and the
 editor can never offer one that does not exist — which would be worse than
 offering nothing, since you would only find out on day 0 of a run.
 
+### An error you can click
+
+Every diagnostic that carries a Lua position — a raised error, a syntax error,
+anything the script check found — arrives with the script and line parsed out
+of it (`backtest.ScriptPosition`, done once in `diagf` so no consumer parses
+messages itself). The console row shows that position as a link: clicking it
+opens the script, jumps to the line and puts the cursor there, loading the file
+first if the diagnostic belongs to a different one. The same diagnostics are
+drawn as markers in the editor's gutter for the script that is open.
+
+Both formats are recognised, which matters more than it sounds: a raised error
+reads `mine.lua:41:` and a *syntax* error reads `mine.lua line:3(column:3)`,
+sharing no punctuation — and the syntax error is the one whose line is
+certain.
+
 ### Checking a script before running it
 
 The Lua tab's **✓ Check script** compiles the script, requires its `step(day)`,

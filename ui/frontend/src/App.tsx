@@ -40,7 +40,7 @@ import type {
     SimpleForm as SimpleFormData,
     HypothesisForm as HypothesisFormData,
 } from "./buildToml";
-import { chipLabel } from "./paths";
+import { baseName, chipLabel } from "./paths";
 import { registerLuaLanguageSupport } from "./luaEditor";
 import ResultsView from "./ResultsView";
 import ErrorBoundary from "./ErrorBoundary";
@@ -292,6 +292,10 @@ function App() {
     // registered once when Monaco mounts and reads this at the moment a list
     // is requested, so the API arriving later needs no re-render and no
     // re-registration.
+    // The Monaco editor and namespace, for the two things that need to reach
+    // into the editor from outside it: jumping to a line, and marking one.
+    const editorRef = useRef<any>(null);
+    const monacoRef = useRef<any>(null);
     const luaApiRef = useRef<backtest.LuaGlobal[]>([]);
     useEffect(() => {
         let cancelled = false;
@@ -547,6 +551,67 @@ function App() {
         }
     }
 
+    // Open a script at a line, from a console row. The message already named
+    // the position; until now the reader had to go and find it.
+    //
+    // A diagnostic can name a script other than the one open — a config with
+    // several portfolios runs several — so a different file is loaded first,
+    // and only then jumped into. Failing to load it is not an error worth a
+    // red banner: the console row is still there and still says where.
+    async function jumpToScript(script: string, line: number) {
+        setMode("advanced");
+        setTab("lua");
+        if (script !== luaPath) {
+            try {
+                const content = await ReadFile(script);
+                setLuaPath(script);
+                setLuaText(content);
+            } catch {
+                setStatusMsg(`${script} — could not be opened; line ${line}`);
+                return;
+            }
+        }
+        // After the state above has rendered: the model may have just been
+        // replaced, and revealing a line in the old one does nothing.
+        window.setTimeout(() => {
+            const editor = editorRef.current;
+            if (!editor) return;
+            editor.revealLineInCenter(line);
+            editor.setPosition({ lineNumber: line, column: 1 });
+            editor.focus();
+        }, 0);
+    }
+
+    // Mark the lines the last run complained about, so the editor shows what
+    // the console says. Only diagnostics belonging to the script actually
+    // open: a marker on line 41 of a different file would point at whatever
+    // happens to be on line 41 of this one.
+    useEffect(() => {
+        const monaco = monacoRef.current;
+        const editor = editorRef.current;
+        if (!monaco || !editor) return;
+        const model = editor.getModel();
+        if (!model || tab !== "lua") return;
+        const mine = diagnostics.filter(
+            (d) => d.line > 0 && d.script && baseName(d.script) === baseName(luaPath),
+        );
+        monaco.editor.setModelMarkers(
+            model,
+            "backtester",
+            mine.map((d) => ({
+                startLineNumber: d.line,
+                endLineNumber: d.line,
+                startColumn: 1,
+                endColumn: 1000,
+                message: d.message,
+                severity:
+                    d.level === "error"
+                        ? monaco.MarkerSeverity.Error
+                        : monaco.MarkerSeverity.Warning,
+            })),
+        );
+    }, [diagnostics, luaPath, luaText, tab]);
+
     // Load a simple-mode-generated config into the Advanced editor and switch.
     function editAsToml(cfgText: string) {
         setTomlText(cfgText);
@@ -764,9 +829,14 @@ function App() {
                             // mount and registerLuaLanguageSupport is
                             // idempotent -- registering twice would offer
                             // every completion twice.
-                            onMount={(_editor, monaco) =>
-                                registerLuaLanguageSupport(monaco, () => luaApiRef.current)
-                            }
+                            onMount={(editor, monaco) => {
+                                editorRef.current = editor;
+                                monacoRef.current = monaco;
+                                registerLuaLanguageSupport(
+                                    monaco,
+                                    () => luaApiRef.current,
+                                );
+                            }}
                             options={{
                                 minimap: { enabled: false },
                                 fontSize,
@@ -809,7 +879,11 @@ function App() {
                 </ErrorBoundary>
             </div>
 
-            <ConsolePanel diagnostics={diagnostics} fontSize={fontSize} />
+            <ConsolePanel
+                diagnostics={diagnostics}
+                fontSize={fontSize}
+                onJump={jumpToScript}
+            />
 
             <footer className="status">
                 {errorMsg ? (

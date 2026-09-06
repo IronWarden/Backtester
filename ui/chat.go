@@ -631,6 +631,13 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+CONSOLE ROWS THAT NAME A LUA POSITION ARE CLICKABLE: the script and line are
+parsed out of the message, shown as "sma_cross.lua:41", and clicking opens that
+script at that line (loading it first if it is not the one open). The same
+positions are drawn as markers in the editor. So when a user quotes an error at
+you, the line is already reachable -- point at what the line does, not at how
+to find it.
+
 THE LUA TAB HAS ITS OWN CHECK BUTTON. "Check script" compiles the script,
 requires step(day) and runs it for three days against a synthetic two-ticker
 history -- no database, no backtest. Errors: a syntax error with its line, no
