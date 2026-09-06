@@ -50,6 +50,10 @@ export function LuaAPI() {
   return window['go']['main']['App']['LuaAPI']();
 }
 
+export function LuaSkeletons() {
+  return window['go']['main']['App']['LuaSkeletons']();
+}
+
 export function ListTickers(arg1) {
   return window['go']['main']['App']['ListTickers'](arg1);
 }

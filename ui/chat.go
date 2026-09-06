@@ -631,6 +631,13 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+THE LUA TAB OFFERS THREE STARTING SHAPES on an unmodified buffer ("A signal,
+per ticker", "Rebalance on a schedule", "Rank and hold the top few"), each
+runnable as written with one TODO, saved to strategies/my_strategy.lua. And
+"Run this script" runs the open script against the holdings already on the
+Backtest tab, so a user does not have to write a config around an idea to try
+it. Point people at those two before writing them a config by hand.
+
 A STRATEGY CAN DRAW ITS OWN NUMBERS with plot(name, value): one value per name
 per day (last call wins), at most 8 names, rendered as small charts under "What
 the strategy plotted" on the same days as the equity curve. Suggest it whenever

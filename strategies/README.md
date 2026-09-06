@@ -99,6 +99,13 @@ interesting across asset classes — e.g. `["$SP500", "$CASH"]`.
 
 ## Writing your own
 
+**Start from a shape.** On a blank (or unmodified) Lua tab the app offers
+three starting shapes — a per-ticker signal, a scheduled rebalance, and a
+cross-sectional ranking — each running as written with one `TODO` where the
+idea goes. **▶ Run this script** then runs it against the holdings already on
+the Backtest tab, so trying an idea does not require writing a config around it
+first.
+
 **Check it before you run it.** The Lua tab's ✓ Check script compiles the
 script, requires `step(day)`, and runs it for three days against synthetic
 prices — no database, no backtest. A typo inside the body is found there

@@ -488,6 +488,14 @@ func (a *App) LuaAPI() []backtest.LuaGlobal {
 	return backtest.LuaAPI()
 }
 
+// LuaSkeletons returns the starting shapes the Lua tab offers on a blank
+// file. Served from the engine like the API description, so the shapes are
+// checked by the engine's own tests -- a skeleton that does not run teaches a
+// beginner that they broke it.
+func (a *App) LuaSkeletons() []backtest.LuaSkeleton {
+	return backtest.LuaSkeletons()
+}
+
 // CriterionMetrics returns the metric names a pre-registered hypothesis may
 // test, straight from the engine's own table. Bound rather than mirrored in
 // the frontend on purpose: a hand-copied list is how the UI ends up offering

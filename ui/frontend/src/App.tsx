@@ -24,6 +24,7 @@ import {
     CheckLuaScript,
     DatabaseNotice,
     LuaAPI,
+    LuaSkeletons,
     DefaultDBPath,
     FileExists,
     FindLuaPathInConfig,
@@ -36,6 +37,7 @@ import {
 } from "../wailsjs/go/main/App";
 import { backtest, main } from "../wailsjs/go/models";
 import SimpleForm from "./SimpleForm";
+import { buildToml } from "./buildToml";
 import type {
     SimpleForm as SimpleFormData,
     HypothesisForm as HypothesisFormData,
@@ -70,6 +72,10 @@ type Mode = "simple" | "advanced" | "data";
 // this is only what the field holds for the instant before that resolves, and
 // it is the path a checkout has always used.
 const DEFAULT_DB_PATH = "../stock_data.db";
+
+// Where a script started from a skeleton is saved. A name of its own so
+// picking a shape can never overwrite example.lua or a library script.
+const SKELETON_LUA_PATH = "strategies/my_strategy.lua";
 
 // Path used for the Lua tab when the TOML doesn't pin a specific lua: script.
 // Portfolios that omit Strategy fall back to this file at run time.
@@ -297,11 +303,29 @@ function App() {
     const editorRef = useRef<any>(null);
     const monacoRef = useRef<any>(null);
     const luaApiRef = useRef<backtest.LuaGlobal[]>([]);
+    // Starting shapes for a blank file. State rather than a ref: the buttons
+    // that offer them are rendered, so their arrival has to re-render.
+    const [skeletons, setSkeletons] = useState<backtest.LuaSkeleton[]>([]);
+    // The text as last loaded from or saved to disk. A buffer equal to it has
+    // no unsaved work in it, which is what makes replacing it safe.
+    const [luaPristine, setLuaPristine] = useState<string>("");
     useEffect(() => {
         let cancelled = false;
         LuaAPI()
             .then((api) => {
                 if (!cancelled) luaApiRef.current = api ?? [];
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        LuaSkeletons()
+            .then((s) => {
+                if (!cancelled) setSkeletons(s ?? []);
             })
             .catch(() => {});
         return () => {
@@ -371,13 +395,17 @@ function App() {
             if (!exists) {
                 if (!cancelled) {
                     setLuaText("");
+                    setLuaPristine("");
                     setStatusMsg(`${resolved} — new file, will be created on Save`);
                 }
                 return;
             }
             try {
                 const content = await ReadFile(resolved);
-                if (!cancelled) setLuaText(content);
+                if (!cancelled) {
+                    setLuaText(content);
+                    setLuaPristine(content);
+                }
             } catch (e: any) {
                 if (!cancelled) {
                     setLuaText("");
@@ -551,6 +579,47 @@ function App() {
         }
     }
 
+    // Start from a shape rather than from a blank file (or from buy-and-hold,
+    // which is what example.lua is and which teaches exactly one shape).
+    //
+    // Only offered while the buffer holds no unsaved work — an unmodified file
+    // is still on disk, so replacing it loses nothing, and this way there is
+    // no "are you sure" to get wrong. The path moves to a new file so Save
+    // cannot overwrite the script that was open.
+    function startFromSkeleton(sk: backtest.LuaSkeleton) {
+        setLuaText(sk.source);
+        setLuaPristine("");
+        setLuaPath(SKELETON_LUA_PATH);
+        setTab("lua");
+        setStatusMsg(
+            `${sk.name} — Save writes ${SKELETON_LUA_PATH}; ✓ Check script tells you if it runs`,
+        );
+    }
+
+    // Run the script that is open, against the holdings already on the
+    // Backtest tab. The detour it removes is real: without it, trying a script
+    // means going to the Config tab, writing a portfolio around it, and coming
+    // back — which is a lot of TOML to learn before finding out whether an
+    // idea does anything.
+    async function runScript() {
+        const usable = simpleForms.filter((f) => f.tickers.length > 0);
+        if (usable.length === 0) {
+            setErrorMsg(
+                "Add holdings on the Backtest tab first — Run this script " +
+                    "runs your script against them.",
+            );
+            return;
+        }
+        if (!luaPath) {
+            setErrorMsg("Save the script first, so the engine has a file to read.");
+            return;
+        }
+        // Every portfolio, pointed at this script instead of whatever it was
+        // going to run. Names are left alone so the results are recognisable.
+        const forms = usable.map((f) => ({ ...f, strategy: luaPath }));
+        await runConfig(buildToml(forms), true);
+    }
+
     // Open a script at a line, from a console row. The message already named
     // the position; until now the reader had to go and find it.
     //
@@ -566,6 +635,7 @@ function App() {
                 const content = await ReadFile(script);
                 setLuaPath(script);
                 setLuaText(content);
+                setLuaPristine(content);
             } catch {
                 setStatusMsg(`${script} — could not be opened; line ${line}`);
                 return;
@@ -744,13 +814,23 @@ function App() {
                             buttons would ask the user which of "check" they
                             meant while looking straight at the answer. */}
                         {tab === "lua" ? (
-                            <button
-                                onClick={checkScript}
-                                disabled={running}
-                                title="Compile the script and run its step(day) against synthetic prices, without a backtest"
-                            >
-                                ✓ Check script
-                            </button>
+                            <>
+                                <button
+                                    onClick={checkScript}
+                                    disabled={running}
+                                    title="Compile the script and run its step(day) against synthetic prices, without a backtest"
+                                >
+                                    ✓ Check script
+                                </button>
+                                <button
+                                    onClick={runScript}
+                                    disabled={running}
+                                    className="run"
+                                    title="Run this script against the holdings on the Backtest tab"
+                                >
+                                    {running ? "Running…" : "▶ Run this script"}
+                                </button>
+                            </>
                         ) : (
                             <button
                                 onClick={checkConfig}
@@ -816,6 +896,32 @@ function App() {
                             Lua script
                         </button>
                     </div>
+
+                    {/* Starting shapes, offered only while the buffer holds no
+                        unsaved work — an unmodified file is still on disk, so
+                        replacing it loses nothing, and nothing here needs an
+                        "are you sure". Same rule as the Backtest tab's starter
+                        examples: the offer appears exactly where there is
+                        nothing to lose by taking it. */}
+                    {tab === "lua" &&
+                        skeletons.length > 0 &&
+                        luaText === luaPristine && (
+                            <div className="skeletons">
+                                <span className="skeletons-label">
+                                    Start from a shape
+                                </span>
+                                {skeletons.map((sk) => (
+                                    <button
+                                        key={sk.name}
+                                        className="preset-chip"
+                                        title={sk.summary}
+                                        onClick={() => startFromSkeleton(sk)}
+                                    >
+                                        {sk.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
                     <div className="editor">
                         <Editor

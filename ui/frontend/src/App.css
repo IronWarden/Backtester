@@ -1388,6 +1388,24 @@ button.primary:hover:not(:disabled),
   color: var(--text-3);
 }
 
+/* Starting shapes for a blank Lua file, above the editor. Reuses the chip
+   styling the date and criterion presets use — it is the same kind of offer:
+   one click that fills something in, made where there is nothing to lose. */
+.skeletons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.5em 0.9em;
+  border-bottom: 1px solid var(--border);
+}
+
+.skeletons-label {
+  font-size: 0.8em;
+  color: var(--text-3);
+  margin-right: 0.2em;
+}
+
 /* What the strategy plotted: one small chart per plot() series, each on its
    own vertical scale. Not lines on the equity chart -- that axis is in
    dollars, and an RSI drawn on it is a flat line along the bottom. */

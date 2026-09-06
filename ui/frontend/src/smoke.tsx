@@ -307,6 +307,34 @@ function withPanelsOpen<T>(fn: () => T): T {
     );
 }
 
+// "Run this script" points every portfolio at the file open in the Lua tab,
+// which is a path, while the strategy picker names a library file. buildToml
+// has to emit both correctly: a bare name means the shipped library, a path is
+// already a path.
+check("a strategy may be a library name or a path", () => {
+    const libraryPick = buildToml([{ ...form, strategy: "rsi.lua" }]);
+    if (!libraryPick.includes('Strategy = "lua:strategies/rsi.lua"')) {
+        throw new Error(`a library pick emitted:\n${libraryPick}`);
+    }
+    const scriptPath = buildToml([{ ...form, strategy: "strategies/my_strategy.lua" }]);
+    if (!scriptPath.includes('Strategy = "lua:strategies/my_strategy.lua"')) {
+        throw new Error(`a path emitted:\n${scriptPath}`);
+    }
+    // The bug this prevents: a path run through the library rule becomes
+    // "lua:strategies/strategies/my_strategy.lua", which resolves to nothing.
+    if (scriptPath.includes("strategies/strategies")) {
+        throw new Error("a path was prefixed with the library directory again");
+    }
+    const absolute = buildToml([{ ...form, name: "", strategy: "/home/u/scripts/idea.lua" }]);
+    if (!absolute.includes('Strategy = "lua:/home/u/scripts/idea.lua"')) {
+        throw new Error(`an absolute path emitted:\n${absolute}`);
+    }
+    // And the portfolio's fallback name is the script's, not the whole path.
+    if (!absolute.includes('Name = "idea"')) {
+        throw new Error(`an unnamed portfolio was named from the path:\n${absolute}`);
+    }
+});
+
 // What the strategy plotted. The panel is collapsible, so the render has to
 // open it; the shape checks are that a series starting late starts late and a
 // flat series does not divide by a zero range.

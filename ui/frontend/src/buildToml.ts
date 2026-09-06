@@ -92,7 +92,7 @@ function tomlKey(k: string): string {
 function portfolioBlock(form: SimpleForm): string[] {
   const tickerList = form.tickers.map((t) => JSON.stringify(t)).join(", ");
   const fallbackName = form.strategy
-    ? form.strategy.replace(/\.lua$/, "")
+    ? (form.strategy.split(/[\\/]/).pop() ?? form.strategy).replace(/\.lua$/, "")
     : "Buy and Hold";
   const lines: string[] = [
     "[[Portfolio]]",
@@ -125,8 +125,16 @@ function portfolioBlock(form: SimpleForm): string[] {
 
   // A library pick sizes itself and reads its own defaults, so no Params
   // block is emitted and the allocation percentages are not consulted.
+  //
+  // A bare file name means the shipped library ("rsi.lua"). A value carrying a
+  // separator is already a path and is emitted as written -- that is what lets
+  // "Run this script" point a portfolio at the file open in the Lua tab,
+  // wherever it lives, without the picker's names changing at all.
   if (form.strategy) {
-    lines.push(`Strategy = "lua:${STRATEGY_DIR}/${form.strategy}"`);
+    const spec = /[\\/]/.test(form.strategy)
+      ? form.strategy
+      : `${STRATEGY_DIR}/${form.strategy}`;
+    lines.push(`Strategy = "lua:${spec}"`);
     return lines.concat(cashflow);
   }
 

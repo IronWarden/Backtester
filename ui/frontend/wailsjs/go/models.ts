@@ -177,6 +177,22 @@ export namespace backtest {
 		    return a;
 		}
 	}
+	export class LuaSkeleton {
+	    name: string;
+	    summary: string;
+	    source: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LuaSkeleton(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.summary = source["summary"];
+	        this.source = source["source"];
+	    }
+	}
 	export class PlotPoint {
 	    day: number;
 	    value: number;

@@ -2140,6 +2140,33 @@ global added to the engine cannot ship without its documentation, and the
 editor can never offer one that does not exist — which would be worse than
 offering nothing, since you would only find out on day 0 of a run.
 
+### Starting a script, and running it
+
+The Lua tab opens on `example.lua`, which is buy-and-hold — correct, and no
+help at all if you want to write your own idea, because it shows one shape and
+never says there are others. Above the editor, while the buffer holds no
+unsaved work, are three **starting shapes**:
+
+| shape | for |
+|---|---|
+| A signal, per ticker | decide about each holding on its own — a moving average, an RSI level, a breakout |
+| Rebalance on a schedule | hold everything and put the weights back every so often; no signal, no timing |
+| Rank and hold the top few | score every ticker against the others and hold the best — momentum, value, low vol |
+
+Each runs as written and has one `TODO` where the idea goes, and each is put
+through the app's own ✓ Check by the engine's tests — a skeleton that does not
+run teaches a beginner that they broke it. Picking one moves the path to
+`strategies/my_strategy.lua`, so it can never overwrite the script that was
+open, and they are only offered when the buffer is unmodified: an unmodified
+file is still on disk, so replacing it loses nothing and there is no "are you
+sure" to get wrong.
+
+**▶ Run this script** runs the open script against the holdings already on the
+Backtest tab — every portfolio there, pointed at this file instead of whatever
+it was going to run. Without it, trying an idea means going to the Config tab,
+writing a portfolio around it in TOML, and coming back, which is a lot to learn
+before finding out whether the idea does anything at all.
+
 ### Seeing what the strategy saw: `plot()`
 
 A strategy can record a number per day with `plot(name, value)`, and each name
