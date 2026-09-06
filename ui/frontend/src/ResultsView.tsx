@@ -688,6 +688,29 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
 
   return (
     <div className="results-view">
+      {/* What happened, in a sentence, before any of the numbers. Written by
+          the engine (backtest.Sentence), not assembled here: the app, the
+          -pages export and the assistant then say the same thing about the
+          same run, and the sentence cannot drift from the table under it.
+          A result that simulated nothing carries no headline and shows
+          none -- silence rather than an empty quote. */}
+      {results.some((r) => r.headline) && (
+        <div className="panel headlines">
+          {results.map((r, i) =>
+            r.headline ? (
+              <p className="headline-line" key={i}>
+                {results.length > 1 && (
+                  <span className="headline-who">
+                    <Swatch index={i} inline />
+                    {r.portfolioName}
+                  </span>
+                )}
+                {r.headline}
+              </p>
+            ) : null,
+          )}
+        </div>
+      )}
       <div className="stat-grid">
         {results.map((r, i) => {
           const p = profit(r);

@@ -40,6 +40,7 @@ export namespace backtest {
 	    sharpeRatio: number;
 	    maxDrawdown: number;
 	    standardDev: number;
+	    realAnnualReturn: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new BenchmarkStats(source);
@@ -52,6 +53,7 @@ export namespace backtest {
 	        this.sharpeRatio = source["sharpeRatio"];
 	        this.maxDrawdown = source["maxDrawdown"];
 	        this.standardDev = source["standardDev"];
+	        this.realAnnualReturn = source["realAnnualReturn"];
 	    }
 	}
 	export class Check {
@@ -535,6 +537,9 @@ export namespace main {
 	    sortinoRatio: number;
 	    maxDrawdown: number;
 	    annualReturn: number;
+	    realAnnualReturn: number;
+	    netContributions: number;
+	    withdrawalsMissed: number;
 	    standardDev: number;
 	    avgCorrelation: number;
 	    cointegratedPairs: number;
@@ -552,6 +557,7 @@ export namespace main {
 	    downCapture: number;
 	    initialCapital: number;
 	    finalValue: number;
+	    headline: string;
 	    equityCurve: number[];
 	    dates: string[];
 	    drawdowns: backtest.Drawdown[];
@@ -581,6 +587,9 @@ export namespace main {
 	        this.sortinoRatio = source["sortinoRatio"];
 	        this.maxDrawdown = source["maxDrawdown"];
 	        this.annualReturn = source["annualReturn"];
+	        this.realAnnualReturn = source["realAnnualReturn"];
+	        this.netContributions = source["netContributions"];
+	        this.withdrawalsMissed = source["withdrawalsMissed"];
 	        this.standardDev = source["standardDev"];
 	        this.avgCorrelation = source["avgCorrelation"];
 	        this.cointegratedPairs = source["cointegratedPairs"];
@@ -598,6 +607,7 @@ export namespace main {
 	        this.downCapture = source["downCapture"];
 	        this.initialCapital = source["initialCapital"];
 	        this.finalValue = source["finalValue"];
+	        this.headline = source["headline"];
 	        this.equityCurve = source["equityCurve"];
 	        this.dates = source["dates"];
 	        this.drawdowns = this.convertValues(source["drawdowns"], backtest.Drawdown);

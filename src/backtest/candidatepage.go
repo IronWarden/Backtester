@@ -141,6 +141,7 @@ func writeHeadline(b *strings.Builder, r Result) {
 <h1>%s</h1>
 <p class="sub">%s</p>
 <p class="window">%s</p>
+<p class="says">%s</p>
 <div class="headline">
   <div class="big"><span class="v">%s</span><span class="l">final value</span></div>
   <div class="big"><span class="v %s">%+.1f%%</span><span class="l">total return (%s)</span></div>
@@ -149,7 +150,7 @@ func writeHeadline(b *strings.Builder, r Result) {
 </div>
 </header>
 `,
-		esc(r.PortfolioName), esc(r.Strategy), window,
+		esc(r.PortfolioName), esc(r.Strategy), window, esc(Sentence(r)),
 		money(r.FinalValue), sign(pct), pct, money(profit),
 		r.Metrics.SharpeRatio, r.Metrics.MaxDrawdown)
 }
@@ -545,6 +546,10 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)
  margin:32px 0 10px;font-weight:600}
 header .sub{color:var(--dim);margin:4px 0 0;font-family:ui-monospace,monospace}
 header .window{color:var(--dim);margin:2px 0 0;font-size:12px}
+/* The result in English, above the four big numbers it summarises. Wider
+   measure and a larger size than the window line: it is meant to be read,
+   not skimmed past. */
+header .says{margin:10px 0 0;font-size:15px;line-height:1.5;max-width:70ch}
 .headline{display:flex;flex-wrap:wrap;gap:28px;margin-top:18px;padding-bottom:18px;
  border-bottom:1px solid var(--line)}
 .big{display:flex;flex-direction:column}

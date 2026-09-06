@@ -631,6 +631,15 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+EVERY RESULT CARRIES A ONE-SENTENCE HEADLINE, in RunResult.headline, written
+by backtest.Sentence and shown above the numbers: what the money did over what
+period, the worst fall and the longest stretch underwater, money paid in or
+taken out, and the benchmark comparison. Quote it rather than re-deriving
+prose from the metrics table -- it is the same wording the -pages export
+uses. It never annualizes a window under a year, never claims a drawdown
+recovered (only that it did not), and leads with a plan that ran out of money.
+A run that simulated nothing has an empty headline.
+
 THE METRICS TABLE HAS TWO VIEWS, chosen in its header and remembered:
 "Basics" (portfolio, strategy, final value, profit, Sharpe, max drawdown,
 annual %, plus Contributed / Missed W/D / Confidence / Alpha % when the run

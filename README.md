@@ -2125,6 +2125,37 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### What happened, in a sentence
+
+Above every result, before any number, the app writes what the run actually
+did:
+
+> $100,000 became $184,300 over 4 years — 16.5% a year. The worst fall was
+> 34%, and the longest stretch below a previous high was 14 months. Holding
+> $SP500 instead would have made 14.2% a year, so this was 2.3 points ahead.
+
+It is `backtest.Sentence` (`src/backtest/headline.go`), so the desktop app,
+the `-pages` export and the assistant all say the same thing about the same
+run, and the sentence cannot drift from the table beneath it. It derives
+nothing: every figure in it is one the engine already computed.
+
+The rules it follows are what keep it honest, and each is pinned by a test:
+
+- **a window under a year is never annualized** — a 3% month annualizes to
+  43% a year, and that is not a thing that happened. The total is stated
+  instead, and the benchmark is compared on its total too, since a total
+  against an annualized figure is not a comparison.
+- **recovery is never asserted, only its absence.** The result carries the
+  deepest few drawdowns, not all of them, so "it recovered" is not knowable
+  from there while "it had not made that back by the end" is.
+- **money paid in is named.** "$100,000 became $184,300" reads as performance
+  when a third of it was deposits.
+- **a plan that ran out of money leads with it.** For a decumulation backtest
+  that is the result, not a footnote.
+- **no minus sign carries the meaning.** "a loss of 11.6% a year", never
+  "-11.6% a year" — the one character that reverses a sentence is the first
+  one a reader skips.
+
 ### Basics, or everything
 
 The metrics table has two views, chosen in its header:

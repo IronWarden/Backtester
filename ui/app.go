@@ -64,6 +64,11 @@ type RunResult struct {
 	// the frontend can show the profit in dollars alongside the percentages.
 	InitialCapital float64 `json:"initialCapital"`
 	FinalValue     float64 `json:"finalValue"`
+	// Headline is what this result did, in a sentence, from backtest.Sentence.
+	// Computed in Go rather than assembled in the frontend so the app, the
+	// -pages export and the assistant all say the same thing about the same
+	// run. Empty for a run that simulated nothing.
+	Headline string `json:"headline"`
 	// EquityCurve is the portfolio's daily total value; Dates are the
 	// matching trading days (YYYY-MM-DD), 1:1 with EquityCurve. The frontend
 	// plots these as the equity-curve chart.
@@ -254,6 +259,7 @@ func (a *App) RunBacktest(
 		results = append(results, RunResult{
 			PortfolioName:         r.PortfolioName,
 			Strategy:              r.Strategy,
+			Headline:              backtest.Sentence(r),
 			SharpeRatio:           r.Metrics.SharpeRatio,
 			SortinoRatio:          r.Metrics.SortinoRatio,
 			MaxDrawdown:           r.Metrics.MaxDrawdown,
