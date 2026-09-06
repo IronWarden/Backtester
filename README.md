@@ -2125,6 +2125,29 @@ presets, and a list of tickers with allocation percentages. It generates the
 TOML for you, and **Edit as TOML →** hands that config to the **Config** tab's editor
 when you want the full schema.
 
+### The form is remembered between launches
+
+Everything on the Backtest tab — the portfolio cards, holdings, allocations,
+window, strategy, benchmark, contribution schedule and the pre-registered
+claim — is saved as you edit it and restored next launch. A first session is
+exploratory, and closing the app to think about a result should not cost the
+portfolio you built to get it.
+
+Three things are deliberately *not* remembered:
+
+- **the results.** A stale result beside a fresh form reads as today's numbers.
+- **the database and config paths.** They may have moved, and the app resolves
+  them properly on launch (see *Where the app looks for its files*).
+- **anything that no longer matches the current form.** A stored session is
+  input like any other: it survives upgrades, so it is validated field by
+  field and dropped *whole* if any part of it fails. Half a restored form —
+  holdings with no allocations, a criterion with no metric — is worse than an
+  empty one, because you cannot see what is missing.
+
+Stored under `backtester-session-v1` in the app's local storage; the version
+is in the key, so a shape change re-defaults rather than restoring a form the
+app no longer understands.
+
 ### Starting from a question
 
 An empty form asks for holdings, two dates, a strategy, an allocation and a

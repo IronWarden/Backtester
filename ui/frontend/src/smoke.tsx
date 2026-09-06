@@ -34,6 +34,8 @@ import {
     exampleHypothesis,
 } from "./examples";
 import { chipLabel } from "./paths";
+import { parseSession } from "./session";
+import type { Session } from "./session";
 import { readStored, readStoredNumber, readStoredObject, writeStored } from "./storage";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { backtest, main } from "../wailsjs/go/models";
@@ -312,6 +314,81 @@ for (const [label, fs] of [
         );
     });
 }
+
+// What the app remembers between launches. A stored session outlives shape
+// changes and upgrades, so it is INPUT: the check is that a session which no
+// longer matches the current form is dropped whole, rather than restoring a
+// card with holdings and no allocations.
+const savedSession: Session = {
+    forms: [form, { ...form, name: "B", tickers: ["AAPL"], allocations: { AAPL: 100 } }],
+    hypothesis: { claim: "it beats the market", metric: "sharpe", op: ">=", value: "1" },
+};
+const fallbackSession: Session = { forms: [form], hypothesis: emptyHypothesis };
+
+check("a saved session round-trips", () => {
+    const got = parseSession(JSON.stringify(savedSession), fallbackSession);
+    if (JSON.stringify(got) !== JSON.stringify(savedSession)) {
+        throw new Error(
+            `restored session differs:\n${JSON.stringify(got)}\n` +
+                `want\n${JSON.stringify(savedSession)}`,
+        );
+    }
+});
+
+check("a session that is not the current shape is dropped whole", () => {
+    const bad: [string, string | null][] = [
+        ["nothing stored", null],
+        ["not JSON", "{oh no"],
+        ["JSON null", "null"],
+        ["an array", "[]"],
+        ["no forms", JSON.stringify({ hypothesis: emptyHypothesis })],
+        ["an empty form list", JSON.stringify({ forms: [], hypothesis: emptyHypothesis })],
+        ["no hypothesis", JSON.stringify({ forms: [form] })],
+        [
+            "a non-numeric allocation",
+            JSON.stringify({
+                forms: [{ ...form, allocations: { AAPL: "half" } }],
+                hypothesis: emptyHypothesis,
+            }),
+        ],
+        [
+            "a cashflow frequency the engine does not have",
+            JSON.stringify({
+                forms: [{ ...form, cashflowFrequency: "fortnightly" }],
+                hypothesis: emptyHypothesis,
+            }),
+        ],
+        [
+            "one bad form among good ones",
+            JSON.stringify({
+                forms: [form, { ...form, tickers: "AAPL" }],
+                hypothesis: emptyHypothesis,
+            }),
+        ],
+    ];
+    for (const [what, raw] of bad) {
+        const got = parseSession(raw, fallbackSession);
+        if (got !== fallbackSession) {
+            throw new Error(`${what}: restored ${JSON.stringify(got)} instead of the defaults`);
+        }
+    }
+});
+
+// The validator has to name every field of SimpleForm. One it forgets is one
+// restored as undefined, which reaches buildToml and generates a config with a
+// hole in it -- so dropping any single field must invalidate the session.
+check("every field of the form is validated", () => {
+    for (const field of Object.keys(form)) {
+        const partial: Record<string, unknown> = { ...form };
+        delete partial[field];
+        const raw = JSON.stringify({ forms: [partial], hypothesis: emptyHypothesis });
+        if (parseSession(raw, fallbackSession) !== fallbackSession) {
+            throw new Error(
+                `a form with no "${field}" was restored; session.ts does not check that field`,
+            );
+        }
+    }
+});
 
 // The header chips. The database one can now read "Choose DB…" for real: the
 // path comes from Go (DefaultDBPath), and an app launched with no database

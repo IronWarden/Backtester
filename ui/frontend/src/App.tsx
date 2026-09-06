@@ -42,6 +42,8 @@ import { chipLabel } from "./paths";
 import ResultsView from "./ResultsView";
 import ErrorBoundary from "./ErrorBoundary";
 import { readStoredNumber, writeStored } from "./storage";
+import { readSession, writeSession } from "./session";
+import type { Session } from "./session";
 import ConsolePanel from "./ConsolePanel";
 import ChatPanel from "./ChatPanel";
 import QueryConsole from "./QueryConsole";
@@ -69,6 +71,38 @@ const DEFAULT_DB_PATH = "../stock_data.db";
 // Path used for the Lua tab when the TOML doesn't pin a specific lua: script.
 // Portfolios that omit Strategy fall back to this file at run time.
 const DEFAULT_LUA_PATH = "strategies/example.lua";
+
+// The Backtest tab as it opens when there is nothing to restore. A function,
+// not a constant, because the state initializer must not share one object
+// with anything else -- and because `today` moves.
+function defaultSession(): Session {
+    return {
+        forms: [
+            {
+                name: "Buy and Hold",
+                buyingPower: 100000,
+                startDate: "2020-01-01",
+                endDate: today,
+                tickers: [],
+                evenSplit: true,
+                allocations: {},
+                // Empty is buy-and-hold, so an untouched form behaves exactly
+                // as it did before the picker existed.
+                strategy: "",
+                // Deliberately NOT a zero value: an unset Benchmark leaves
+                // "did this beat the market?" unanswerable, which is the
+                // question simple mode exists to answer.
+                benchmark: "$SP500",
+                // "never" emits no [portfolio.Cashflow] block at all, so an
+                // untouched form generates exactly the config it always did.
+                cashflowDirection: "deposit",
+                cashflowAmount: 0,
+                cashflowFrequency: "never",
+            },
+        ],
+        hypothesis: { claim: "", metric: "sharpe", op: ">=", value: "" },
+    };
+}
 
 const DEFAULT_TOML = `# Edit your portfolio config here. Add as many [[portfolio]] blocks as
 # you like — they all run and their metrics appear in the results table.
@@ -137,40 +171,28 @@ function App() {
     // A LIST since the Backtest tab learned to run several portfolios at once.
     // It opens with exactly one, so an untouched app generates exactly the
     // config it generated before.
-    const [simpleForms, setSimpleForms] = useState<SimpleFormData[]>([
-        {
-            name: "Buy and Hold",
-            buyingPower: 100000,
-            startDate: "2020-01-01",
-            endDate: today,
-            tickers: [],
-            evenSplit: true,
-            allocations: {},
-            // Empty is buy-and-hold, so an untouched form behaves exactly as it
-            // did before the picker existed.
-            strategy: "",
-            // Deliberately NOT a zero value: an unset Benchmark leaves "did this
-            // beat the market?" unanswerable, which is the question simple mode
-            // exists to answer.
-            benchmark: "$SP500",
-            // "never" emits no [portfolio.Cashflow] block at all, so an
-            // untouched form generates exactly the config it always did.
-            cashflowDirection: "deposit",
-            cashflowAmount: 0,
-            cashflowFrequency: "never",
-        },
-    ]);
+    // Restored from the last session if there is a valid one, and the
+    // untouched defaults otherwise. Read once, in the ROOT component's
+    // initializer, so both pieces of state come from the same session rather
+    // than from two reads that could disagree.
+    const [restored] = useState<Session>(() => readSession(defaultSession()));
+    const [simpleForms, setSimpleForms] = useState<SimpleFormData[]>(
+        () => restored.forms,
+    );
     // One per RUN, not one per portfolio: the engine registers a single claim
     // and judges every result against it, so a box per card would invent a
     // concept the engine does not have. Empty claim = not pre-registered = the
     // run is not judged; a default criterion would be judging against a bar
     // nobody chose.
-    const [simpleHypothesis, setSimpleHypothesis] = useState<HypothesisFormData>({
-        claim: "",
-        metric: "sharpe",
-        op: ">=",
-        value: "",
-    });
+    const [simpleHypothesis, setSimpleHypothesis] = useState<HypothesisFormData>(
+        () => restored.hypothesis,
+    );
+
+    // Remember the form as it is edited. Not the results, and not the file
+    // paths -- see session.ts for why each is left out.
+    useEffect(() => {
+        writeSession({ forms: simpleForms, hypothesis: simpleHypothesis });
+    }, [simpleForms, simpleHypothesis]);
 
     // Drag the handle between editor and results to resize. The pointer moves in
     // real screen pixels, but resultsHeight is stored in base pixels, so the

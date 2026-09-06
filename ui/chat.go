@@ -631,6 +631,15 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 
+THE BACKTEST TAB IS REMEMBERED BETWEEN LAUNCHES: portfolio cards, holdings,
+allocations, window, strategy, benchmark, contributions and the pre-registered
+claim are saved as the user edits them and restored on the next launch.
+Results are NOT remembered (a stale result beside a fresh form would read as
+today's numbers), nor are the database and config paths. A stored session that
+no longer matches the current form shape is discarded whole rather than
+half-restored, so "my portfolio came back empty after an update" is expected
+behaviour, not a bug.
+
 THE DATABASE CAN BE OPEN IN ONE OF THREE WAYS, and the app says so when it is
 not the ordinary one. A file it can write is opened in place, silently. A file
 it cannot write (installed under /usr/share or /opt, an AppImage mount, chmod
