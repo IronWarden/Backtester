@@ -881,6 +881,80 @@ from a gap in the middle. Nothing liquidates the short holding and carries the
 survivors onward — that would break the shared-window invariant, which is the
 property that makes two holdings' numbers comparable in the first place.
 
+## Keeping the price data current
+
+A backtest is only as current as its last bar, and a database that has sat for
+a month quietly costs you the most recent window of every run. Refreshing it
+used to mean asking the assistant, which drives `fetch_history` three symbols
+at a time — fine for one ticker, hopeless for ten thousand — or running
+`add_ticker.py` in a loop with the app closed.
+
+**Sync now**, on the Data tab, refreshes every tradable ticker in one action.
+The assistant has the same thing as the `sync_data` tool, so "bring the
+database up to date" is one call rather than a loop it has to drive and
+invariably abandons partway.
+
+Two things make a full refresh affordable:
+
+- **Only the missing tail is fetched.** Each ticker starts the day after its
+  last stored bar, so nothing already held is downloaded twice.
+- **Tickers sharing a start date go in one request.** After any previous sync
+  almost all of them do, so a full refresh is roughly a hundred requests
+  rather than ten thousand.
+
+What it skips, and says so in the summary:
+
+| Skipped | Why |
+| --- | --- |
+| `$`-prefixed series | Built locally by `add_collections.py` from other rows in the same table; there is no Yahoo symbol to fetch. |
+| Generation symbols (`COR.1`) | By construction the earlier occupant of a recycled symbol — it stopped trading when the symbol moved on. |
+| Delisted symbols | The `delistings` registry records a death date. Yahoo serves nothing for them, so attempting them would mean ~400 guaranteed failures every run. |
+
+A **renamed** symbol is *not* skipped. The registry files a name change the
+same way it files a death (see [A rename is not a recycling](#delisted-companies-and-recycled-tickers)),
+and the company is still trading — skipping it would freeze 74 live tickers.
+
+Each batch is written as it arrives, so **an interrupted sync keeps its work**.
+Because the next run derives its plan from the database's own last bars, it
+resumes exactly where the previous one stopped; pressing **Stop**, closing the
+app, or losing the network costs you the batch in flight and nothing else. The
+assistant's `sync_data` has a ten-minute budget for the same reason — a chat
+turn cannot block for an hour — and reports what it managed, so calling it
+again finishes the job.
+
+`sync_data` also takes `dry_run`, which reports how far behind the database is
+without downloading anything. That is what the Data tab's status line shows.
+
+The target session is the latest weekday on or before today. Exchange holidays
+are deliberately not modelled: getting one wrong costs a single no-op pass,
+and the alternative is a holiday calendar that must be maintained forever.
+
+### What sync does not cover
+
+`sync_data` refreshes the **price table only**. These still need their Python
+loaders, run with the app closed — DuckDB is single-writer and the UI holds
+the write lock:
+
+| Stale thing | Loader |
+| --- | --- |
+| `$SP500`, `$CASH` and the other benchmark series | `python3 add_collections.py` |
+| `3MTreasuryYields`, `10YrTreasuryYields` | `python3 update_treasury_yields.py` |
+| `economic_indicators` (CPI, FEDFUNDS, …) | see [Fundamentals, macro and the publication lag](#fundamentals-macro-and-the-publication-lag) |
+
+This matters more than it sounds: the Backtest form defaults `Benchmark` to
+`"$SP500"`, and benchmark-relative metrics — alpha, beta, tracking error,
+information ratio, up/down capture — are dropped entirely for any window the
+benchmark does not fully cover. A stale `$SP500` silently removes the
+comparison from every default run. Real (inflation-adjusted) return goes blank
+past the last CPI reading the same way.
+
+Implementation: `src/data/sync.go` (the pure plan — what to fetch, from when,
+and what to leave alone), `sync_prices.py` (the batched download; like
+`fetch_history.py` it never opens the DuckDB, because the UI holds the lock),
+`ui/sync.go` (orchestration and the assistant tool), `ui/app_sync.go` (the
+bound methods and progress events), `ui/frontend/src/SyncPanel.tsx` (the Data
+tab strip).
+
 ## Configuration
 
 Define one `[[portfolio]]` block per portfolio in `config.toml`. Each block names exactly one strategy; to compare strategies, write one block per strategy. Every portfolio runs as its own job.
@@ -2522,6 +2596,9 @@ open (even unsaved) in the editors.
   pulled (labelled "(local)", discovered live from `/api/tags`;
   `OLLAMA_HOST` overrides the default `localhost:11434`). The choice is
   remembered across restarts.
+- It can bring the whole database up to date with the `sync_data` tool —
+  one call rather than a loop of three-symbol `fetch_history` calls. See
+  [Keeping the price data current](#keeping-the-price-data-current).
 - It can query the database itself through a read-only SQL tool
   (SELECT-family statements only, capped at 100 rows) — e.g. to check
   ticker coverage before proposing a date range. Queries it runs are shown
@@ -2636,7 +2713,7 @@ Per-strategy state lives on the implementing struct, so a `Strategy` instance is
 ├── stock_data.db            # DuckDB file (OHLCV + risk-free rates)
 ├── go.mod / go.sum
 ├── *.py                     # data loaders (add_collections, fetch_history,
-│                            #   add_ticker, update_treasury_yields, …)
+│                            #   add_ticker, sync_prices, update_treasury_yields, …)
 ├── strategies/              # Lua strategy library + its API reference
 │   ├── README.md
 │   └── *.lua

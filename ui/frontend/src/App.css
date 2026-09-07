@@ -2335,3 +2335,103 @@ td.num.dim {
   color: var(--text-3);
   white-space: pre-wrap;
 }
+
+/* ── Sync panel (Data tab) ───────────────────────────────────────────────
+   A strip above the SQL console saying how far behind the price data is,
+   and the one button that fixes it. Sized to sit quietly when the data is
+   current and to be unmissable when it is not. */
+.data-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.sync-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  padding: 0.6em 0.9em;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+}
+
+.sync-spacer {
+  flex: 1;
+}
+
+.sync-label {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.sync-note {
+  color: var(--text-3);
+  font-size: 0.9em;
+}
+
+.sync-ok {
+  color: var(--pos);
+}
+
+.sync-stale {
+  color: var(--warn);
+}
+
+.sync-error {
+  color: var(--neg);
+}
+
+.sync-result {
+  color: var(--text-2);
+}
+
+.sync-go,
+.sync-stop {
+  padding: 0.3em 0.9em;
+  border-radius: 0.35em;
+  border: 1px solid var(--border-strong);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.sync-go:disabled {
+  background: var(--bg-raised);
+  color: var(--text-3);
+  cursor: default;
+}
+
+.sync-stop {
+  background: var(--neg-soft);
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
+.sync-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+}
+
+/* The bar is the only moving thing on the tab during a sync, so it is kept
+   thin: a full-height progress bar reads as an error state. */
+.sync-bar {
+  flex: 0 0 12em;
+  height: 0.4em;
+  border-radius: 0.2em;
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.sync-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}

@@ -153,6 +153,14 @@ func ollamaTools() []map[string]any {
 				"parameters":  screenStocksToolSchema(),
 			},
 		},
+		{
+			"type": "function",
+			"function": map[string]any{
+				"name":        syncDataToolName,
+				"description": syncDataToolDescription,
+				"parameters":  syncDataToolSchema(),
+			},
+		},
 	}
 }
 
@@ -310,6 +318,9 @@ func ollamaChat(
 			case screenStocksToolName:
 				em.tool("screen_stocks: " + screenPreview(call.Function.Arguments))
 				out = runScreenTool(ctx, call.Function.Arguments)
+			case syncDataToolName:
+				em.tool("sync_data: " + syncPreview(call.Function.Arguments))
+				out = runSyncTool(ctx, dbPath, call.Function.Arguments, em)
 			default:
 				out = fmt.Sprintf("ERROR: unknown tool %q", call.Function.Name)
 			}

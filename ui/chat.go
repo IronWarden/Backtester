@@ -1672,10 +1672,24 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   "what is X trading at / worth today" questions; use query_db for
   historical bars. It cannot look up the $-benchmark pseudo-tickers.
 - The fetch_history tool downloads daily adjusted OHLCV from Yahoo into
-  the database (idempotent upsert). When the user wants to backtest a
-  ticker that is missing or stale — check with query_db — offer to fetch
-  it, then confirm the stored range before building the config. It cannot
-  fetch the $-benchmark series (those are built locally).
+  the database (idempotent upsert), up to 3 symbols per call. Use it for a
+  SPECIFIC missing or stale ticker — check with query_db — then confirm the
+  stored range before building the config. It cannot fetch the $-benchmark
+  series (those are built locally).
+- The sync_data tool brings EVERY tradable ticker up to the latest trading
+  session in one call. Use it, not a loop of fetch_history calls, whenever
+  the database is broadly behind — it fetches only each ticker's missing
+  tail and batches ~100 symbols per request, so it is orders of magnitude
+  faster. Delisted symbols and $-benchmark series are skipped and reported.
+  Pass dry_run to report what is stale without downloading, and offer that
+  first when the user has not asked for a download outright. It is safe to
+  re-run: each batch is stored as it arrives, so an interrupted sync keeps
+  its work and a later call resumes from where it stopped. The user can
+  also run it from the Sync now button on the Data tab.
+  It does NOT refresh the $-benchmark series, the treasury-yield tables or
+  economic_indicators — those come from the Python loaders
+  (add_collections.py, update_treasury_yields.py), which the user must run
+  themselves with the app closed, because DuckDB is single-writer.
 - To find or filter companies by fundamentals (P/E, market cap, dividend
   yield, sector), use the screen_stocks tool — the database cannot answer
   these. It screens the whole US market, so before proposing a backtest
@@ -1718,10 +1732,17 @@ tell users to check it FIRST when a run shows a flat curve or no trades.
   so aggregate or LIMIT. This is how you check coverage before proposing
   any config: MIN(Date)/MAX(Date) GROUP BY Ticker answers it cheaply.
 - fetch_history — downloads daily adjusted OHLCV from Yahoo Finance into
-  the database, up to 3 symbols per call, idempotent upsert. USE THIS when
-  a ticker the user wants is missing or stale: check with query_db, offer
-  to fetch it, then confirm the stored range before writing the config.
+  the database, up to 3 symbols per call, idempotent upsert. USE THIS for
+  ONE specific missing or stale ticker: check with query_db, offer to fetch
+  it, then confirm the stored range before writing the config.
   It cannot fetch the $-benchmark series (those are built locally).
+- sync_data — brings EVERY stale ticker up to the latest session in one
+  call, fetching only each one's missing tail in batches. USE THIS instead
+  of repeated fetch_history calls when the whole database is behind. Pass
+  dry_run to report staleness without downloading. Skips delisted and
+  $-benchmark symbols; safe to re-run, and resumes if interrupted. It does
+  not refresh the $-benchmarks, treasury yields or economic_indicators —
+  those need the Python loaders, run by the user with the app closed.
 - lookup_quote — LIVE price and fundamentals (P/E, market cap, sector)
   from Yahoo for a real symbol. Use for "what is X worth today"; use
   query_db for historical bars. No $-pseudo-tickers.
@@ -1947,7 +1968,8 @@ total US market.
   button on complete blocks, so a fragment is much less useful.
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
-  fetch_history when something is missing or stale.
+  fetch_history for one missing ticker, and sync_data when the database as
+  a whole is behind.
 - The results view opens with the verdicts, equity curve and metrics
   expanded; the other panels (walk-forward, in/out-of-sample, drawdowns,
   trading, attribution, calendar and monthly returns) are collapsed and open

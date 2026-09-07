@@ -86,6 +86,22 @@ export function SaveClaudeKey(arg1) {
   return window['go']['main']['App']['SaveClaudeKey'](arg1);
 }
 
+export function StopSync() {
+  return window['go']['main']['App']['StopSync']();
+}
+
+export function SyncData(arg1) {
+  return window['go']['main']['App']['SyncData'](arg1);
+}
+
+export function SyncStatus(arg1) {
+  return window['go']['main']['App']['SyncStatus'](arg1);
+}
+
+export function SyncSummary(arg1) {
+  return window['go']['main']['App']['SyncSummary'](arg1);
+}
+
 export function TickerDateRanges(arg1) {
   return window['go']['main']['App']['TickerDateRanges'](arg1);
 }
