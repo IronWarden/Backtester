@@ -925,6 +925,19 @@ again finishes the job.
 `sync_data` also takes `dry_run`, which reports how far behind the database is
 without downloading anything. That is what the Data tab's status line shows.
 
+The same thing runs headlessly, for a machine with no display and for the
+first sync of a freshly downloaded database — which is when it is furthest
+behind:
+
+```bash
+ui --sync /path/to/stock_data.db --dry-run   # how far behind is it?
+ui --sync /path/to/stock_data.db             # bring it up to date
+```
+
+It prints one progress line per batch and the same summary the tool returns,
+exits non-zero if the run was cut short, and treats Ctrl-C the way the Stop
+button does — the batch in flight is lost, everything already stored is kept.
+
 The target session is the latest weekday on or before today. Exchange holidays
 are deliberately not modelled: getting one wrong costs a single no-op pass,
 and the alternative is a holiday calendar that must be maintained forever.
@@ -952,8 +965,8 @@ Implementation: `src/data/sync.go` (the pure plan — what to fetch, from when,
 and what to leave alone), `sync_prices.py` (the batched download; like
 `fetch_history.py` it never opens the DuckDB, because the UI holds the lock),
 `ui/sync.go` (orchestration and the assistant tool), `ui/app_sync.go` (the
-bound methods and progress events), `ui/frontend/src/SyncPanel.tsx` (the Data
-tab strip).
+bound methods and progress events), `ui/synccmd.go` (the `--sync` flag),
+`ui/frontend/src/SyncPanel.tsx` (the Data tab strip).
 
 ## Configuration
 

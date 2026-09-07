@@ -205,3 +205,50 @@ func TestRunSyncToolLive(t *testing.T) {
 	}
 	t.Logf("live sync:\n%s\nlast bar now %s", out, rows[0][0])
 }
+
+func TestRunSyncCommandIgnoresAnAbsentFlag(t *testing.T) {
+	// No --sync means the GUI must still launch; a false here would open a
+	// window-less binary that silently does nothing.
+	if handled, _ := runSyncCommand([]string{}); handled {
+		t.Error("runSyncCommand claimed a bare argv")
+	}
+	if handled, _ := runSyncCommand([]string{"--other"}); handled {
+		t.Error("runSyncCommand claimed an unrelated flag")
+	}
+}
+
+func TestRunSyncCommandRejectsAMissingDatabase(t *testing.T) {
+	handled, code := runSyncCommand([]string{
+		"--sync", filepath.Join(t.TempDir(), "nope.db"), "--dry-run",
+	})
+	if !handled {
+		t.Fatal("runSyncCommand did not handle --sync")
+	}
+	if code == 0 {
+		t.Error("an empty database exited 0; a sync that found nothing to " +
+			"sync must not look like a successful one")
+	}
+}
+
+func TestPlanReportCountsWithoutFetching(t *testing.T) {
+	rep := planReport(data.SyncPlan{
+		Through:  "2026-09-07",
+		UpToDate: 2,
+		Targets:  []data.SyncTarget{{Ticker: "AAPL", Start: "2026-07-03"}},
+		Skipped: []data.SyncSkip{
+			{Ticker: "$SP500", Reason: data.SkipLocalSeries},
+			{Ticker: "DEAD", Reason: data.SkipDelisted + " 2019-04-16"},
+			{Ticker: "GONE", Reason: data.SkipDelisted + " 2020-01-02"},
+		},
+	})
+	if !rep.DryRun {
+		t.Error("planReport must be a dry run — it fetches nothing")
+	}
+	if rep.Considered != 6 {
+		t.Errorf("considered = %d, want 6", rep.Considered)
+	}
+	if rep.Skipped[data.SkipDelisted] != 2 {
+		t.Errorf("delisted tally = %d, want 2 collapsed from two dates",
+			rep.Skipped[data.SkipDelisted])
+	}
+}

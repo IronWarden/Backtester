@@ -157,6 +157,25 @@ func planSync(dbPath string, symbols []string) (data.SyncPlan, error) {
 	return data.PlanSync(ranges, coverage, time.Now()), nil
 }
 
+// planReport renders a plan as a SyncReport without fetching anything. The
+// dry run, the Data tab's status line and the CLI's --dry-run all go through
+// it, so none of them can describe the same plan differently.
+func planReport(plan data.SyncPlan) SyncReport {
+	rep := SyncReport{
+		Through:    plan.Through,
+		UpToDate:   plan.UpToDate,
+		Stale:      len(plan.Targets),
+		Considered: plan.UpToDate + len(plan.Targets) + len(plan.Skipped),
+		Skipped:    map[string]int{},
+		Failed:     map[string]string{},
+		DryRun:     true,
+	}
+	for _, s := range plan.Skipped {
+		rep.Skipped[skipBucket(s.Reason)]++
+	}
+	return rep
+}
+
 // runSync executes a plan, upserting each batch as it arrives. onProgress may
 // be nil. The context bounds the whole run; when it expires the report comes
 // back Incomplete rather than as an error, because the batches already stored
@@ -347,21 +366,8 @@ func runSyncTool(
 		return "ERROR: " + err.Error()
 	}
 
-	dry, _ := input["dry_run"].(bool)
-	if dry {
-		rep := SyncReport{
-			Through:    plan.Through,
-			UpToDate:   plan.UpToDate,
-			Stale:      len(plan.Targets),
-			Considered: plan.UpToDate + len(plan.Targets) + len(plan.Skipped),
-			Skipped:    map[string]int{},
-			Failed:     map[string]string{},
-			DryRun:     true,
-		}
-		for _, s := range plan.Skipped {
-			rep.Skipped[skipBucket(s.Reason)]++
-		}
-		return formatSyncReport(rep)
+	if dry, _ := input["dry_run"].(bool); dry {
+		return formatSyncReport(planReport(plan))
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, syncToolBudget)

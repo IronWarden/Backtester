@@ -32,19 +32,7 @@ func (a *App) SyncStatus(dbPath string) (SyncReport, error) {
 	if err != nil {
 		return SyncReport{}, err
 	}
-	rep := SyncReport{
-		Through:    plan.Through,
-		UpToDate:   plan.UpToDate,
-		Stale:      len(plan.Targets),
-		Considered: plan.UpToDate + len(plan.Targets) + len(plan.Skipped),
-		Skipped:    map[string]int{},
-		Failed:     map[string]string{},
-		DryRun:     true,
-	}
-	for _, s := range plan.Skipped {
-		rep.Skipped[skipBucket(s.Reason)]++
-	}
-	return rep, nil
+	return planReport(plan), nil
 }
 
 // SyncData starts a background sync of every stale ticker. It returns once

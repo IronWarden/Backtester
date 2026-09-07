@@ -1685,7 +1685,8 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   first when the user has not asked for a download outright. It is safe to
   re-run: each batch is stored as it arrives, so an interrupted sync keeps
   its work and a later call resumes from where it stopped. The user can
-  also run it from the Sync now button on the Data tab.
+  also run it from the Sync now button on the Data tab, or headlessly with
+  "ui --sync <db>".
   It does NOT refresh the $-benchmark series, the treasury-yield tables or
   economic_indicators — those come from the Python loaders
   (add_collections.py, update_treasury_yields.py), which the user must run

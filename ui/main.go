@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -12,6 +13,13 @@ import (
 var assets embed.FS
 
 func main() {
+	// `ui --sync <db>` refreshes the price data and exits without opening a
+	// window, for machines with no display and for the first sync of a newly
+	// downloaded database — which is when it is furthest behind.
+	if handled, code := runSyncCommand(os.Args[1:]); handled {
+		os.Exit(code)
+	}
+
 	// Create an instance of the app structure
 	app := NewApp()
 
