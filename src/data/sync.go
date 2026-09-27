@@ -61,18 +61,44 @@ const (
 	SkipDelisted    = "delisted"
 )
 
-// latestSession returns the most recent weekday on or before t. It is a
-// deliberately coarse stand-in for a market calendar: the sync path only needs
-// to know whether a ticker is plausibly behind, and being wrong on the ten-odd
-// exchange holidays a year costs one no-op fetch, not a wrong answer. Holidays
-// are not modelled here because the alternative — shipping a holiday table
-// that must be maintained forever — is worse than a wasted request.
+// sessionSettledHour is the New York hour after which a day's bar is treated
+// as final. The close is 16:00, but Yahoo keeps revising the day's volume and
+// adjusted close for a while after it; two hours is comfortably past that.
+const sessionSettledHour = 18
+
+// marketTZ is the exchange's clock. If the system has no tzdata, a fixed EST
+// offset stands in: during daylight time it makes the sync wait one hour
+// longer than necessary, which is the safe direction to be wrong in.
+var marketTZ = func() *time.Location {
+	if loc, err := time.LoadLocation("America/New_York"); err == nil {
+		return loc
+	}
+	return time.FixedZone("EST", -5*3600)
+}()
+
+// latestSession returns the most recent weekday session that has finished and
+// settled as of t, judged on the New York clock. A session still in progress
+// is NOT the latest session: syncing during market hours used to fetch today's
+// half-formed bar, store it as the day's close, and then count the ticker as
+// current — so the partial bar was never replaced.
+//
+// It is a deliberately coarse stand-in for a market calendar: the sync path
+// only needs to know whether a ticker is plausibly behind, and being wrong on
+// the ten-odd exchange holidays a year costs one no-op fetch, not a wrong
+// answer. Holidays are not modelled here because the alternative — shipping a
+// holiday table that must be maintained forever — is worse than a wasted
+// request.
 func latestSession(t time.Time) time.Time {
-	// Local midnight, not Truncate(24h): Truncate snaps to a boundary
+	t = t.In(marketTZ)
+	settled := t.Hour() >= sessionSettledHour
+	// Calendar midnight, not Truncate(24h): Truncate snaps to a boundary
 	// measured from the zero time in UTC, so west of Greenwich it lands on
-	// the previous local day and the whole plan aims a session too early.
+	// the previous day and the whole plan aims a session too early.
 	y, m, d := t.Date()
-	t = time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+	t = time.Date(y, m, d, 0, 0, 0, 0, marketTZ)
+	if !settled {
+		t = t.AddDate(0, 0, -1)
+	}
 	for {
 		switch t.Weekday() {
 		case time.Saturday, time.Sunday:
@@ -127,7 +153,12 @@ func PlanSync(
 				SyncSkip{Ticker: ticker, Reason: reason})
 			continue
 		}
-		if !r.Max.Before(through) {
+		// Compared as calendar days, not instants: the price table's dates
+		// come back as midnight UTC and `through` is midnight local, so an
+		// instant comparison is an offset out — west of Greenwich that made
+		// every ticker look a session behind the moment it caught up, and a
+		// freshly synced database re-fetched its whole universe.
+		if r.Max.Format(ISODate) >= plan.Through {
 			plan.UpToDate++
 			continue
 		}

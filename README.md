@@ -920,7 +920,16 @@ resumes exactly where the previous one stopped; pressing **Stop**, closing the
 app, or losing the network costs you the batch in flight and nothing else. The
 assistant's `sync_data` has a ten-minute budget for the same reason — a chat
 turn cannot block for an hour — and reports what it managed, so calling it
-again finishes the job.
+again finishes the job. The budget is also cut to end 90 seconds before the
+chat turn's own deadline, so the report always makes it back to the assistant
+instead of the turn failing with the work unreported.
+
+**Timeouts.** Each batch's download has three minutes. A batch that exceeds it
+is split in half and each half retried once, so one slow symbol or a slow
+stretch of network does not fail a hundred tickers; a half that times out again
+is reported as failed and the run carries on. A killed download is given two
+seconds to release its output before it is abandoned, so a hung worker thread
+cannot stall the run past its timeout.
 
 `sync_data` also takes `dry_run`, which reports how far behind the database is
 without downloading anything. That is what the Data tab's status line shows.
@@ -938,9 +947,26 @@ It prints one progress line per batch and the same summary the tool returns,
 exits non-zero if the run was cut short, and treats Ctrl-C the way the Stop
 button does — the batch in flight is lost, everything already stored is kept.
 
-The target session is the latest weekday on or before today. Exchange holidays
+The target session is the latest weekday session that has **finished**, on the
+New York clock: today's only from 6 pm ET, when Yahoo's daily bar has settled,
+and the previous weekday before that. Syncing during market hours used to store
+today's half-formed bar as the day's close, and because the ticker then looked
+current, no later sync ever replaced it. Exchange holidays
 are deliberately not modelled: getting one wrong costs a single no-op pass,
 and the alternative is a holiday calendar that must be maintained forever.
+
+**Rate limiting.** A full refresh is well over a hundred requests, and Yahoo
+throttles a run that fires them back to back. Two seconds separate the
+batches; a throttled batch is retried after 30 seconds, doubling, four times;
+and a batch still refused after that **stops the run** rather than spending the
+remaining batches confirming it — the report comes back `INCOMPLETE`, and a
+later run resumes from the last bar written. Nothing about this is silent: a
+symbol yfinance failed to download is reported as a failure, never as a ticker
+that simply had not traded. That distinction was worth the plumbing, because
+`yf.download` does not raise for a per-symbol failure — it records it in
+`yf.shared._ERRORS` and returns a frame without that symbol, so conflating the
+two once made a fully rate-limited sync of 7,403 tickers report itself as a
+clean run in which 5,202 tickers had nothing new.
 
 ### What sync does not cover
 

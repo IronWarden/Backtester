@@ -25,6 +25,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -70,17 +71,50 @@ const (
 	// a hundredfold at this size.
 	syncBatchSize = 100
 
-	// Per-batch subprocess timeout. Generous because it covers a hundred
-	// symbols, and a slow batch is retried by the next run rather than lost.
-	syncBatchTimeout = 180 * time.Second
-
 	// How long the assistant's sync_data call may run before it stops and
 	// reports what it managed. The UI button has no such budget: it runs
-	// until it finishes or the user cancels.
+	// until it finishes or the user cancels. The chat turn around the tool
+	// has its own, shorter deadline, so the effective budget is whichever
+	// ends first — see syncBudget.
 	syncToolBudget = 10 * time.Minute
+
+	// Held back from the chat turn's deadline so that, after the sync stops,
+	// the model still has time to receive the report and relay it. Without
+	// it a sync ran to the turn's deadline and the whole turn failed, taking
+	// the summary of the work already stored with it.
+	syncReplyReserve = 90 * time.Second
+
+	// How long a killed helper's children may keep its output pipes open
+	// before Run gives up on them. yfinance downloads on worker threads, and
+	// without a bound a timed-out batch could hang on the pipe indefinitely.
+	syncWaitDelay = 2 * time.Second
+
+	// Breathing room between batches. A full refresh is over a hundred
+	// requests, and firing them back to back is what gets the whole run
+	// throttled -- which used to be invisible, because a throttled batch came
+	// back looking like a hundred tickers that simply had not traded.
+	syncBatchPause = 2 * time.Second
+
+	// A throttled batch is retried after this long, doubling each time. Yahoo
+	// does not say how long its limit lasts, so the wait is the only lever.
+	syncRateLimitBackoff = 30 * time.Second
+
+	// How many times a throttled batch is retried before the run gives up.
+	// Giving up is the point: marching on through the remaining batches while
+	// throttled fetches nothing and deepens the limit.
+	syncRateLimitRetries = 4
 
 	syncHelperScript = "sync_prices.py"
 )
+
+// Per-batch subprocess timeout. Generous because it covers a hundred symbols;
+// a batch that still times out is split and retried once (fetchBatchResilient).
+// A var so tests can shorten it.
+var syncBatchTimeout = 180 * time.Second
+
+// errBatchTimeout marks a batch that exceeded syncBatchTimeout, as opposed to
+// one cut short by the caller's own deadline or cancellation.
+var errBatchTimeout = errors.New("batch timed out")
 
 // SyncProgress is one step of a running sync, for the UI's progress bar.
 type SyncProgress struct {
@@ -117,7 +151,7 @@ type SyncReport struct {
 	Incomplete bool   `json:"incomplete"`
 	Reason     string `json:"reason,omitempty"`
 	// Remaining counts targets never attempted, when Incomplete.
-	Remaining int `json:"remaining"`
+	Remaining int  `json:"remaining"`
 	DryRun    bool `json:"dryRun"`
 }
 
@@ -239,7 +273,30 @@ func runSync(
 			onProgress(prog)
 		}
 
-		results, err := fetchBatch(ctx, py, script, batch, end)
+		results, err, throttled := fetchBatchResilient(ctx, py, script, batch, end)
+		if ctx.Err() != nil {
+			// The run's own deadline or a Stop landed mid-batch. The batch is
+			// unattempted, not failed: nothing about its symbols went wrong,
+			// and the next run fetches it again.
+			rep.Incomplete = true
+			rep.Reason = "stopped during batch " + itoa(i+1) + " of " +
+				itoa(len(batches)) + " (" + ctxReason(ctx.Err()) + ")"
+			for _, t := range batches[i:] {
+				rep.Remaining += len(t)
+			}
+			break
+		}
+		if throttled {
+			// Every retry came back throttled. Stop rather than spend the
+			// remaining batches confirming it.
+			rep.Incomplete = true
+			rep.Reason = "Yahoo rate limited the run after " + itoa(i) +
+				" of " + itoa(len(batches)) + " batches"
+			for _, t := range batches[i:] {
+				rep.Remaining += len(t)
+			}
+			break
+		}
 		if err != nil {
 			// A whole batch failing is usually the network, not the symbols;
 			// record it against each and carry on to the next batch.
@@ -276,8 +333,109 @@ func runSync(
 		if onProgress != nil {
 			onProgress(prog)
 		}
+
+		if i < len(batches)-1 && !sleepCtx(ctx, syncBatchPause) {
+			rep.Incomplete = true
+			rep.Reason = "stopped after " + itoa(i+1) + " of " +
+				itoa(len(batches)) + " batches (" + ctxReason(ctx.Err()) + ")"
+			for _, t := range batches[i+1:] {
+				rep.Remaining += len(t)
+			}
+			break
+		}
 	}
 	return rep
+}
+
+// fetchBatchResilient is fetchBatchPatiently with one retry for a batch that
+// timed out: it is split in half and each half is fetched on its own. A
+// timeout is usually one slow symbol or a slow network stretch, and failing a
+// hundred tickers for it is the expensive answer. The split happens once, not
+// recursively, so a genuinely dead network costs at most three timeouts per
+// batch rather than a cascade of them.
+func fetchBatchResilient(
+	ctx context.Context, py, script string, batch []data.SyncTarget, end string,
+) ([]syncResult, error, bool) {
+	results, err, throttled := fetchBatchPatiently(ctx, py, script, batch, end)
+	if !errors.Is(err, errBatchTimeout) || len(batch) < 2 || ctx.Err() != nil {
+		return results, err, throttled
+	}
+
+	mid := len(batch) / 2
+	var merged []syncResult
+	for _, half := range [][]data.SyncTarget{batch[:mid], batch[mid:]} {
+		res, herr, hthrottled := fetchBatchPatiently(ctx, py, script, half, end)
+		if hthrottled {
+			return nil, herr, true
+		}
+		if herr != nil {
+			// This half failed again; name it against its own symbols so the
+			// other half's data is not thrown away with it.
+			for _, t := range half {
+				merged = append(merged, syncResult{Symbol: t.Ticker, Error: herr.Error()})
+			}
+			continue
+		}
+		merged = append(merged, res...)
+	}
+	return merged, nil, false
+}
+
+// fetchBatchPatiently is fetchBatch with a wait-and-retry for a throttled
+// response. It reports throttled only when every attempt was refused, which
+// is the caller's cue to stop the run rather than to record failures.
+func fetchBatchPatiently(
+	ctx context.Context, py, script string, batch []data.SyncTarget, end string,
+) (results []syncResult, err error, throttled bool) {
+	wait := syncRateLimitBackoff
+	for attempt := 0; ; attempt++ {
+		results, err = fetchBatch(ctx, py, script, batch, end)
+		if !rateLimited(results, err) {
+			return results, err, false
+		}
+		if attempt >= syncRateLimitRetries {
+			return nil, err, true
+		}
+		// A backoff the run's deadline will not outlast is not a retry, only
+		// a slower way to report the same limit — give up now, while the
+		// caller still has time to relay it.
+		if dl, ok := ctx.Deadline(); ok && time.Until(dl) < wait {
+			return nil, err, true
+		}
+		if !sleepCtx(ctx, wait) {
+			return nil, ctx.Err(), false
+		}
+		wait *= 2
+	}
+}
+
+// rateLimited reports whether a batch was throttled rather than answered.
+// Yahoo refuses the whole request, so a throttled batch is one where nothing
+// came back and every symbol that spoke said so.
+func rateLimited(results []syncResult, err error) bool {
+	if err != nil {
+		return strings.Contains(err.Error(), "RateLimit")
+	}
+	if len(results) == 0 {
+		return false
+	}
+	for _, r := range results {
+		if !strings.Contains(r.Error, "RateLimit") {
+			return false
+		}
+	}
+	return true
+}
+
+// sleepCtx waits for d, reporting false if the context ended first. A plain
+// time.Sleep would make Stop take up to a batch-pause to be noticed.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
+	}
 }
 
 // syncResult is one symbol's slice of the helper's JSON output. It matches
@@ -297,16 +455,23 @@ func fetchBatch(
 		args = append(args, t.Ticker)
 	}
 
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, syncBatchTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, py, args...)
 	cmd.Dir = repoRoot()
+	cmd.WaitDelay = syncWaitDelay
 	stdout, stderr := &strings.Builder{}, &strings.Builder{}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 
 	if err := cmd.Run(); err != nil {
+		if perr := parent.Err(); perr != nil {
+			// The run was stopped or ran out of budget; that is not this
+			// batch's fault and must not be reported as its timeout.
+			return nil, perr
+		}
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("batch timed out after %s", syncBatchTimeout)
+			return nil, fmt.Errorf("%w after %s", errBatchTimeout, syncBatchTimeout)
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if len(msg) > 200 {
@@ -370,7 +535,12 @@ func runSyncTool(
 		return formatSyncReport(planReport(plan))
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, syncToolBudget)
+	budget := syncBudget(ctx, time.Now())
+	if budget <= 0 {
+		return "ERROR: not enough time left in this chat turn to sync; " +
+			"ask again, or use the Sync now button on the Data tab"
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	rep := runSync(ctx, plan, nil)
 
@@ -383,6 +553,19 @@ func runSyncTool(
 		}
 	}
 	return formatSyncReport(rep)
+}
+
+// syncBudget is how long the assistant's sync may run: syncToolBudget, cut
+// down to end syncReplyReserve before the caller's own deadline. A result of
+// zero or less means there is no time to start.
+func syncBudget(ctx context.Context, now time.Time) time.Duration {
+	budget := syncToolBudget
+	if dl, ok := ctx.Deadline(); ok {
+		if left := dl.Sub(now) - syncReplyReserve; left < budget {
+			budget = left
+		}
+	}
+	return budget
 }
 
 // syncPreview renders the tool-note chip.

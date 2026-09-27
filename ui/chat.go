@@ -1684,8 +1684,10 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   SPECIFIC missing or stale ticker — check with query_db — then confirm the
   stored range before building the config. It cannot fetch the $-benchmark
   series (those are built locally).
-- The sync_data tool brings EVERY tradable ticker up to the latest trading
-  session in one call. Use it, not a loop of fetch_history calls, whenever
+- The sync_data tool brings EVERY tradable ticker up to the latest COMPLETED
+  trading session in one call — today's session only counts from 6 pm ET, so
+  during market hours "current" means through the previous weekday, and
+  that is correct, not a stale database. Use it, not a loop of fetch_history calls, whenever
   the database is broadly behind — it fetches only each ticker's missing
   tail and batches ~100 symbols per request, so it is orders of magnitude
   faster. Delisted symbols and $-benchmark series are skipped and reported.
@@ -1695,6 +1697,12 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   its work and a later call resumes from where it stopped. The user can
   also run it from the Sync now button on the Data tab, or headlessly with
   "ui --sync <db>".
+  Yahoo throttles a long run: the batches are paced, a throttled one is
+  retried with a doubling backoff, and a run still refused stops and comes
+  back INCOMPLETE. Read that report honestly when you relay it — "N failed"
+  means those tickers did NOT update, and "had not traded since their last
+  bar" means only that. If a run comes back INCOMPLETE, say so and offer to
+  run it again later rather than describing the database as current.
   It does NOT refresh the $-benchmark series, the treasury-yield tables or
   economic_indicators — those come from the Python loaders
   (add_collections.py, update_treasury_yields.py), which the user must run

@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"my-backtester/src/data"
 )
@@ -188,7 +191,12 @@ func TestRunSyncToolLive(t *testing.T) {
 	}
 
 	out := runSyncTool(context.Background(), dbPath, map[string]any{}, nil)
-	if strings.Contains(out, "helper failed") || strings.Contains(out, "timed out") {
+	// A throttled Yahoo is the network being unavailable, not a regression —
+	// and since sync_prices.py started reporting a rate limit as the error it
+	// is, rather than as an empty result, it arrives here in words.
+	if strings.Contains(out, "helper failed") ||
+		strings.Contains(out, "timed out") ||
+		strings.Contains(out, "RateLimit") {
 		t.Skipf("network/helper unavailable: %s", out)
 	}
 	if !strings.Contains(out, "Updated 1 ticker ") {
@@ -250,5 +258,159 @@ func TestPlanReportCountsWithoutFetching(t *testing.T) {
 	if rep.Skipped[data.SkipDelisted] != 2 {
 		t.Errorf("delisted tally = %d, want 2 collapsed from two dates",
 			rep.Skipped[data.SkipDelisted])
+	}
+}
+
+// A throttled batch used to be indistinguishable from a hundred tickers that
+// had not traded, which is how a rate-limited run reported itself as a clean
+// sync that found nothing to do.
+func TestRateLimitedRecognizesAThrottledBatch(t *testing.T) {
+	limit := "download failed: YFRateLimitError('Too Many Requests...')"
+	cases := []struct {
+		name    string
+		results []syncResult
+		err     error
+		want    bool
+	}{
+		{"every symbol throttled", []syncResult{
+			{Symbol: "AAPL", Error: limit}, {Symbol: "MSFT", Error: limit},
+		}, nil, true},
+		{"the request itself throttled", nil,
+			errors.New("helper failed: YFRateLimitError"), true},
+		{"one symbol answered", []syncResult{
+			{Symbol: "AAPL", Error: limit},
+			{Symbol: "MSFT", Rows: [][]any{{"2026-09-11", 1.0, 1.0, 1.0, 1.0, 1.0}}},
+		}, nil, false},
+		{"genuinely nothing new", []syncResult{
+			{Symbol: "AAPL"}, {Symbol: "MSFT"},
+		}, nil, false},
+		{"an unrelated failure", []syncResult{
+			{Symbol: "AAPL", Error: "no data (delisted?)"},
+		}, nil, false},
+		{"nothing came back", nil, nil, false},
+	}
+	for _, tc := range cases {
+		if got := rateLimited(tc.results, tc.err); got != tc.want {
+			t.Errorf("%s: rateLimited = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A chat turn has its own deadline. A sync that ran to it failed the whole
+// turn and lost the report of what it had stored, so the tool's budget must
+// end early enough for the reply to be sent.
+func TestSyncBudgetLeavesTimeToReply(t *testing.T) {
+	now := time.Now()
+
+	if got := syncBudget(context.Background(), now); got != syncToolBudget {
+		t.Errorf("no deadline: budget = %s, want %s", got, syncToolBudget)
+	}
+
+	ctx, cancel := context.WithDeadline(context.Background(), now.Add(5*time.Minute))
+	defer cancel()
+	want := 5*time.Minute - syncReplyReserve
+	if got := syncBudget(ctx, now); got != want {
+		t.Errorf("5m turn: budget = %s, want %s", got, want)
+	}
+
+	short, cancel2 := context.WithDeadline(context.Background(), now.Add(30*time.Second))
+	defer cancel2()
+	if got := syncBudget(short, now); got > 0 {
+		t.Errorf("30s left: budget = %s, want none", got)
+	}
+}
+
+// fakeHelper writes a shell script standing in for sync_prices.py. Called as
+// `sh script --start S --end E SYM...`, so $# is 4 plus the symbol count.
+func fakeHelper(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "helper.sh")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func targets(syms ...string) []data.SyncTarget {
+	out := make([]data.SyncTarget, len(syms))
+	for i, s := range syms {
+		out[i] = data.SyncTarget{Ticker: s, Start: "2026-09-10"}
+	}
+	return out
+}
+
+// A batch that times out is split and retried rather than failed wholesale,
+// and a killed helper whose child still holds the output pipe must not hang
+// the run past the timeout.
+func TestFetchBatchResilientSplitsATimedOutBatch(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not on PATH")
+	}
+	old := syncBatchTimeout
+	syncBatchTimeout = 500 * time.Millisecond
+	defer func() { syncBatchTimeout = old }()
+
+	// Two or more symbols hang (in a child that keeps stdout open); one
+	// symbol answers straight away.
+	script := fakeHelper(t, `if [ $# -gt 5 ]; then sleep 30; fi
+printf '{"results":[{"symbol":"%s","rows":[["2026-09-11",1,1,1,1,1]]}]}' "$5"
+`)
+
+	start := time.Now()
+	results, err, throttled := fetchBatchResilient(
+		context.Background(), "sh", script, targets("AAA", "BBB"), "2026-09-12")
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Errorf("took %s — the hung child held the run past its timeout", elapsed)
+	}
+	if err != nil || throttled {
+		t.Fatalf("err = %v, throttled = %v; want the split halves to succeed", err, throttled)
+	}
+	if len(results) != 2 || results[0].Symbol != "AAA" || results[1].Symbol != "BBB" {
+		t.Fatalf("results = %+v, want AAA and BBB from the two halves", results)
+	}
+	for _, r := range results {
+		if r.Error != "" || len(r.Rows) != 1 {
+			t.Errorf("%s: %+v, want one row and no error", r.Symbol, r)
+		}
+	}
+}
+
+// A stop or an exhausted budget during a batch is the run ending, not the
+// batch timing out, and must not be reported as one.
+func TestFetchBatchReportsTheCallersDeadlineNotATimeout(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not on PATH")
+	}
+	script := fakeHelper(t, "sleep 30\n")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	_, err := fetchBatch(ctx, "sh", script, targets("AAA"), "2026-09-12")
+	if errors.Is(err, errBatchTimeout) {
+		t.Errorf("err = %v, want the caller's deadline, not a batch timeout", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v, want context.DeadlineExceeded", err)
+	}
+}
+
+// A rate-limit backoff longer than the time left is not worth sleeping
+// through: the run gives up at once, while there is still time to say why.
+func TestFetchBatchPatientlyDoesNotSleepPastTheDeadline(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not on PATH")
+	}
+	script := fakeHelper(t,
+		`printf '{"results":[{"symbol":"%s","error":"YFRateLimitError"}]}' "$5"`+"\n")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	_, _, throttled := fetchBatchPatiently(ctx, "sh", script, targets("AAA"), "2026-09-12")
+	if !throttled {
+		t.Error("throttled = false, want the limit reported")
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Errorf("took %s — slept into a backoff the deadline could not outlast", elapsed)
 	}
 }

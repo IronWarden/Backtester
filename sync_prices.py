@@ -23,6 +23,13 @@ stock_data_optimized's conventions. A symbol with no new sessions in the range
 comes back with an empty "rows" list, which is a normal, non-error outcome:
 a ticker that has not traded since its last bar has nothing to add.
 
+A symbol yfinance FAILED to download comes back as an error, not as empty
+rows. yf.download does not raise for a per-symbol failure -- it records it in
+yf.shared._ERRORS and hands back a frame without that symbol -- so the two
+outcomes are indistinguishable in the frame alone. Conflating them is not a
+cosmetic problem: a rate-limited batch then reports every symbol in it as
+"has not traded", and the caller records a clean sync that fetched nothing.
+
 Exit codes: 0 when the JSON contract was printed (even if every symbol
 failed); 2 for usage errors or missing dependencies.
 """
@@ -120,6 +127,10 @@ def main() -> int:
         print(json.dumps({"results": []}))
         return 0
 
+    # Cleared first: _ERRORS is module-level state that survives across
+    # calls, and a stale entry would condemn a symbol this batch fetched fine.
+    getattr(yf.shared, "_ERRORS", {}).clear()
+
     try:
         df = yf.download(
             symbols,
@@ -135,18 +146,31 @@ def main() -> int:
         ]}))
         return 0
 
+    # Per-symbol failures yfinance swallowed: rate limits, delisted symbols,
+    # transient HTTP errors. Reported so the caller can retry them rather than
+    # filing them as tickers that simply did not trade.
+    errors = dict(getattr(yf.shared, "_ERRORS", {}) or {})
+
     results = []
     for symbol in symbols:
-        if df is None or df.empty:
-            results.append({"symbol": symbol, "rows": []})
-            continue
-        try:
+        rows = []
+        if df is not None and not df.empty:
+            try:
+                rows = rows_for(frame_for(df, symbol))
+            except Exception as e:
+                results.append({"symbol": symbol, "error": f"parse failed: {e}"})
+                continue
+        # Rows win over a recorded error: yfinance files some non-fatal
+        # complaints against symbols it nonetheless returned data for, and
+        # data in hand is not a failed fetch. An error only speaks when there
+        # is nothing to show for the symbol.
+        if not rows and symbol in errors:
             results.append({
                 "symbol": symbol,
-                "rows": rows_for(frame_for(df, symbol)),
+                "error": f"download failed: {errors[symbol]}",
             })
-        except Exception as e:
-            results.append({"symbol": symbol, "error": f"parse failed: {e}"})
+            continue
+        results.append({"symbol": symbol, "rows": rows})
 
     print(json.dumps({"results": results}))
     return 0

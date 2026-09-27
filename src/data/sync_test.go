@@ -13,7 +13,7 @@ func TestLatestSessionSkipsTheWeekend(t *testing.T) {
 		"2026-09-13": "2026-09-11", // Sunday   -> Friday
 	}
 	for in, want := range cases {
-		if got := latestSession(day(in)).Format(ISODate); got != want {
+		if got := latestSession(afterClose(in)).Format(ISODate); got != want {
 			t.Errorf("latestSession(%s) = %s, want %s", in, got, want)
 		}
 	}
@@ -23,7 +23,7 @@ func TestPlanSyncStartsTheDayAfterTheLastBar(t *testing.T) {
 	ranges := map[string]DateRange{
 		"AAPL": {Min: day("2010-06-17"), Max: day("2026-07-02")},
 	}
-	plan := PlanSync(ranges, nil, day("2026-09-07"))
+	plan := PlanSync(ranges, nil, afterClose("2026-09-07"))
 
 	if len(plan.Targets) != 1 {
 		t.Fatalf("targets = %+v, want exactly one", plan.Targets)
@@ -41,7 +41,7 @@ func TestPlanSyncCountsACurrentTickerAsUpToDate(t *testing.T) {
 		"AAPL": {Min: day("2010-06-17"), Max: day("2026-09-07")},
 		"MSFT": {Min: day("2010-06-17"), Max: day("2026-09-08")}, // ahead of asOf
 	}
-	plan := PlanSync(ranges, nil, day("2026-09-07"))
+	plan := PlanSync(ranges, nil, afterClose("2026-09-07"))
 
 	if len(plan.Targets) != 0 {
 		t.Errorf("targets = %+v, want none", plan.Targets)
@@ -57,7 +57,7 @@ func TestPlanSyncSkipsLocalSeriesAndGenerationSymbols(t *testing.T) {
 		"COR.1":  {Min: day("1998-01-02"), Max: day("2010-04-15")},
 		"COR":    {Min: day("2010-05-03"), Max: day("2026-07-02")},
 	}
-	plan := PlanSync(ranges, nil, day("2026-09-07"))
+	plan := PlanSync(ranges, nil, afterClose("2026-09-07"))
 
 	if len(plan.Targets) != 1 || plan.Targets[0].Ticker != "COR" {
 		t.Fatalf("targets = %+v, want only COR", plan.Targets)
@@ -101,7 +101,7 @@ func TestPlanSyncSkipsDelistedButNotRenamed(t *testing.T) {
 		"AAPL": {Ticker: "AAPL", Verdict: CoverageUnknown},
 	}
 
-	plan := PlanSync(ranges, coverage, day("2026-09-07"))
+	plan := PlanSync(ranges, coverage, afterClose("2026-09-07"))
 
 	got := map[string]bool{}
 	for _, tgt := range plan.Targets {
@@ -130,7 +130,7 @@ func TestPlanSyncWithoutARegistrySkipsNothingAsDead(t *testing.T) {
 		"DEAD": {Min: day("1998-01-02"), Max: day("2019-04-15")},
 		"AAPL": {Min: day("2010-06-17"), Max: day("2026-07-02")},
 	}
-	plan := PlanSync(ranges, nil, day("2026-09-07"))
+	plan := PlanSync(ranges, nil, afterClose("2026-09-07"))
 	if len(plan.Targets) != 2 {
 		t.Errorf("targets = %+v, want both tickers", plan.Targets)
 	}
@@ -179,17 +179,78 @@ func TestSyncBatchesTreatsAZeroSizeAsOne(t *testing.T) {
 	}
 }
 
+// afterClose is the evening of a date on the New York clock, when that day's
+// session has settled and is therefore the latest one a sync can obtain.
+func afterClose(s string) time.Time {
+	y, m, d := day(s).Date()
+	return time.Date(y, m, d, 20, 0, 0, 0, marketTZ)
+}
+
 // A time zone west of Greenwich must not push the target session back a day.
-// Truncate(24h) snaps to a UTC boundary, so a Monday afternoon in New York
+// Truncate(24h) snaps to a UTC boundary, so a Monday evening in New York
 // truncated that way lands on Sunday and plans a sync that stops at Friday —
 // silently leaving Monday's bar out of every ticker.
-func TestLatestSessionUsesTheLocalDate(t *testing.T) {
+func TestLatestSessionUsesTheMarketDate(t *testing.T) {
 	ny, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Skip("no tzdata")
 	}
-	afternoon := time.Date(2026, 9, 7, 15, 52, 0, 0, ny) // a Monday
-	if got := latestSession(afternoon).Format(ISODate); got != "2026-09-07" {
-		t.Errorf("latestSession = %s, want 2026-09-07 (the same local day)", got)
+	evening := time.Date(2026, 9, 7, 19, 52, 0, 0, ny) // a Monday
+	if got := latestSession(evening).Format(ISODate); got != "2026-09-07" {
+		t.Errorf("latestSession = %s, want 2026-09-07 (the same market day)", got)
+	}
+	// 00:30 UTC Tuesday is still Monday evening on the exchange's clock.
+	utc := time.Date(2026, 9, 8, 0, 30, 0, 0, time.UTC)
+	if got := latestSession(utc).Format(ISODate); got != "2026-09-07" {
+		t.Errorf("latestSession(UTC) = %s, want 2026-09-07", got)
+	}
+}
+
+// A session still trading is not a session a sync can have. Yahoo serves the
+// half-formed bar for today, and once stored it made the ticker look current,
+// so the partial close was never replaced by the real one.
+func TestLatestSessionExcludesAnUnfinishedSession(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no tzdata")
+	}
+	cases := []struct {
+		at   time.Time
+		want string
+	}{
+		{time.Date(2026, 9, 14, 10, 4, 0, 0, ny), "2026-09-11"},  // Monday, open -> Friday
+		{time.Date(2026, 9, 14, 16, 30, 0, 0, ny), "2026-09-11"}, // closed, not settled
+		{time.Date(2026, 9, 14, 18, 0, 0, 0, ny), "2026-09-14"},  // settled
+		{time.Date(2026, 9, 9, 9, 0, 0, 0, ny), "2026-09-08"},    // Wednesday premarket
+	}
+	for _, tc := range cases {
+		if got := latestSession(tc.at).Format(ISODate); got != tc.want {
+			t.Errorf("latestSession(%s) = %s, want %s",
+				tc.at.Format(time.RFC3339), got, tc.want)
+		}
+	}
+}
+
+// The price table hands back midnight UTC and the clock is local, so the two
+// sides of the staleness test used to be an offset apart: west of Greenwich
+// every ticker looked a session behind the moment it had caught up, and a
+// synced database re-fetched its whole universe on the next run.
+func TestPlanSyncComparesCalendarDaysNotInstants(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no tzdata")
+	}
+	ranges := map[string]DateRange{
+		// As TickerDateRanges returns it: midnight UTC on the last session.
+		"AAPL": {Min: day("2010-06-17"), Max: day("2026-09-11")},
+	}
+	plan := PlanSync(ranges, nil, time.Date(2026, 9, 11, 19, 30, 0, 0, ny))
+
+	if len(plan.Targets) != 0 {
+		t.Errorf("targets = %+v, want none — AAPL already has %s",
+			plan.Targets, plan.Through)
+	}
+	if plan.UpToDate != 1 {
+		t.Errorf("upToDate = %d, want 1", plan.UpToDate)
 	}
 }
