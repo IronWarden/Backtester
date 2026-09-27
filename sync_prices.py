@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fetch one batch of symbols' recent OHLCV from yfinance and print it as JSON.
 
-Companion to the UI's sync_data feature. Like fetch_history.py -- and unlike
-add_ticker.py -- this script never opens the DuckDB, because the running UI
+Companion to `ui --sync <db>`. Like fetch_history.py -- and unlike
+add_ticker.py -- this script never opens the DuckDB, because the Go side
 holds the write lock; it only downloads and normalizes, printing one JSON
 object to stdout. The Go side performs the upsert through its own handle.
 

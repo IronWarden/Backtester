@@ -153,11 +153,6 @@ func anthropicTools() []map[string]any {
 			"description":  screenStocksToolDescription,
 			"input_schema": screenStocksToolSchema(),
 		},
-		{
-			"name":         syncDataToolName,
-			"description":  syncDataToolDescription,
-			"input_schema": syncDataToolSchema(),
-		},
 	}
 }
 
@@ -396,9 +391,6 @@ func anthropicChat(
 			case screenStocksToolName:
 				em.tool("screen_stocks: " + screenPreview(tu.Input))
 				out = runScreenTool(ctx, tu.Input)
-			case syncDataToolName:
-				em.tool("sync_data: " + syncPreview(tu.Input))
-				out = runSyncTool(ctx, dbPath, tu.Input, em)
 			default:
 				out = fmt.Sprintf("ERROR: unknown tool %q", tu.Name)
 			}

@@ -769,42 +769,6 @@ export namespace main {
 		}
 	}
 	
-	export class SyncReport {
-	    through: string;
-	    considered: number;
-	    upToDate: number;
-	    stale: number;
-	    updated: number;
-	    noNewBars: number;
-	    rows: number;
-	    skipped: Record<string, number>;
-	    failed: Record<string, string>;
-	    incomplete: boolean;
-	    reason?: string;
-	    remaining: number;
-	    dryRun: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new SyncReport(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.through = source["through"];
-	        this.considered = source["considered"];
-	        this.upToDate = source["upToDate"];
-	        this.stale = source["stale"];
-	        this.updated = source["updated"];
-	        this.noNewBars = source["noNewBars"];
-	        this.rows = source["rows"];
-	        this.skipped = source["skipped"];
-	        this.failed = source["failed"];
-	        this.incomplete = source["incomplete"];
-	        this.reason = source["reason"];
-	        this.remaining = source["remaining"];
-	        this.dryRun = source["dryRun"];
-	    }
-	}
 
 }
 

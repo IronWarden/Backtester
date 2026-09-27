@@ -13,28 +13,10 @@ import (
 	"my-backtester/src/data"
 )
 
-func TestRunSyncToolRefusesWithoutADatabase(t *testing.T) {
-	got := runSyncTool(context.Background(), "", map[string]any{}, nil)
-	if !strings.Contains(got, "no database chosen") {
-		t.Errorf("runSyncTool = %q, want it to name the missing database", got)
-	}
-}
-
-func TestSyncPreview(t *testing.T) {
-	cases := []struct {
-		name string
-		in   map[string]any
-		want string
-	}{
-		{"default", map[string]any{}, "every stale ticker"},
-		{"dry run", map[string]any{"dry_run": true}, "check what is stale"},
-		{"symbols", map[string]any{"symbols": []any{"tsla", "NVDA"}},
-			"TSLA, NVDA"},
-	}
-	for _, tc := range cases {
-		if got := syncPreview(tc.in); got != tc.want {
-			t.Errorf("%s: syncPreview = %q, want %q", tc.name, got, tc.want)
-		}
+func TestPlanSyncRefusesWithoutADatabase(t *testing.T) {
+	_, err := planSync("", nil)
+	if err == nil || !strings.Contains(err.Error(), "no database chosen") {
+		t.Errorf("planSync(\"\") err = %v, want it to name the missing database", err)
 	}
 }
 
@@ -168,9 +150,9 @@ func TestRunSyncStopsOnACancelledContext(t *testing.T) {
 	}
 }
 
-// Live end-to-end: seed a throwaway DB with a stale ticker, sync it, and
-// check the tail actually arrived.
-func TestRunSyncToolLive(t *testing.T) {
+// Live end-to-end: seed a throwaway DB with a stale ticker, sync it the way
+// `ui --sync` does, and check the tail actually arrived.
+func TestRunSyncLive(t *testing.T) {
 	if testing.Short() {
 		t.Skip("live network test")
 	}
@@ -190,7 +172,11 @@ func TestRunSyncToolLive(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	out := runSyncTool(context.Background(), dbPath, map[string]any{}, nil)
+	plan, err := planSync(dbPath, nil)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	out := formatSyncReport(runSync(context.Background(), plan, nil))
 	// A throttled Yahoo is the network being unavailable, not a regression —
 	// and since sync_prices.py started reporting a rate limit as the error it
 	// is, rather than as an empty result, it arrives here in words.
@@ -293,30 +279,6 @@ func TestRateLimitedRecognizesAThrottledBatch(t *testing.T) {
 		if got := rateLimited(tc.results, tc.err); got != tc.want {
 			t.Errorf("%s: rateLimited = %v, want %v", tc.name, got, tc.want)
 		}
-	}
-}
-
-// A chat turn has its own deadline. A sync that ran to it failed the whole
-// turn and lost the report of what it had stored, so the tool's budget must
-// end early enough for the reply to be sent.
-func TestSyncBudgetLeavesTimeToReply(t *testing.T) {
-	now := time.Now()
-
-	if got := syncBudget(context.Background(), now); got != syncToolBudget {
-		t.Errorf("no deadline: budget = %s, want %s", got, syncToolBudget)
-	}
-
-	ctx, cancel := context.WithDeadline(context.Background(), now.Add(5*time.Minute))
-	defer cancel()
-	want := 5*time.Minute - syncReplyReserve
-	if got := syncBudget(ctx, now); got != want {
-		t.Errorf("5m turn: budget = %s, want %s", got, want)
-	}
-
-	short, cancel2 := context.WithDeadline(context.Background(), now.Add(30*time.Second))
-	defer cancel2()
-	if got := syncBudget(short, now); got > 0 {
-		t.Errorf("30s left: budget = %s, want none", got)
 	}
 }
 

@@ -45,14 +45,6 @@ export function RunUserQuery(arg1:string,arg2:string):Promise<main.QueryResult>;
 
 export function SaveClaudeKey(arg1:string):Promise<void>;
 
-export function StopSync():Promise<void>;
-
-export function SyncData(arg1:string):Promise<void>;
-
-export function SyncStatus(arg1:string):Promise<main.SyncReport>;
-
-export function SyncSummary(arg1:main.SyncReport):Promise<string>;
-
 export function TickerDateRanges(arg1:string):Promise<Record<string, Array<string>>>;
 
 export function TickerNames(arg1:string):Promise<Record<string, string>>;

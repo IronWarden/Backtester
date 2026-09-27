@@ -1,14 +1,14 @@
 package main
 
-// sync_data: bring every tradable ticker in the price table up to the latest
-// session, in one action.
+// Price sync: bring every tradable ticker in the price table up to the latest
+// finished session, in one action. Run headless as `ui --sync <db>` (see
+// synccmd.go); the app itself no longer offers it, from the Data tab or the
+// assistant.
 //
 // The fetch_history tool refreshes up to three symbols per call and defaults
 // to full history. That is right for "add TSLA", and hopeless for "the
-// database is two months behind": ten thousand tickers is three thousand tool
-// calls, and the assistant reliably gives up or times out partway through.
-// This path exists so that keeping the data current is one operation rather
-// than a loop the model has to drive.
+// database is two months behind": ten thousand tickers is three thousand
+// calls. This path makes keeping the data current one operation.
 //
 // Two properties do the work:
 //
@@ -35,54 +35,12 @@ import (
 	"my-backtester/src/data"
 )
 
-const syncDataToolName = "sync_data"
-
-const syncDataToolDescription = "Bring every tradable ticker in the " +
-	"database up to the latest trading session in one call. Fetches only " +
-	"each ticker's missing tail, batched, so it is far faster than repeated " +
-	"fetch_history calls — use this, not fetch_history, when the database " +
-	"is broadly stale. Delisted symbols and locally-built $-prefixed " +
-	"benchmark series are skipped. Safe to re-run: it resumes where it " +
-	"stopped. Set dry_run to report what is stale without downloading."
-
-func syncDataToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"dry_run": map[string]any{
-				"type": "boolean",
-				"description": "Report how many tickers are stale and " +
-					"through what date, without fetching anything.",
-			},
-			"symbols": map[string]any{
-				"type":  "array",
-				"items": map[string]any{"type": "string"},
-				"description": "Restrict the sync to these tickers. Omit " +
-					"to sync every stale ticker in the database.",
-			},
-		},
-	}
-}
-
 const (
 	// One request carries this many symbols. Yahoo accepts more, but a larger
 	// batch means a longer window in which a single network failure loses
 	// everything in flight, and the per-request overhead is already amortized
 	// a hundredfold at this size.
 	syncBatchSize = 100
-
-	// How long the assistant's sync_data call may run before it stops and
-	// reports what it managed. The UI button has no such budget: it runs
-	// until it finishes or the user cancels. The chat turn around the tool
-	// has its own, shorter deadline, so the effective budget is whichever
-	// ends first — see syncBudget.
-	syncToolBudget = 10 * time.Minute
-
-	// Held back from the chat turn's deadline so that, after the sync stops,
-	// the model still has time to receive the report and relay it. Without
-	// it a sync ran to the turn's deadline and the whole turn failed, taking
-	// the summary of the work already stored with it.
-	syncReplyReserve = 90 * time.Second
 
 	// How long a killed helper's children may keep its output pipes open
 	// before Run gives up on them. yfinance downloads on worker threads, and
@@ -192,8 +150,8 @@ func planSync(dbPath string, symbols []string) (data.SyncPlan, error) {
 }
 
 // planReport renders a plan as a SyncReport without fetching anything. The
-// dry run, the Data tab's status line and the CLI's --dry-run all go through
-// it, so none of them can describe the same plan differently.
+// CLI's --dry-run goes through it, as does the live run's opening tally, so
+// the two cannot describe the same plan differently.
 func planReport(plan data.SyncPlan) SyncReport {
 	rep := SyncReport{
 		Through:    plan.Through,
@@ -520,73 +478,7 @@ func plural(n int, word string) string {
 	return word + "s"
 }
 
-// runSyncTool is the assistant's entry point: plan, fetch within a budget,
-// and render the outcome as text the model can relay.
-func runSyncTool(
-	ctx context.Context, dbPath string, input map[string]any, em *chatEmitter,
-) string {
-	symbols := quoteSymbols(asAnySlice(input["symbols"]))
-	plan, err := planSync(dbPath, symbols)
-	if err != nil {
-		return "ERROR: " + err.Error()
-	}
-
-	if dry, _ := input["dry_run"].(bool); dry {
-		return formatSyncReport(planReport(plan))
-	}
-
-	budget := syncBudget(ctx, time.Now())
-	if budget <= 0 {
-		return "ERROR: not enough time left in this chat turn to sync; " +
-			"ask again, or use the Sync now button on the Data tab"
-	}
-	ctx, cancel := context.WithTimeout(ctx, budget)
-	defer cancel()
-	rep := runSync(ctx, plan, nil)
-
-	if rep.Updated > 0 {
-		// The system prompt's DB overview and the frontend's ticker list are
-		// both stale now.
-		dbOverviewCache.Delete(dbPath)
-		if em != nil {
-			em.dbChanged()
-		}
-	}
-	return formatSyncReport(rep)
-}
-
-// syncBudget is how long the assistant's sync may run: syncToolBudget, cut
-// down to end syncReplyReserve before the caller's own deadline. A result of
-// zero or less means there is no time to start.
-func syncBudget(ctx context.Context, now time.Time) time.Duration {
-	budget := syncToolBudget
-	if dl, ok := ctx.Deadline(); ok {
-		if left := dl.Sub(now) - syncReplyReserve; left < budget {
-			budget = left
-		}
-	}
-	return budget
-}
-
-// syncPreview renders the tool-note chip.
-func syncPreview(input map[string]any) string {
-	if dry, _ := input["dry_run"].(bool); dry {
-		return "check what is stale"
-	}
-	if syms := quoteSymbols(asAnySlice(input["symbols"])); len(syms) > 0 {
-		return strings.Join(syms, ", ")
-	}
-	return "every stale ticker"
-}
-
-// asAnySlice normalizes an optional JSON array argument, which is absent as
-// nil rather than as an empty slice.
-func asAnySlice(v any) []any {
-	s, _ := v.([]any)
-	return s
-}
-
-// formatSyncReport renders a report as the text the assistant sees and relays.
+// formatSyncReport renders a report as the text `ui --sync` prints.
 func formatSyncReport(rep SyncReport) string {
 	var b strings.Builder
 
@@ -624,7 +516,7 @@ func formatSyncReport(rep SyncReport) string {
 		}
 		if rep.Incomplete {
 			fmt.Fprintf(&b, "INCOMPLETE: %s. %d tickers were not attempted — "+
-				"everything fetched so far is stored, and running sync_data "+
+				"everything fetched so far is stored, and running ui --sync "+
 				"again resumes from here.\n", rep.Reason, rep.Remaining)
 		}
 		if rep.Updated > 0 {
@@ -632,7 +524,7 @@ func formatSyncReport(rep SyncReport) string {
 				"and query_db.\n")
 		}
 	} else if rep.Stale > 0 {
-		b.WriteString("Run sync_data without dry_run to fetch them.\n")
+		b.WriteString("Run ui --sync without --dry-run to fetch them.\n")
 	}
 
 	return strings.TrimRight(b.String(), "\n")

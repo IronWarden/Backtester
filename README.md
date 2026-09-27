@@ -889,10 +889,20 @@ used to mean asking the assistant, which drives `fetch_history` three symbols
 at a time — fine for one ticker, hopeless for ten thousand — or running
 `add_ticker.py` in a loop with the app closed.
 
-**Sync now**, on the Data tab, refreshes every tradable ticker in one action.
-The assistant has the same thing as the `sync_data` tool, so "bring the
-database up to date" is one call rather than a loop it has to drive and
-invariably abandons partway.
+`ui --sync <db>` refreshes every tradable ticker in one command. It is a
+terminal step, run with the app **closed** — DuckDB is single-writer, and the
+app holds the database while it is open. There is no sync button in the app
+and no sync tool for the assistant; both were removed so refreshing the data
+is a deliberate step rather than something that happens mid-session.
+
+```bash
+ui --sync /path/to/stock_data.db --dry-run   # how far behind is it?
+ui --sync /path/to/stock_data.db             # bring it up to date
+```
+
+It prints one progress line per batch and a summary, exits non-zero if the run
+was cut short, and treats Ctrl-C as a clean stop — the batch in flight is
+lost, everything already stored is kept.
 
 Two things make a full refresh affordable:
 
@@ -916,13 +926,8 @@ and the company is still trading — skipping it would freeze 74 live tickers.
 
 Each batch is written as it arrives, so **an interrupted sync keeps its work**.
 Because the next run derives its plan from the database's own last bars, it
-resumes exactly where the previous one stopped; pressing **Stop**, closing the
-app, or losing the network costs you the batch in flight and nothing else. The
-assistant's `sync_data` has a ten-minute budget for the same reason — a chat
-turn cannot block for an hour — and reports what it managed, so calling it
-again finishes the job. The budget is also cut to end 90 seconds before the
-chat turn's own deadline, so the report always makes it back to the assistant
-instead of the turn failing with the work unreported.
+resumes exactly where the previous one stopped; Ctrl-C or losing the network
+costs you the batch in flight and nothing else.
 
 **Timeouts.** Each batch's download has three minutes. A batch that exceeds it
 is split in half and each half retried once, so one slow symbol or a slow
@@ -930,22 +935,6 @@ stretch of network does not fail a hundred tickers; a half that times out again
 is reported as failed and the run carries on. A killed download is given two
 seconds to release its output before it is abandoned, so a hung worker thread
 cannot stall the run past its timeout.
-
-`sync_data` also takes `dry_run`, which reports how far behind the database is
-without downloading anything. That is what the Data tab's status line shows.
-
-The same thing runs headlessly, for a machine with no display and for the
-first sync of a freshly downloaded database — which is when it is furthest
-behind:
-
-```bash
-ui --sync /path/to/stock_data.db --dry-run   # how far behind is it?
-ui --sync /path/to/stock_data.db             # bring it up to date
-```
-
-It prints one progress line per batch and the same summary the tool returns,
-exits non-zero if the run was cut short, and treats Ctrl-C the way the Stop
-button does — the batch in flight is lost, everything already stored is kept.
 
 The target session is the latest weekday session that has **finished**, on the
 New York clock: today's only from 6 pm ET, when Yahoo's daily bar has settled,
@@ -970,9 +959,8 @@ clean run in which 5,202 tickers had nothing new.
 
 ### What sync does not cover
 
-`sync_data` refreshes the **price table only**. These still need their Python
-loaders, run with the app closed — DuckDB is single-writer and the UI holds
-the write lock:
+`ui --sync` refreshes the **price table only**. These still need their Python
+loaders, also run with the app closed:
 
 | Stale thing | Loader |
 | --- | --- |
@@ -989,10 +977,9 @@ past the last CPI reading the same way.
 
 Implementation: `src/data/sync.go` (the pure plan — what to fetch, from when,
 and what to leave alone), `sync_prices.py` (the batched download; like
-`fetch_history.py` it never opens the DuckDB, because the UI holds the lock),
-`ui/sync.go` (orchestration and the assistant tool), `ui/app_sync.go` (the
-bound methods and progress events), `ui/synccmd.go` (the `--sync` flag),
-`ui/frontend/src/SyncPanel.tsx` (the Data tab strip).
+`fetch_history.py` it never opens the DuckDB; the Go side holds the lock),
+`ui/sync.go` (orchestration, pacing and retries), `ui/synccmd.go` (the
+`--sync` flag).
 
 ## Configuration
 
@@ -2659,8 +2646,8 @@ open (even unsaved) in the editors.
   pulled (labelled "(local)", discovered live from `/api/tags`;
   `OLLAMA_HOST` overrides the default `localhost:11434`). The choice is
   remembered across restarts.
-- It can bring the whole database up to date with the `sync_data` tool —
-  one call rather than a loop of three-symbol `fetch_history` calls. See
+- It cannot refresh the whole database — that is `ui --sync <db>`, run from
+  a terminal with the app closed, and the assistant will tell you so. See
   [Keeping the price data current](#keeping-the-price-data-current).
 - It can query the database itself through a read-only SQL tool
   (SELECT-family statements only, capped at 100 rows) — e.g. to check

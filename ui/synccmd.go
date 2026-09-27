@@ -1,11 +1,11 @@
 package main
 
-// The headless half of sync_data.
-//
-// The button and the assistant tool both need a running app, and there are
-// two occasions when there isn't one: keeping a machine's database current
-// without opening a GUI, and the first sync of a freshly downloaded database,
-// which is exactly when it is furthest behind. `ui --sync <db>` runs the same
+// The price sync's only entry point. The app once offered it from a Data tab
+// button and an assistant tool too; both were removed, and the refresh is now
+// a deliberate step run with the app closed (DuckDB is single-writer). It also
+// serves a machine with no display, and the first sync of a freshly
+// downloaded database, which is exactly when it is furthest behind.
+// `ui --sync <db>` runs the same
 // plan-fetch-upsert the button runs, prints the same summary, and exits.
 
 import (

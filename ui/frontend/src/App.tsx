@@ -38,7 +38,6 @@ import {
 } from "../wailsjs/go/main/App";
 import { backtest, main } from "../wailsjs/go/models";
 import SimpleForm from "./SimpleForm";
-import SyncPanel from "./SyncPanel";
 import { buildToml } from "./buildToml";
 import type {
     SimpleForm as SimpleFormData,
@@ -797,7 +796,6 @@ function App() {
                 </div>
             ) : mode === "data" ? (
                 <div className="data-pane">
-                    <SyncPanel dbPath={dbPath} />
                     <QueryConsole dbPath={dbPath} fontSize={fontSize} />
                 </div>
             ) : (

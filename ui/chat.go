@@ -1684,25 +1684,16 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   SPECIFIC missing or stale ticker — check with query_db — then confirm the
   stored range before building the config. It cannot fetch the $-benchmark
   series (those are built locally).
-- The sync_data tool brings EVERY tradable ticker up to the latest COMPLETED
-  trading session in one call — today's session only counts from 6 pm ET, so
-  during market hours "current" means through the previous weekday, and
-  that is correct, not a stale database. Use it, not a loop of fetch_history calls, whenever
-  the database is broadly behind — it fetches only each ticker's missing
-  tail and batches ~100 symbols per request, so it is orders of magnitude
-  faster. Delisted symbols and $-benchmark series are skipped and reported.
-  Pass dry_run to report what is stale without downloading, and offer that
-  first when the user has not asked for a download outright. It is safe to
-  re-run: each batch is stored as it arrives, so an interrupted sync keeps
-  its work and a later call resumes from where it stopped. The user can
-  also run it from the Sync now button on the Data tab, or headlessly with
-  "ui --sync <db>".
-  Yahoo throttles a long run: the batches are paced, a throttled one is
-  retried with a doubling backoff, and a run still refused stops and comes
-  back INCOMPLETE. Read that report honestly when you relay it — "N failed"
-  means those tickers did NOT update, and "had not traded since their last
-  bar" means only that. If a run comes back INCOMPLETE, say so and offer to
-  run it again later rather than describing the database as current.
+- YOU CANNOT REFRESH THE WHOLE DATABASE, and neither can the app: there is
+  no sync button and no sync tool. When the database as a whole is behind,
+  tell the user to close the app and run "ui --sync <db>" from a terminal
+  ("--dry-run" first to see how far behind it is). It fetches only each
+  ticker's missing tail, ~100 symbols per request, up to the latest
+  COMPLETED session — today's only counts from 6 pm ET, so during market
+  hours "current" means through the previous weekday, which is correct.
+  Delisted and $-benchmark symbols are skipped; an interrupted or
+  rate-limited run reports INCOMPLETE and a re-run resumes. Do not loop
+  fetch_history over hundreds of tickers to imitate it.
   It does NOT refresh the $-benchmark series, the treasury-yield tables or
   economic_indicators — those come from the Python loaders
   (add_collections.py, update_treasury_yields.py), which the user must run
@@ -1754,13 +1745,10 @@ unlisted ticker); the CLI with -check prints every diagnostic.
   ONE specific missing or stale ticker: check with query_db, offer to fetch
   it, then confirm the stored range before writing the config.
   It cannot fetch the $-benchmark series (those are built locally).
-- sync_data — brings EVERY stale ticker up to the latest session in one
-  call, fetching only each one's missing tail in batches. USE THIS instead
-  of repeated fetch_history calls when the whole database is behind. Pass
-  dry_run to report staleness without downloading. Skips delisted and
-  $-benchmark symbols; safe to re-run, and resumes if interrupted. It does
-  not refresh the $-benchmarks, treasury yields or economic_indicators —
-  those need the Python loaders, run by the user with the app closed.
+- (No sync tool.) When the WHOLE database is behind, the user closes the
+  app and runs "ui --sync <db>" in a terminal; it refreshes prices only.
+  The $-benchmarks, treasury yields and economic_indicators need the
+  Python loaders, also run by the user with the app closed.
 - lookup_quote — LIVE price and fundamentals (P/E, market cap, sector)
   from Yahoo for a real symbol. Use for "what is X worth today"; use
   query_db for historical bars. No $-pseudo-tickers.
@@ -1986,8 +1974,8 @@ total US market.
   button on complete blocks, so a fragment is much less useful.
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
-  fetch_history for one missing ticker, and sync_data when the database as
-  a whole is behind.
+  fetch_history for one missing ticker; when the database as a whole is
+  behind, tell the user to close the app and run "ui --sync <db>".
 - The results view opens with the verdicts, equity curve and metrics
   expanded; the other panels (walk-forward, in/out-of-sample, drawdowns,
   trading, attribution, calendar and monthly returns) are collapsed and open
