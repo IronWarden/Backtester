@@ -3,24 +3,26 @@ import type { ReactNode } from "react";
 import { backtest, main } from "../wailsjs/go/models";
 import { readStored, readStoredObject, writeStored } from "./storage";
 
-// Categorical palette (dark-surface steps), assigned by portfolio index in
-// fixed slot order. Validated against the #1a1a19 card surface for CVD
-// separation, normal-vision separation, and 3:1 contrast.
+// Categorical palette (Kanagawa), assigned by portfolio index in fixed slot
+// order: crystalBlue, surimiOrange, springGreen, sakuraPink, carpYellow,
+// oniViolet, waveAqua, waveRed. Adjacent slots alternate warm and cool so the
+// first few portfolios — the common case — never sit next to a near-twin, and
+// every hue clears 3:1 against the #1f1f28 card surface.
 const COLORS = [
-  "#3987e5",
-  "#d95926",
-  "#199e70",
-  "#c98500",
-  "#d55181",
-  "#008300",
-  "#9085e9",
-  "#e66767",
+  "#7e9cd8",
+  "#ffa066",
+  "#98bb6c",
+  "#d27e99",
+  "#e6c384",
+  "#957fb8",
+  "#7aa89f",
+  "#e46876",
 ];
 
 // The benchmark is a reference line, not a competing series, so it is drawn
-// in a muted neutral outside the categorical palette — it must never be
-// mistaken for one of the portfolios.
-const BENCHMARK_COLOR = "#8a8a85";
+// in a muted neutral (fujiGray) outside the categorical palette — it must never
+// be mistaken for one of the portfolios.
+const BENCHMARK_COLOR = "#727169";
 
 type PlotSeries = {
   name: string;
@@ -848,7 +850,7 @@ export default function ResultsView({ results, fontSize, verdicts }: Props) {
                     cy={r.y}
                     r={4 * scale}
                     fill={r.color}
-                    stroke="#1a1a19"
+                    stroke="#1f1f28"
                     strokeWidth={2 * scale}
                   />
                 ))}

@@ -23,16 +23,39 @@ self.MonacoEnvironment = {
 };
 loader.config({ monaco });
 
-// vs-dark's #1e1e1e clashes with the app's warm-neutral surfaces; every
-// editor (TOML, Lua, SQL console) uses this re-grounded variant instead.
+// vs-dark's #1e1e1e clashes with the app's Kanagawa surfaces; every editor
+// (TOML, Lua, SQL console) uses this re-grounded variant instead. The token
+// rules are Kanagawa's own syntax colours, so code reads like it does in the
+// editor the palette comes from.
 monaco.editor.defineTheme("backtester-dark", {
   base: "vs-dark",
   inherit: true,
-  rules: [],
+  rules: [
+    { token: "", foreground: "dcd7ba" },
+    { token: "comment", foreground: "727169", fontStyle: "italic" },
+    { token: "keyword", foreground: "957fb8" },
+    { token: "string", foreground: "98bb6c" },
+    { token: "number", foreground: "d27e99" },
+    { token: "type", foreground: "7aa89f" },
+    { token: "identifier", foreground: "dcd7ba" },
+    { token: "delimiter", foreground: "9cabca" },
+    { token: "operator", foreground: "c0a36e" },
+    { token: "predefined", foreground: "7e9cd8" },
+    { token: "constant", foreground: "ffa066" },
+  ],
   colors: {
-    "editor.background": "#121211",
-    "editorGutter.background": "#121211",
-    "editor.lineHighlightBackground": "#1a1a19",
+    "editor.background": "#181820",
+    "editor.foreground": "#dcd7ba",
+    "editorGutter.background": "#181820",
+    "editor.lineHighlightBackground": "#1f1f28",
+    "editor.selectionBackground": "#2d4f67",
+    "editorCursor.foreground": "#c8c093",
+    "editorLineNumber.foreground": "#54546d",
+    "editorLineNumber.activeForeground": "#ffa066",
+    "editorWidget.background": "#1f1f28",
+    "editorSuggestWidget.background": "#1f1f28",
+    "editorSuggestWidget.selectedBackground": "#2d4f67",
+    "editorIndentGuide.background": "#2a2a37",
   },
 });
 
