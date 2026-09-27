@@ -33,7 +33,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/marcboeker/go-duckdb"
+	_ "github.com/duckdb/duckdb-go/v2"
 	"gonum.org/v1/gonum/stat"
 )
 

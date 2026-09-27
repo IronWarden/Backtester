@@ -49,13 +49,23 @@ differently from one that says `linux/amd64`.
 
 ## Prerequisites
 
-- Go 1.24+ (module pinned to `go 1.24.4`).
+- Go 1.25+ (module pinned to `go 1.25.0`).
 - A DuckDB file named `stock_data.db` in the repository root containing:
   - `stock_data_optimized(Date, Ticker, Open, High, Low, Close, Volume)`
   - `"3MTreasuryYields"(Date, daily_risk_free_rate_decimal)`
 - A `config.toml` in the repository root (see below).
 
-Dependencies (`github.com/marcboeker/go-duckdb`, `gonum.org/v1/gonum`, `github.com/BurntSushi/toml`, `github.com/yuin/gopher-lua`, and the Wails runtime) are pulled via `go mod`.
+Dependencies (`github.com/duckdb/duckdb-go/v2`, `gonum.org/v1/gonum`, `github.com/BurntSushi/toml`, `github.com/yuin/gopher-lua`, and the Wails runtime) are pulled via `go mod`.
+
+**Keep every DuckDB that writes the file on the same version line.** The app
+bundles DuckDB **1.5.x** (`duckdb-go` v2.10505). The Python loaders use
+whatever `pip` installed, and a newer DuckDB can write storage an older one
+cannot read — on 2026-09-27 a loader run under Python DuckDB 1.5.0 left a
+database that the app's previous engine (1.1.3) and a 1.3.2 CLI could read one
+ticker at a time but failed on any scan across tickers, with an `INTERNAL
+Error: Attempted to access index 9223372036854775807`. The data was intact;
+only the older readers were stuck. So: use `pip install "duckdb>=1.5,<1.6"`
+for the loaders, a 1.5 CLI for inspection, and upgrade all three together.
 
 ### Building from a fresh clone
 
@@ -2801,7 +2811,7 @@ under the same terms:
 |---|---|
 | [`LICENSE`](LICENSE) | The software. A **beta evaluation licence** — free to use, including commercially, but not open source and not redistributable. The source is published to be read; reading it grants nothing further. Beta terms end at 1.0. |
 | [`DATA-LICENSE.md`](DATA-LICENSE.md) | The bundled `stock_data.db`. **More restrictive than the software licence** — some of the data comes from providers whose terms forbid redistribution. Also the honest inventory of what is wrong with the data, which anyone acting on a result should read first. |
-| [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) | The 22 Go modules and 11 npm packages compiled into the binary, plus the DuckDB C++ library statically linked by `go-duckdb`. All permissive (MIT, BSD, ISC, Apache-2.0), and all of them require their notice to travel with the binary. |
+| [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) | The 14 Go modules and 11 npm packages compiled into the binary, including the DuckDB C++ library, which `duckdb-go` statically links from the per-platform `duckdb-go-bindings/lib/*` module. All permissive (MIT, BSD, ISC, Apache-2.0), and all of them require their notice to travel with the binary. |
 
 `THIRD-PARTY-NOTICES.txt` is generated — regenerate it whenever a dependency
 changes, because a stale notices file asserts something untrue:

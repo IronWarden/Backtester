@@ -115,14 +115,11 @@ def main():
     parts.append(f"\n{'=' * 78}\nGo modules ({len(go)})\n{'=' * 78}\n\n")
     for path, (ver, d) in go:
         parts.append(section(path, f"Version: {ver}", find_license(d)))
-        # go-duckdb statically links the DuckDB C++ library, which carries its
-        # own separate copyright.
-        if path == "github.com/marcboeker/go-duckdb":
-            dep = os.path.join(d, "deps", "LICENSE.txt")
-            if os.path.isfile(dep):
-                parts.append(section(
-                    "DuckDB (bundled C++ library, statically linked by go-duckdb)",
-                    "Stichting DuckDB Foundation", dep))
+        # The DuckDB C++ library is statically linked. With duckdb-go v2 it
+        # ships as its own module per platform
+        # (github.com/duckdb/duckdb-go-bindings/lib/<os>-<arch>) carrying the
+        # Stichting DuckDB Foundation's LICENSE, so the loop above already
+        # emits its notice; the old go-duckdb special case is gone.
 
     npm = npm_packages()
     parts.append(f"\n{'=' * 78}\nnpm packages ({len(npm)})\n{'=' * 78}\n\n")
