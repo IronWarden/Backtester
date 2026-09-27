@@ -187,18 +187,33 @@ export function normalizeDates(
   return { startDate: s, endDate: e };
 }
 
-// Whether adding this symbol keeps the portfolio runnable: it must be priced,
+// Whether adding a symbol keeps the portfolio runnable: it must be priced,
 // and its history must overlap what is already held. Offering one that does
 // not is offering an error.
-export function tickerFits(ticker: string, form: SimpleForm, ranges: Ranges): boolean {
-  if (Object.keys(ranges).length === 0) return true;
-  const r = ranges[ticker];
-  if (!r) return false;
+//
+// Returns a predicate rather than taking the symbol, because it runs over the
+// whole universe (~10,000 symbols) on every form change: the coverage and the
+// "have the ranges loaded" check are computed ONCE here, so each symbol costs a
+// lookup and two string compares. Computing them per symbol made the filter
+// quadratic -- 15 seconds of blocked UI per keystroke on a real database.
+export function tickerFilter(form: SimpleForm, ranges: Ranges): (ticker: string) => boolean {
+  let loaded = false;
+  for (const _ in ranges) {
+    loaded = true;
+    break;
+  }
+  if (!loaded) return () => true;
   const cov = coverageOf(form, ranges);
-  if (!cov || !cov.start) return true;
-  const start = r[0] > cov.start ? r[0] : cov.start;
-  const end = r[1] < cov.end ? r[1] : cov.end;
-  return start <= end;
+  const held = new Set(form.tickers);
+  return (ticker) => {
+    if (held.has(ticker)) return false;
+    const r = ranges[ticker];
+    if (!r) return false;
+    if (!cov || !cov.start) return true;
+    const start = r[0] > cov.start ? r[0] : cov.start;
+    const end = r[1] < cov.end ? r[1] : cov.end;
+    return start <= end;
+  };
 }
 
 // What Enter or Add should add: the highlighted suggestion, else an exact

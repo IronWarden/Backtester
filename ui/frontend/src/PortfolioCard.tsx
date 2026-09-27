@@ -19,7 +19,7 @@ import {
     maskDate,
     normalizeDates,
     resolveTicker,
-    tickerFits,
+    tickerFilter,
     uniqueName,
 } from "./portfolioCheck";
 import type { Ranges } from "./portfolioCheck";
@@ -137,16 +137,19 @@ export default function PortfolioCard({
     // Shallow-merge a patch into the form data owned by the container.
     const patch = (p: Partial<Form>) => onChange({ ...form, ...p });
 
-    const suggestions = useMemo(() => {
-        const sel = new Set(form.tickers);
-        // Only symbols that keep the portfolio runnable are offered: priced,
-        // and overlapping what is already held.
-        return searchTickers(
-            available.filter((t) => !sel.has(t) && tickerFits(t, form, ranges)),
-            names,
-            tickerInput,
-        );
-    }, [available, names, form, ranges, tickerInput]);
+    // Only symbols that keep the portfolio runnable are offered: priced, not
+    // already held, and overlapping what is. Keyed on the holdings, not the
+    // whole form, so typing a name or a date does not re-filter ten thousand
+    // symbols; searchTickers then ranks the survivors per keystroke.
+    const pool = useMemo(
+        () => available.filter(tickerFilter(form, ranges)),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [available, ranges, form.tickers],
+    );
+    const suggestions = useMemo(
+        () => searchTickers(pool, names, tickerInput),
+        [pool, names, tickerInput],
+    );
 
     const resolved = resolveTicker(tickerInput, highlight, suggestions);
 

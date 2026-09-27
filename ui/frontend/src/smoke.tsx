@@ -31,7 +31,7 @@ import {
     normalizeDates,
     portfolioRunnable,
     resolveTicker,
-    tickerFits,
+    tickerFilter,
     uniqueName,
 } from "./portfolioCheck";
 import {
@@ -1011,13 +1011,31 @@ check("a benchmark that misses the holdings does not empty the window", () => {
 });
 
 check("the picker offers only symbols that keep the portfolio runnable", () => {
-    const holding = { ...form, tickers: ["AAPL"] };
-    eq("overlaps", tickerFits("NEWCO", holding, GUARD_RANGES), true);
-    eq("no overlap", tickerFits("GONE", holding, GUARD_RANGES), false);
-    eq("unpriced", tickerFits("NOPE", holding, GUARD_RANGES), false);
-    eq("first pick", tickerFits("GONE", { ...form, tickers: [] }, GUARD_RANGES), true);
+    const fits = tickerFilter({ ...form, tickers: ["AAPL"] }, GUARD_RANGES);
+    eq("overlaps", fits("NEWCO"), true);
+    eq("no overlap", fits("GONE"), false);
+    eq("unpriced", fits("NOPE"), false);
+    eq("already held", fits("AAPL"), false);
+    eq("first pick", tickerFilter({ ...form, tickers: [] }, GUARD_RANGES)("GONE"), true);
     // Ranges not loaded yet: nothing to judge against, so nothing is hidden.
-    eq("no ranges", tickerFits("NOPE", holding, {}), true);
+    eq("no ranges", tickerFilter({ ...form, tickers: ["AAPL"] }, {})("NOPE"), true);
+});
+
+// The filter runs over the whole symbol universe on every holdings change,
+// on the UI thread. It was once quadratic -- 15 s per keystroke at 10,000
+// symbols -- so this pins it linear with a budget no quadratic version meets.
+check("the picker's filter stays linear in the size of the universe", () => {
+    const big: Record<string, string[]> = {};
+    const syms: string[] = [];
+    for (let i = 0; i < 20000; i++) {
+        syms.push(`S${i}`);
+        big[`S${i}`] = ["2000-01-03", "2026-08-07"];
+    }
+    const t0 = performance.now();
+    const kept = syms.filter(tickerFilter({ ...form, tickers: ["S1", "S2"] }, big));
+    const ms = performance.now() - t0;
+    eq("kept", kept.length, 19998);
+    if (ms > 250) throw new Error(`filtering 20,000 symbols took ${ms.toFixed(0)} ms`);
 });
 
 check("Enter and Add take a listed symbol, never free text", () => {
