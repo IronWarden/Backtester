@@ -833,7 +833,7 @@ recomputed from the stored statistics by `src/data.ClassifyQuality`, so the
 thresholds — which are judgement calls, named and reasoned about in
 `src/data/data_quality.go` — can be changed without re-running the audit.
 **A run now says so.** Before the workers start, every holding is looked up in
-the audit and each `unusable` or `suspect` one produces a console warning
+the audit and each `unusable` or `suspect` one produces a warning diagnostic
 naming the defect — *"VHI cannot support a backtest according to the data
 audit: 5,429 bars priced at or below zero, so any return computed across the
 sign change is arithmetic nonsense that reads as an ordinary extreme move.
@@ -1004,7 +1004,7 @@ Field reference:
 | `StartDate` / `EndDate` | string | `YYYY-MM-DD`. `EndDate` must not precede `StartDate` — a reversed window is rejected by name rather than crashing the run. Both must be fully covered by every ticker's data or the run is rejected with an error naming the offending ticker and its real range. |
 | `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. No duplicates — a repeated symbol is rejected by name. To hold more of something, use `[portfolio.Params.weights]` with `buy_and_hold_weighted.lua`, not a second entry. |
 | `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
-| `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. **Built-in strategies ignore it entirely** — only `lua:` specs receive it, and the console warns if you set it on a built-in. `smaCross` takes its periods from the spec string (`smaCross:<short>:<long>:<buyType>`), so it cannot be swept through `Params` at all; use one `[[portfolio]]` block per setting. |
+| `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. **Built-in strategies ignore it entirely** — only `lua:` specs receive it, and a warning diagnostic says so if you set it on a built-in. `smaCross` takes its periods from the spec string (`smaCross:<short>:<long>:<buyType>`), so it cannot be swept through `Params` at all; use one `[[portfolio]]` block per setting. |
 | `Costs` | table | Optional trading-cost model (below). Absent means frictionless, which is how the engine behaved before costs existed. |
 | `Benchmark` | string | Optional ticker to score against, e.g. `"$SP500"`. Never traded — see below. |
 
@@ -2191,7 +2191,8 @@ wails build -tags webkit2_41 && cp build/bin/ui ui/ui
 The **✓ Check** button next to Run validates the config in the editor without
 running it — the UI half of `-check`. It opens no database and simulates
 nothing, so it answers immediately even for a config whose run would take
-minutes, and its findings appear in the same console described below. Errors
+minutes. The first error it finds is shown in the status bar (see *Where a
+run's problems show up* below). Errors
 mean the config will not run as written; warnings mean it will run but may not
 do what was meant.
 
@@ -2215,10 +2216,40 @@ A preset only appears if the engine actually serves its metric, so the form
 cannot offer a criterion the run would reject. If the claim box is empty a
 preset fills that too; if you have written your own words, they are left alone.
 
-#### The run console
+#### Keeping bad input out of the form
 
-Below the results panel is a **Console** strip that appears whenever a run had
-something to say. It shows only diagnostics a user can act on:
+The Backtest tab refuses input that would make a run fail, rather than
+reporting it afterwards. Every rule is a pure function in
+`ui/frontend/src/portfolioCheck.ts`, pinned by the smoke run:
+
+- **Holdings** come only from the database's own list. Enter and **Add** take
+  the highlighted suggestion, else an exact symbol, else the best match — never
+  free text — and a symbol whose history does not overlap what is already held
+  is not offered at all.
+- **Dates** accept only digits (dashes are inserted as you type) and are
+  disabled until there is a holding to take a window from. On leaving the box a
+  typo falls back to the last good date, anything outside the window every
+  holding covers is pulled inside it, and a start after the end moves the
+  *other* date so what you typed is what you keep. The window also stops at the
+  benchmark's last bar when the two overlap, because a window past it silently
+  drops every comparison metric. The **Compare it against** list disables a
+  benchmark this database does not hold.
+- **Names** are made unique when you leave the box (`Value` → `Value (2)`), and
+  a blank one becomes `Portfolio N`.
+- **Money** boxes take digits only, up to $999 billion; a starting capital left
+  at zero goes back to $10,000.
+- **The criterion value** accepts only a signed decimal.
+
+#### Where a run's problems show up
+
+There is no console panel. What the form cannot prevent — a Lua script that
+raises, a hand-written TOML config — surfaces in two places: the **first
+error** of a run or ✓ Check appears as one line in the status bar (`+N more`
+when there are several), and a Lua error that names a line is drawn as a
+marker in the editor's gutter. Warnings and `log()` notes are not shown in the
+app; a CLI run prints every diagnostic to its log (stderr, or
+`backtester.log` under `-debug`), and `-check` prints the config-level ones.
+The diagnostics the engine produces:
 
 | level | what produces it |
 |---|---|
@@ -2233,20 +2264,14 @@ something to say. It shows only diagnostics a user can act on:
 | `info` | this database has no `data_quality` table, so no holding was checked (said once per session) |
 | `warn` | an in-sample/out-of-sample split with too few days either side to score |
 
-Each row carries the level, the portfolio it belongs to, and the message. The
-strip stays collapsed for warnings and opens itself when a run produced an
-error, since an error means the run did not do what was asked. A run that
-reports nothing shows no strip at all.
+Each carries the level, the portfolio it belongs to, and the message. The
+engine's own logging — query timings, row-scan warnings, the `PrintMetrics`
+dump — is not a diagnostic; the split is decided in Go at each call site, by
+`backtest.diagf`, not filtered afterwards.
 
-What it deliberately does **not** show is the engine's own logging — query
-timings, row-scan warnings, the `PrintMetrics` dump. Those still go to the log
-(`backtester.log` under the CLI's `-debug`), because a console that reports
-everything is one nobody reads. The split is decided in Go at each call site,
-by `backtest.diagf`, not filtered afterwards.
-
-At most 200 diagnostics are kept per run; beyond that the console says how many
-it suppressed rather than truncating silently. A strategy that raises on every
-trading day is the case this bounds.
+At most 200 diagnostics are kept per run; beyond that a final one says how many
+were suppressed. A strategy that raises on every trading day is the case this
+bounds.
 
 ## The Backtest tab (UI)
 
@@ -2316,18 +2341,16 @@ is a flat line along the bottom.
 
 One value per name per day (the last call wins), at most 8 names, series start
 where you start plotting them, and NaN/infinity are dropped. Both bounds report
-themselves once in the console rather than silently losing data. Nothing here
+themselves once as a diagnostic rather than silently losing data. Nothing here
 reaches a metric: it is an instrument, not a measurement.
 
-### An error you can click
+### An error marked on its line
 
 Every diagnostic that carries a Lua position — a raised error, a syntax error,
 anything the script check found — arrives with the script and line parsed out
 of it (`backtest.ScriptPosition`, done once in `diagf` so no consumer parses
-messages itself). The console row shows that position as a link: clicking it
-opens the script, jumps to the line and puts the cursor there, loading the file
-first if the diagnostic belongs to a different one. The same diagnostics are
-drawn as markers in the editor's gutter for the script that is open.
+messages itself). Those positions are drawn as markers in the editor's gutter
+for the script that is open.
 
 Both formats are recognised, which matters more than it sounds: a raised error
 reads `mine.lua:41:` and a *syntax* error reads `mine.lua line:3(column:3)`,
@@ -2548,7 +2571,8 @@ calendar. Choose *Nothing — skip the comparison* to get the previous output
 back exactly.
 
 The engine skips every benchmark-relative metric unless the benchmark has a bar
-for **every trading day in the window**, and says so only in the run console.
+for **every trading day in the window**, and says so only in a warning diagnostic
+(the form keeps the window inside the benchmark's for this reason).
 The Backtest tab checks it up front instead: the `$`-series currently end weeks
 earlier than the priced tickers (`$SP500` to 2026-07-02 against 2026-08-07 for
 real symbols), so the date presets snap to the earlier of the two ends, and a
@@ -2706,7 +2730,7 @@ Each result additionally carries time-sliced views of the same run, available to
 
 Lua is the intended route — no rebuild, and the engine handles the day loop.
 
-1. Copy a file from `strategies/` and edit it. A strategy is one global `step(day)` function, called once per trading day with `day` counting from 0; the engine provides `price()`, `sma()`, `rsi()`, `cash()`, `position()`, `buy()`, `buy_max()`, `sell()`, `sell_all()`, and the `tickers` / `params` globals. Orders may only name a ticker from the `tickers` global — a typo is refused and reported in the run console rather than silently burning the cash. Full API, patterns, and gotchas: [`strategies/README.md`](strategies/README.md).
+1. Copy a file from `strategies/` and edit it. A strategy is one global `step(day)` function, called once per trading day with `day` counting from 0; the engine provides `price()`, `sma()`, `rsi()`, `cash()`, `position()`, `buy()`, `buy_max()`, `sell()`, `sell_all()`, and the `tickers` / `params` globals. Orders may only name a ticker from the `tickers` global — a typo is refused and reported as a run error rather than silently burning the cash. Full API, patterns, and gotchas: [`strategies/README.md`](strategies/README.md).
 2. Point a portfolio at it with `Strategy = "lua:strategies/your_file.lua"` and pass any settings in a `[portfolio.Params]` block.
 3. Add it to `shippedStrategies()` in `src/backtest/strategies_library_test.go`, which runs every shipped strategy against synthetic data and fails if it errors, overspends, or never trades.
 

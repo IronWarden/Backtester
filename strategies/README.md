@@ -238,7 +238,7 @@ accident.
 | `weight_of(t, day)` | The fraction of equity a position currently represents, for checking drift. |
 | `target_weights(day, {T = fraction, …})` | Move the whole book to those fractions of equity: sells run first so the proceeds fund the buys, and buys are clamped to available cash. A ticker absent from the table is a target of **zero**, so `target_weights(day, {})` goes to cash. |
 | `rank(day, fn)` | Score every ticker with `fn(ticker, day)` and return `{ {ticker=…, value=…}, … }` **sorted strongest first**. Tickers whose `fn` returns `nil` are left out rather than ranked last. |
-| `log(...)` | Say something the run console will show. Any number of values, rendered as `tostring` would and joined with spaces, like `print`. |
+| `log(...)` | Record a note in the run's diagnostics (printed by a CLI run; not shown in the desktop app). Any number of values, rendered as `tostring` would and joined with spaces, like `print`. |
 | `plot(name, value)` | Record a number for today. Each name becomes a small chart on the results panel, drawn against the same days as the equity curve — the way to *see* what the strategy is reacting to rather than reading it out of a thousand log lines. |
 | `num_days()` | Trading days in this run. `day` is 0-based, so **the last day is `num_days() - 1`**. |
 
@@ -265,8 +265,8 @@ Rules worth knowing:
 - **One value per name per day**, and the last call wins. A `plot()` inside a
   loop over tickers therefore records the loop's final value, not one point
   per ticker — give each ticker its own name if that is what you want.
-- **At most 8 names.** Past that the extra names are ignored and the console
-  says so once.
+- **At most 8 names.** Past that the extra names are ignored and a warning
+  diagnostic says so once.
 - **A series starts where you start plotting it.** An indicator with 200 days
   of warm-up simply has no line before day 200, rather than a line at zero.
 - `nil`, NaN and infinities are dropped rather than drawn.
@@ -334,8 +334,9 @@ final round of fees, which is real and will show in `TotalFees`.
 
 **A misspelled `Params` key is reported, not silently ignored.** Scripts read
 settings as `params.lookback or 126`, so a key spelled wrong falls through to
-the default and the run proceeds with settings you did not choose. The console
-warns when a key you passed is never read by the script. In a **sweep** this
+the default and the run proceeds with settings you did not choose. A warning
+diagnostic names any key you passed that the script never reads (✓ Check and
+`-check` report it before a run). In a **sweep** this
 matters more than it looks: sweep values are merged into `Params`, so a
 mistyped swept key expands to N runs that differ only in a value nothing reads
 — every trial produces identical numbers, and the deflated Sharpe still
@@ -347,14 +348,15 @@ that reason, never a rejection.
 
 **Use `log()`, not `print()`.** Lua's `print` writes to stdout, which is fine
 from the CLI and **invisible in the desktop app** — debugging a strategy there
-with `print` shows you nothing. `log()` goes to the run console under the
-results panel, tagged with the script name, and to `backtester.log` as well.
-It is not deduplicated: a `log()` inside the day loop fires every day, which
-is usually what you wanted, and the console keeps the first 200 lines of a run.
+with `print` shows you nothing. `log()` records a diagnostic tagged with the
+script name, which a CLI run prints to its log (stderr, or `backtester.log`
+under `-debug`); the desktop app has no console and does not show it. It is not
+deduplicated: a `log()` inside the day loop fires every day, which is usually
+what you wanted, and a run keeps the first 200 diagnostics.
 
 Every order function requires a ticker from the `tickers` global. A ticker
 the portfolio does not list — a typo, or a `nil` that reads as the empty
-string — is **refused**, and the run console says which function asked for
+string — is **refused**, and an error diagnostic says which function asked for
 what alongside the list it should have come from. It used to fill: the
 position went in under the unlisted key, was never valued, and the cash
 disappeared from the equity curve for the rest of the run.
@@ -432,8 +434,9 @@ left alone for now so there is an example of the long-hand form to copy from.
   rather than `~= nil`.
 - **Only tickers in the `tickers` global can be traded.** Anything else is
   refused and reported; see "Account and orders" above.
-- **Errors are logged, not raised.** If a strategy misbehaves, check the run
-  console in the UI (or `backtester.log` under the CLI's `-debug`); a runtime
+- **Errors are logged, not raised.** If a strategy misbehaves, the app's status
+  bar shows the first error and the editor marks its line; a CLI run (or
+  `backtester.log` under `-debug`) has them all. A runtime
   error means `step` stops for that day but the backtest continues.
 - **`then` is a Lua keyword** — do not name a variable `then`.
 

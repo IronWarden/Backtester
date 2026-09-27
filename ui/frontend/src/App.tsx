@@ -51,7 +51,6 @@ import ErrorBoundary from "./ErrorBoundary";
 import { readStoredNumber, writeStored } from "./storage";
 import { readSession, writeSession } from "./session";
 import type { Session } from "./session";
-import ConsolePanel from "./ConsolePanel";
 import ChatPanel from "./ChatPanel";
 import QueryConsole from "./QueryConsole";
 import "./App.css";
@@ -134,6 +133,18 @@ EndDate = "2024-01-01"
 Tickers = ["AAPL", "MSFT"]
 Strategy = "buyAndHold:equalWeights"
 `;
+
+// There is no console panel: the Backtest form refuses bad input up front, so
+// what is left to say after a run is rare enough for the status bar. The first
+// error is the one worth reading; the rest are counted, not listed. Lua errors
+// that name a line are also drawn as markers in the editor.
+function firstError(diags: backtest.Diagnostic[]): string {
+    const errs = diags.filter((d) => d.level === "error");
+    if (errs.length === 0) return "";
+    const more = errs.length > 1 ? ` (+${errs.length - 1} more)` : "";
+    const who = errs[0].portfolio ? `${errs[0].portfolio}: ` : "";
+    return `${who}${errs[0].message}${more}`;
+}
 
 function App() {
     const [mode, setMode] = useState<Mode>("simple");
@@ -524,6 +535,7 @@ function App() {
             );
             setResults(res.results ?? []);
             setDiagnostics(res.diagnostics ?? []);
+            setErrorMsg(firstError(res.diagnostics ?? []));
             setVerdicts(res.verdicts ?? []);
             setHypothesisError(res.hypothesisError ?? "");
             setStatusMsg(`Done — ${(res.results ?? []).length} result(s)`);
@@ -547,6 +559,7 @@ function App() {
             const res = await CheckConfig(tomlText, luaPath);
             const diags = res.diagnostics ?? [];
             setDiagnostics(diags);
+            setErrorMsg(firstError(diags));
             const errors = diags.filter((d) => d.level === "error").length;
             const warnings = diags.length - errors;
             if (errors > 0) {
@@ -580,6 +593,7 @@ function App() {
             const res = await CheckLuaScript(luaText, luaPath, tomlText);
             const diags = res.diagnostics ?? [];
             setDiagnostics(diags);
+            setErrorMsg(firstError(diags));
             const errors = diags.filter((d) => d.level === "error").length;
             const warnings = diags.length - errors;
             if (errors > 0) {
@@ -638,40 +652,8 @@ function App() {
         await runConfig(buildToml(forms), true);
     }
 
-    // Open a script at a line, from a console row. The message already named
-    // the position; until now the reader had to go and find it.
-    //
-    // A diagnostic can name a script other than the one open — a config with
-    // several portfolios runs several — so a different file is loaded first,
-    // and only then jumped into. Failing to load it is not an error worth a
-    // red banner: the console row is still there and still says where.
-    async function jumpToScript(script: string, line: number) {
-        setMode("advanced");
-        setTab("lua");
-        if (script !== luaPath) {
-            try {
-                const content = await ReadFile(script);
-                setLuaPath(script);
-                setLuaText(content);
-                setLuaPristine(content);
-            } catch {
-                setStatusMsg(`${script} — could not be opened; line ${line}`);
-                return;
-            }
-        }
-        // After the state above has rendered: the model may have just been
-        // replaced, and revealing a line in the old one does nothing.
-        window.setTimeout(() => {
-            const editor = editorRef.current;
-            if (!editor) return;
-            editor.revealLineInCenter(line);
-            editor.setPosition({ lineNumber: line, column: 1 });
-            editor.focus();
-        }, 0);
-    }
-
-    // Mark the lines the last run complained about, so the editor shows what
-    // the console says. Only diagnostics belonging to the script actually
+    // Mark the lines the last run complained about, so the editor shows where
+    // a script went wrong. Only diagnostics belonging to the script actually
     // open: a marker on line 41 of a different file would point at whatever
     // happens to be on line 41 of this one.
     useEffect(() => {
@@ -1013,12 +995,6 @@ function App() {
                     <ResultsView results={results} fontSize={fontSize} verdicts={verdicts} />
                 </ErrorBoundary>
             </div>
-
-            <ConsolePanel
-                diagnostics={diagnostics}
-                fontSize={fontSize}
-                onJump={jumpToScript}
-            />
 
             <footer className="status">
                 {errorMsg ? (

@@ -19,12 +19,21 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import ResultsView, { differingWindows } from "./ResultsView";
-import ConsolePanel from "./ConsolePanel";
 import { SyncPanelView } from "./SyncPanel";
 import SimpleFormView from "./SimpleForm";
 import { CRITERION_OPS, buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
-import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
+import {
+    dateBounds,
+    duplicateNames,
+    maskDate,
+    maskDecimal,
+    normalizeDates,
+    portfolioRunnable,
+    resolveTicker,
+    tickerFits,
+    uniqueName,
+} from "./portfolioCheck";
 import {
     BASKETS,
     BLANK,
@@ -408,54 +417,6 @@ check("plotted series are drawn, late starts and all", () => {
     }
 });
 
-// A console row that knows where it happened offers to go there. The message
-// has always said "sma_cross.lua:41"; the reader had to find line 41 by hand.
-check("a console row with a position offers to open it", () => {
-    const positioned = backtest.Diagnostic.createFrom({
-        level: "error",
-        portfolio: "P",
-        message: "lua strategy: strategies/sma_cross.lua:41: attempt to compare nil with number",
-        script: "strategies/sma_cross.lua",
-        line: 41,
-    });
-    const plain = backtest.Diagnostic.createFrom({
-        level: "warn",
-        portfolio: "P",
-        message: "benchmark $SP500 covers only part of the window",
-        script: "",
-        line: 0,
-    });
-
-    const withJump = renderToString(
-        <ConsolePanel
-            diagnostics={[positioned, plain]}
-            fontSize={16}
-            onJump={() => {}}
-        />,
-    );
-    if (!withJump.includes("sma_cross.lua:41")) {
-        throw new Error("the position chip never rendered");
-    }
-    if ((withJump.match(/console-jump/g) ?? []).length !== 1) {
-        throw new Error(
-            "a diagnostic with no script offered a jump — it would open " +
-                "whatever file happened to be in the editor",
-        );
-    }
-
-    // Without a handler there is nothing to jump to, and a dead link is worse
-    // than plain text.
-    const withoutJump = renderToString(
-        <ConsolePanel diagnostics={[positioned]} fontSize={16} />,
-    );
-    if (withoutJump.includes("console-jump")) {
-        throw new Error("a jump chip rendered with no handler behind it");
-    }
-    if (!withoutJump.includes("attempt to compare nil")) {
-        throw new Error("the message itself went missing");
-    }
-});
-
 // The Lua editor's completion. The descriptions come from Go and a test there
 // pins them to the engine's own SetGlobal calls; what is checked here is the
 // part that turns a signature into something an editor can insert -- because a
@@ -672,7 +633,7 @@ check("no raw timestamp reaches the DOM", () => {
 });
 
 for (const name of ["full", "plain", "no-curve", "empty"]) {
-    const { results, verdicts, diagnostics } = load(name);
+    const { results, verdicts } = load(name);
     // Both zoom extremes: the chart lays itself out in real pixels scaled by
     // fontSize, and a divide-by-zero there would only show at one end.
     for (const fontSize of [12, 22]) {
@@ -682,9 +643,6 @@ for (const name of ["full", "plain", "no-curve", "empty"]) {
             );
         });
     }
-    check(`ConsolePanel / ${name}`, () => {
-        renderToString(<ConsolePanel diagnostics={diagnostics} fontSize={16} />);
-    });
 }
 
 // The Backtest tab itself. Its effects (ListTickers, TickerNames, the gallery)
@@ -996,6 +954,93 @@ check("duplicate portfolio names are reported", () => {
     // Reported once however many times it repeats, and blanks are not names.
     eq("triple", duplicateNames([form, { ...form }, { ...form }]), [form.name]);
     eq("blank", duplicateNames([{ ...form, name: "" }, { ...form, name: "  " }]), []);
+});
+
+// Input guards. The form refuses bad input rather than reporting it, so these
+// are what stands between a user and an error message -- and none of them is
+// visible to a render test, which never types.
+const GUARD_RANGES = {
+    AAPL: ["2000-01-03", "2026-08-07"],
+    NEWCO: ["2021-06-01", "2026-08-07"],
+    GONE: ["1995-01-03", "1999-12-31"],
+    $SP500: ["1990-01-02", "2026-07-31"],
+};
+
+check("date boxes accept only the shape of a date", () => {
+    eq("digits", maskDate("20150102"), "2015-01-02");
+    eq("partial", maskDate("20151"), "2015-1");
+    eq("letters dropped", maskDate("2o15-O1-02x"), "2151-02");
+    eq("too long", maskDate("2015-01-0299"), "2015-01-02");
+});
+
+check("dates are pulled inside the covered window", () => {
+    const f = { ...form, tickers: ["AAPL"], benchmark: "$SP500",
+        startDate: "1990-01-01", endDate: "2030-01-01" };
+    const b = dateBounds(f, GUARD_RANGES);
+    // The benchmark ends earlier than AAPL, and a window past it would
+    // silently lose every comparison metric.
+    eq("bounds", b, { min: "2000-01-03", max: "2026-07-31" });
+    eq("clamped", normalizeDates(f, b, { start: "", end: "" }, null),
+        { startDate: "2000-01-03", endDate: "2026-07-31" });
+    const fine = { ...f, startDate: "2010-01-01", endDate: "2020-01-01" };
+    eq("already fine", normalizeDates(fine, b, { start: "", end: "" }, null), null);
+    // A typo falls back to the last good date, not to the window's edge.
+    eq("typo", normalizeDates({ ...fine, startDate: "2010-13-45" }, b,
+        { start: "2011-05-05", end: "" }, "start"),
+        { startDate: "2011-05-05", endDate: "2020-01-01" });
+    // Start after end: what the user just typed is kept, the other side moves.
+    eq("start past end", normalizeDates({ ...fine, startDate: "2021-01-01" }, b,
+        { start: "", end: "" }, "start"),
+        { startDate: "2021-01-01", endDate: "2026-07-31" });
+    eq("end before start", normalizeDates({ ...fine, endDate: "2005-01-01" }, b,
+        { start: "", end: "" }, "end"),
+        { startDate: "2000-01-03", endDate: "2005-01-01" });
+    // Empty dates on a portfolio with holdings are filled, not left to fail.
+    eq("empty filled", normalizeDates({ ...f, startDate: "", endDate: "" }, b,
+        { start: "", end: "" }, null),
+        { startDate: "2000-01-03", endDate: "2026-07-31" });
+    // Whatever it returns is runnable -- that is the whole contract.
+    const fixed = { ...f, allocations: { AAPL: 100 },
+        ...normalizeDates(f, b, { start: "", end: "" }, null)! };
+    eq("result runs", portfolioRunnable(fixed, GUARD_RANGES), true);
+});
+
+check("a benchmark that misses the holdings does not empty the window", () => {
+    const f = { ...form, tickers: ["NEWCO"], benchmark: "GONE" };
+    eq("ignored", dateBounds(f, GUARD_RANGES), { min: "2021-06-01", max: "2026-08-07" });
+});
+
+check("the picker offers only symbols that keep the portfolio runnable", () => {
+    const holding = { ...form, tickers: ["AAPL"] };
+    eq("overlaps", tickerFits("NEWCO", holding, GUARD_RANGES), true);
+    eq("no overlap", tickerFits("GONE", holding, GUARD_RANGES), false);
+    eq("unpriced", tickerFits("NOPE", holding, GUARD_RANGES), false);
+    eq("first pick", tickerFits("GONE", { ...form, tickers: [] }, GUARD_RANGES), true);
+    // Ranges not loaded yet: nothing to judge against, so nothing is hidden.
+    eq("no ranges", tickerFits("NOPE", holding, {}), true);
+});
+
+check("Enter and Add take a listed symbol, never free text", () => {
+    const sugg = ["AAPL", "AAP"];
+    eq("highlighted", resolveTicker("aa", 1, sugg), "AAP");
+    eq("exact", resolveTicker("aap", -1, sugg), "AAP");
+    eq("best match", resolveTicker("apple", -1, sugg), "AAPL");
+    eq("nothing listed", resolveTicker("zzzz", -1, []), "");
+    eq("blank", resolveTicker("  ", -1, sugg), "");
+});
+
+check("portfolio names cannot collide or go blank", () => {
+    eq("free", uniqueName("Growth", ["Value"], "Portfolio 2"), "Growth");
+    eq("clash", uniqueName("Value", ["Value"], "Portfolio 2"), "Value (2)");
+    eq("next free", uniqueName("Value", ["Value", "Value (2)"], "P"), "Value (3)");
+    eq("blank", uniqueName("  ", ["Value"], "Portfolio 2"), "Portfolio 2");
+});
+
+check("the criterion box accepts only a number", () => {
+    eq("plain", maskDecimal("1.2"), "1.2");
+    eq("negative", maskDecimal("-0.5"), "-0.5");
+    eq("junk", maskDecimal("abc1.2.3%"), "1.23");
+    eq("inner minus", maskDecimal("1-2"), "12");
 });
 
 // The ticker picker's ordering. This is the whole of what the company-name

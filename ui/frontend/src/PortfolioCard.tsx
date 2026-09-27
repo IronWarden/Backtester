@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { backtest } from "../wailsjs/go/models";
 import {
     BENCHMARKS,
@@ -13,7 +13,14 @@ import {
     allocationTotal,
     benchmarkWarningOf,
     coverageOf,
+    dateBounds,
     dateErrorOf,
+    isValidDate,
+    maskDate,
+    normalizeDates,
+    resolveTicker,
+    tickerFits,
+    uniqueName,
 } from "./portfolioCheck";
 import type { Ranges } from "./portfolioCheck";
 
@@ -72,12 +79,22 @@ function minusYears(date: string, years: number): string {
     return `${String(year).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+// Starting capital restored when the box is left empty or at zero, and the
+// longest dollar figure either money box accepts ($999 billion): past that,
+// float64 cash arithmetic stops being exact to the cent.
+const DEFAULT_CAPITAL = 10000;
+const MONEY_DIGITS = 12;
+
 type Props = {
     form: Form;
     onChange: (next: Form) => void;
     // Null for the only portfolio: a run with nothing in it is not a state the
     // form should be able to reach by clicking Remove.
     onRemove: (() => void) | null;
+    // Every OTHER portfolio's name, so this one can refuse to collide.
+    otherNames: string[];
+    // What a blank name becomes: the card's position-based default.
+    defaultName: string;
     dbPath: string;
     // Shared, fetched once by the container.
     available: string[];
@@ -94,6 +111,8 @@ export default function PortfolioCard({
     form,
     onChange,
     onRemove,
+    otherNames,
+    defaultName,
     dbPath,
     available,
     names,
@@ -107,25 +126,37 @@ export default function PortfolioCard({
     // has changed.
     const [highlight, setHighlight] = useState(-1);
     const [pickerOpen, setPickerOpen] = useState(false);
+    // Which date box has focus. A half-typed date is left alone while the
+    // user is still typing it; it is normalized when they leave the box.
+    const editingDate = useRef<"start" | "end" | null>(null);
+    // The last dates that were real dates, for a typo to fall back to.
+    const lastGood = useRef({ start: form.startDate, end: form.endDate });
+    if (isValidDate(form.startDate)) lastGood.current.start = form.startDate;
+    if (isValidDate(form.endDate)) lastGood.current.end = form.endDate;
 
     // Shallow-merge a patch into the form data owned by the container.
     const patch = (p: Partial<Form>) => onChange({ ...form, ...p });
 
     const suggestions = useMemo(() => {
         const sel = new Set(form.tickers);
+        // Only symbols that keep the portfolio runnable are offered: priced,
+        // and overlapping what is already held.
         return searchTickers(
-            available.filter((t) => !sel.has(t)),
+            available.filter((t) => !sel.has(t) && tickerFits(t, form, ranges)),
             names,
             tickerInput,
         );
-    }, [available, names, form.tickers, tickerInput]);
+    }, [available, names, form, ranges, tickerInput]);
+
+    const resolved = resolveTicker(tickerInput, highlight, suggestions);
 
     // The symbol is the identity and the name is the gloss, so a missing name
     // degrades to exactly the old display rather than to an empty cell.
     const nameOf = (t: string) => names[t] ?? "";
 
-    function addTicker(raw: string) {
-        const t = raw.trim().toUpperCase();
+    // Takes only a symbol resolveTicker vouched for, so free text the
+    // database has never heard of cannot reach the form.
+    function addTicker(t: string) {
         if (!t || form.tickers.includes(t)) return;
         const tickers = [...form.tickers, t];
         const allocations = form.evenSplit
@@ -204,6 +235,25 @@ export default function PortfolioCard({
     const totalsTo100 = Math.abs(total - 100) < 0.01;
 
     const coverage = useMemo(() => coverageOf(form, ranges), [form, ranges]);
+    const bounds = useMemo(() => dateBounds(form, ranges), [form, ranges]);
+
+    // Keep the dates inside the window the holdings (and benchmark) cover.
+    // Runs after every render, not on a dependency list: sibling cards patch
+    // from the same snapshot of the form list, so one card's fix can be
+    // overwritten by another's in the same commit. Re-checking each render
+    // converges instead, and normalizeDates returns null once nothing is
+    // wrong, so a settled card does not patch at all.
+    useEffect(() => {
+        if (editingDate.current) return;
+        const fix = normalizeDates(form, bounds, lastGood.current, null);
+        if (fix) patch(fix);
+    });
+
+    function leaveDate(which: "start" | "end") {
+        editingDate.current = null;
+        const fix = normalizeDates(form, bounds, lastGood.current, which);
+        if (fix) patch(fix);
+    }
     const dateError = useMemo(() => dateErrorOf(form, coverage), [form, coverage]);
     const benchmarkEnd = form.benchmark ? (ranges[form.benchmark]?.[1] ?? "") : "";
     const benchmarkWarning = useMemo(
@@ -260,7 +310,12 @@ export default function PortfolioCard({
                         Name
                         <input
                             value={form.name}
+                            maxLength={60}
                             onChange={(e) => patch({ name: e.target.value })}
+                            onBlur={() => {
+                                const name = uniqueName(form.name, otherNames, defaultName);
+                                if (name !== form.name) patch({ name });
+                            }}
                         />
                     </label>
                     <label>
@@ -270,11 +325,18 @@ export default function PortfolioCard({
                             <input
                                 type="text"
                                 inputMode="numeric"
-                                placeholder="100,000"
+                                placeholder="10,000"
                                 value={formatMoney(form.buyingPower)}
                                 onChange={(e) => {
-                                    const digits = e.target.value.replace(/[^0-9]/g, "");
+                                    const digits = e.target.value
+                                        .replace(/[^0-9]/g, "")
+                                        .slice(0, MONEY_DIGITS);
                                     patch({ buyingPower: digits ? Number(digits) : 0 });
+                                }}
+                                // Nothing to invest is not a backtest.
+                                onBlur={() => {
+                                    if (form.buyingPower <= 0)
+                                        patch({ buyingPower: DEFAULT_CAPITAL });
                                 }}
                             />
                         </div>
@@ -309,7 +371,9 @@ export default function PortfolioCard({
                             aria-label="Recurring amount"
                             value={formatMoney(form.cashflowAmount)}
                             onChange={(e) => {
-                                const digits = e.target.value.replace(/[^0-9]/g, "");
+                                const digits = e.target.value
+                                    .replace(/[^0-9]/g, "")
+                                    .slice(0, MONEY_DIGITS);
                                 patch({ cashflowAmount: digits ? Number(digits) : 0 });
                             }}
                         />
@@ -342,8 +406,20 @@ export default function PortfolioCard({
                             type="text"
                             inputMode="numeric"
                             placeholder="YYYY-MM-DD"
+                            maxLength={10}
+                            disabled={!bounds}
+                            title={
+                                bounds
+                                    ? `${bounds.min} to ${bounds.max}`
+                                    : "Add a holding first — the dates it covers set the range"
+                            }
                             value={form.startDate}
-                            onChange={(e) => patch({ startDate: e.target.value.trim() })}
+                            onFocus={() => (editingDate.current = "start")}
+                            onChange={(e) => patch({ startDate: maskDate(e.target.value) })}
+                            onBlur={() => leaveDate("start")}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                            }}
                         />
                     </label>
                     <label>
@@ -352,8 +428,20 @@ export default function PortfolioCard({
                             type="text"
                             inputMode="numeric"
                             placeholder="YYYY-MM-DD"
+                            maxLength={10}
+                            disabled={!bounds}
+                            title={
+                                bounds
+                                    ? `${bounds.min} to ${bounds.max}`
+                                    : "Add a holding first — the dates it covers set the range"
+                            }
                             value={form.endDate}
-                            onChange={(e) => patch({ endDate: e.target.value.trim() })}
+                            onFocus={() => (editingDate.current = "end")}
+                            onChange={(e) => patch({ endDate: maskDate(e.target.value) })}
+                            onBlur={() => leaveDate("end")}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                            }}
                         />
                     </label>
                 </div>
@@ -405,7 +493,17 @@ export default function PortfolioCard({
                         onChange={(e) => patch({ benchmark: e.target.value })}
                     >
                         {BENCHMARKS.map((b) => (
-                            <option key={b.value} value={b.value}>
+                            <option
+                                key={b.value}
+                                value={b.value}
+                                // A benchmark this database does not hold would
+                                // only produce an empty comparison.
+                                disabled={
+                                    !!b.value &&
+                                    Object.keys(ranges).length > 0 &&
+                                    !ranges[b.value]
+                                }
+                            >
                                 {b.label}
                             </option>
                         ))}
@@ -484,6 +582,7 @@ export default function PortfolioCard({
                                     ? "Symbol or company name"
                                     : "Choose a DB first"
                             }
+                            disabled={!dbPath}
                             value={tickerInput}
                             onChange={(e) => {
                                 setTickerInput(e.target.value);
@@ -506,15 +605,10 @@ export default function PortfolioCard({
                                     setHighlight((h) => (h <= 0 ? n - 1 : h - 1));
                                 } else if (e.key === "Enter") {
                                     e.preventDefault();
-                                    // Nothing highlighted means take what was
-                                    // typed: a symbol the DB has not heard of
-                                    // is still worth attempting, and the
-                                    // coverage check below reports it properly.
-                                    addTicker(
-                                        highlight >= 0 && highlight < n
-                                            ? suggestions[highlight]
-                                            : tickerInput,
-                                    );
+                                    // Nothing highlighted takes the exact
+                                    // symbol, else the best match -- never
+                                    // free text the database cannot price.
+                                    addTicker(resolved);
                                 } else if (e.key === "Escape") {
                                     setPickerOpen(false);
                                     setHighlight(-1);
@@ -544,7 +638,13 @@ export default function PortfolioCard({
                             </ul>
                         )}
                     </div>
-                    <button onClick={() => addTicker(tickerInput)}>Add</button>
+                    <button
+                        disabled={!resolved}
+                        title={resolved ? `Add ${resolved}` : "Pick a symbol from the list"}
+                        onClick={() => addTicker(resolved)}
+                    >
+                        Add
+                    </button>
                 </div>
 
                 {!allocationsApply && form.tickers.length > 0 && (

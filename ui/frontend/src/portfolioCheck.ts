@@ -120,3 +120,116 @@ export function duplicateNames(forms: SimpleForm[]): string[] {
   }
   return dupes;
 }
+
+// ---------------------------------------------------------------------------
+// Guards: stop a bad value getting INTO the form, rather than reporting it
+// after the fact. Every control on the Backtest tab routes its input through
+// one of these, so the error messages above become a backstop rather than the
+// primary interface.
+
+// The window a portfolio's dates may occupy: every holding's coverage, and
+// the benchmark's too when the two overlap — a window past the benchmark's
+// last bar silently costs every comparison metric. A benchmark that does not
+// overlap the holdings at all is ignored here rather than allowed to produce
+// an empty window; benchmarkWarningOf still says so.
+export type Bounds = { min: string; max: string };
+
+export function dateBounds(form: SimpleForm, ranges: Ranges): Bounds | null {
+  const cov = coverageOf(form, ranges);
+  if (!cov || !cov.start || !cov.end || cov.start > cov.end) return null;
+  let { start: min, end: max } = cov;
+  const b = form.benchmark ? ranges[form.benchmark] : undefined;
+  if (b) {
+    const bmin = b[0] > min ? b[0] : min;
+    const bmax = b[1] < max ? b[1] : max;
+    if (bmin <= bmax) [min, max] = [bmin, bmax];
+  }
+  return { min, max };
+}
+
+// Keystroke mask for a YYYY-MM-DD box: digits only, dashes inserted where
+// they belong, never longer than a date. Typing "20150102" reads 2015-01-02.
+export function maskDate(raw: string): string {
+  const d = raw.replace(/[^0-9]/g, "").slice(0, 8);
+  if (d.length <= 4) return d;
+  if (d.length <= 6) return `${d.slice(0, 4)}-${d.slice(4)}`;
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
+}
+
+function clampTo(d: string, b: Bounds): string {
+  return d < b.min ? b.min : d > b.max ? b.max : d;
+}
+
+// The dates this portfolio should hold, or null when they are already fine.
+// A partial or impossible date falls back to the last good one, then to the
+// window's edge; anything outside the window is pulled inside it; and a start
+// after the end moves the side the user did NOT just edit, so what they typed
+// is what they keep.
+export function normalizeDates(
+  form: SimpleForm,
+  bounds: Bounds | null,
+  lastGood: { start: string; end: string },
+  edited: "start" | "end" | null,
+): { startDate: string; endDate: string } | null {
+  const pick = (v: string, prev: string, edge: string) =>
+    isValidDate(v) ? v : isValidDate(prev) ? prev : edge;
+  let s = pick(form.startDate, lastGood.start, bounds?.min ?? "");
+  let e = pick(form.endDate, lastGood.end, bounds?.max ?? "");
+  if (bounds) {
+    s = clampTo(s, bounds);
+    e = clampTo(e, bounds);
+    if (s > e) {
+      if (edited === "end") s = bounds.min;
+      else e = bounds.max;
+    }
+  }
+  if (s === form.startDate && e === form.endDate) return null;
+  return { startDate: s, endDate: e };
+}
+
+// Whether adding this symbol keeps the portfolio runnable: it must be priced,
+// and its history must overlap what is already held. Offering one that does
+// not is offering an error.
+export function tickerFits(ticker: string, form: SimpleForm, ranges: Ranges): boolean {
+  if (Object.keys(ranges).length === 0) return true;
+  const r = ranges[ticker];
+  if (!r) return false;
+  const cov = coverageOf(form, ranges);
+  if (!cov || !cov.start) return true;
+  const start = r[0] > cov.start ? r[0] : cov.start;
+  const end = r[1] < cov.end ? r[1] : cov.end;
+  return start <= end;
+}
+
+// What Enter or Add should add: the highlighted suggestion, else an exact
+// symbol match, else the best suggestion — never free text the database has
+// not heard of.
+export function resolveTicker(
+  typed: string,
+  highlight: number,
+  suggestions: string[],
+): string {
+  if (highlight >= 0 && highlight < suggestions.length) return suggestions[highlight];
+  const q = typed.trim().toUpperCase();
+  if (!q) return "";
+  return suggestions.includes(q) ? q : (suggestions[0] ?? "");
+}
+
+// A name no other portfolio has. Blank falls back to the given default; a
+// clash gets the first free " (n)" suffix.
+export function uniqueName(name: string, others: string[], fallback: string): string {
+  const base = name.trim() || fallback;
+  const taken = new Set(others.map((o) => o.trim()));
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base} (${n})`)) n++;
+  return `${base} (${n})`;
+}
+
+// Keystroke mask for a signed decimal: one leading minus, one point, digits.
+export function maskDecimal(raw: string): string {
+  const neg = raw.trim().startsWith("-");
+  const [whole, ...rest] = raw.replace(/[^0-9.]/g, "").split(".");
+  const num = rest.length > 0 ? `${whole}.${rest.join("")}` : whole;
+  return neg ? `-${num}` : num;
+}

@@ -16,7 +16,7 @@ import {
     criterionLabel,
 } from "./buildToml";
 import type { SimpleForm as Form, HypothesisForm } from "./buildToml";
-import { duplicateNames, portfolioRunnable } from "./portfolioCheck";
+import { duplicateNames, maskDecimal, portfolioRunnable } from "./portfolioCheck";
 import {
     BLANK,
     CRITERION_PRESETS,
@@ -379,6 +379,8 @@ export default function SimpleForm({
                     // The last portfolio cannot be removed: a run with nothing
                     // in it is not a state the form should reach by clicking.
                     onRemove={forms.length > 1 ? () => removeAt(i) : null}
+                    otherNames={forms.filter((_, j) => j !== i).map((o) => o.name)}
+                    defaultName={`Portfolio ${i + 1}`}
                     dbPath={dbPath}
                     available={available}
                     names={names}
@@ -452,7 +454,8 @@ export default function SimpleForm({
                         inputMode="decimal"
                         placeholder="1.2"
                         value={hypothesis.value}
-                        onChange={(e) => patchHypothesis({ value: e.target.value })}
+                        maxLength={16}
+                        onChange={(e) => patchHypothesis({ value: maskDecimal(e.target.value) })}
                     />
                 </div>
 
