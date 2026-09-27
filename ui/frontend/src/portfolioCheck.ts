@@ -22,6 +22,23 @@ export type Coverage = {
   unknown: string[];
 };
 
+// Whether the ranges have loaded. Every card asks this several times per
+// render, and on a real database the object holds ~10,000 symbols: both
+// Object.keys(...).length and a for-in are O(n) there (V8 enumerates every key
+// of a dictionary-mode object before yielding the first), and together they
+// were over half the form's render time in a profile. The object is replaced,
+// never mutated, when a database loads, so the answer is cached per object.
+const loadedCache = new WeakMap<Ranges, boolean>();
+
+export function hasRanges(ranges: Ranges): boolean {
+  let loaded = loadedCache.get(ranges);
+  if (loaded === undefined) {
+    loaded = Object.keys(ranges).length > 0;
+    loadedCache.set(ranges, loaded);
+  }
+  return loaded;
+}
+
 export function isValidDate(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
   const d = new Date(`${s}T00:00:00Z`);
@@ -32,7 +49,7 @@ export function isValidDate(s: string): boolean {
 // the earliest of their last dates. Null until at least one ticker is chosen
 // and the ranges have loaded.
 export function coverageOf(form: SimpleForm, ranges: Ranges): Coverage | null {
-  if (form.tickers.length === 0 || Object.keys(ranges).length === 0) return null;
+  if (form.tickers.length === 0 || !hasRanges(ranges)) return null;
   let start = "";
   let end = "";
   let startTicker = "";
@@ -77,7 +94,7 @@ export function benchmarkWarningOf(form: SimpleForm, ranges: Ranges): string {
   // Nothing to warn about before there is anything to run: an empty form
   // should not greet a new user with a date complaint.
   if (form.tickers.length === 0) return "";
-  if (!form.benchmark || Object.keys(ranges).length === 0) return "";
+  if (!form.benchmark || !hasRanges(ranges)) return "";
   const r = ranges[form.benchmark];
   if (!r) {
     return `${form.benchmark} is not in this database, so Alpha, Beta and the rest of the comparison will be empty.`;
@@ -197,12 +214,7 @@ export function normalizeDates(
 // lookup and two string compares. Computing them per symbol made the filter
 // quadratic -- 15 seconds of blocked UI per keystroke on a real database.
 export function tickerFilter(form: SimpleForm, ranges: Ranges): (ticker: string) => boolean {
-  let loaded = false;
-  for (const _ in ranges) {
-    loaded = true;
-    break;
-  }
-  if (!loaded) return () => true;
+  if (!hasRanges(ranges)) return () => true;
   const cov = coverageOf(form, ranges);
   const held = new Set(form.tickers);
   return (ticker) => {

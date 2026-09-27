@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { backtest, main } from "../wailsjs/go/models";
 import { readStored, readStoredObject, writeStored } from "./storage";
@@ -469,7 +469,7 @@ function Collapsible({
   );
 }
 
-export default function ResultsView({ results, fontSize, verdicts }: Props) {
+function ResultsView({ results, fontSize, verdicts }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   // Which metric columns to show. Remembered like the collapsible panels, so
@@ -1766,3 +1766,9 @@ function MonthGrid({
 // The shape MonthGrid needs from a period return, kept narrow so the grid does
 // not depend on fields it never reads.
 type PeriodReturnLike = { period: string; returnPct: number; partial: boolean };
+
+// Memoised: App re-renders on every keystroke in the Backtest form, and all
+// three props are state that only changes when a run finishes or the zoom
+// moves. Without this each keystroke re-rendered the whole dashboard --
+// ~10 ms plus a diff of every chart path -- to produce identical output.
+export default memo(ResultsView);

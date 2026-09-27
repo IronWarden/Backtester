@@ -15,6 +15,7 @@ import {
     coverageOf,
     dateBounds,
     dateErrorOf,
+    hasRanges,
     isValidDate,
     maskDate,
     normalizeDates,
@@ -503,7 +504,7 @@ export default function PortfolioCard({
                                 // only produce an empty comparison.
                                 disabled={
                                     !!b.value &&
-                                    Object.keys(ranges).length > 0 &&
+                                    hasRanges(ranges) &&
                                     !ranges[b.value]
                                 }
                             >
