@@ -582,22 +582,10 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
     return rows;
   }, [results]);
 
-  // Every hook must run before the early return below: React counts hooks
-  // per render, and ResultsView stays mounted across a run (App clears
-  // results, then fills them), so a hook placed after the return would be
-  // skipped on the empty render and appear on the next one -- "rendered
-  // more hooks than during the previous render", which unmounts the tree.
-  if (results.length === 0) {
-    return (
-      <div className="results-empty">
-        Run a backtest to see equity curves and metrics here.
-      </div>
-    );
-  }
-
   // The chart is laid out in pixels, so its height, paddings, label size and
   // stroke are all multiplied by the zoom factor to grow in step with the rest
   // of the (em-sized) UI. Width still comes from the container's real width.
+  // Above the early return only because the path memo below needs it.
   const scale = fontSize / 16;
   // Direct end-of-line labels for 2–4 series (beyond that the legend carries
   // identity alone); they need reserved room on the right.
@@ -612,6 +600,33 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
   const labelSize = 10 * scale;
   const innerW = Math.max(10, width - pad.left - pad.right);
   const innerH = H - pad.top - pad.bottom;
+
+  // The curve paths depend only on the data and the geometry, never on the
+  // hover state -- yet the crosshair re-renders this component on every
+  // mousemove. Rebuilding a thousands-of-points `d` string per series per
+  // pixel of pointer travel is what made the chart lag behind the cursor, so
+  // they are built once per layout and reused while the pointer moves.
+  const paths = useMemo(() => {
+    if (!chart) return [];
+    const px = (t: number) => pad.left + ((t - chart.tMin) / chart.tSpan) * innerW;
+    const py = (v: number) => pad.top + (1 - (v - chart.yMin) / chart.ySpan) * innerH;
+    return chart.series.map((s) =>
+      s.pts.map((p, j) => `${j === 0 ? "M" : "L"}${px(p.t)},${py(p.v)}`).join(" "),
+    );
+  }, [chart, pad.left, pad.top, innerW, innerH]);
+
+  // Every hook must run before the early return below: React counts hooks
+  // per render, and ResultsView stays mounted across a run (App clears
+  // results, then fills them), so a hook placed after the return would be
+  // skipped on the empty render and appear on the next one -- "rendered
+  // more hooks than during the previous render", which unmounts the tree.
+  if (results.length === 0) {
+    return (
+      <div className="results-empty">
+        Run a backtest to see equity curves and metrics here.
+      </div>
+    );
+  }
 
   const x = (t: number) =>
     chart ? pad.left + ((t - chart.tMin) / chart.tSpan) * innerW : 0;
@@ -806,13 +821,10 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
                 // Benchmarks first so the portfolio lines paint over them.
                 .sort((a, b) => Number(!!b[1].benchmark) - Number(!!a[1].benchmark))
                 .map(([i, s]) => {
-                  const d = s.pts
-                    .map((p, j) => `${j === 0 ? "M" : "L"}${x(p.t)},${y(p.v)}`)
-                    .join(" ");
                   return (
                     <path
                       key={i}
-                      d={d}
+                      d={paths[i]}
                       fill="none"
                       stroke={seriesColor(s, i)}
                       strokeWidth={(s.benchmark ? 1.25 : 2) * scale}
