@@ -1206,6 +1206,31 @@ button.primary:hover:not(:disabled),
   padding: 0.9em 1.1em 1.1em;
 }
 
+/* A run in progress over the previous results: they stay put, dimmed and
+   inert, under a pinned label, until the new ones replace them. Opacity is a
+   compositor-only change, so dimming a large chart costs no relayout. */
+.results.stale > * {
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 0.15s var(--ease);
+}
+
+.results.stale::before {
+  content: "Running…";
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  width: max-content;
+  margin: 0 auto 0.5em;
+  padding: 0.25em 0.9em;
+  border-radius: var(--radius-l);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent-strong);
+  font-size: var(--fs-s);
+}
+
 .results-empty {
   height: 100%;
   display: flex;

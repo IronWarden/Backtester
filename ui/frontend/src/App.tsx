@@ -515,9 +515,14 @@ function App() {
         hypothesisText?: string,
     ) {
         setErrorMsg("");
-        setResults([]);
         setDiagnostics([]);
+        // The previous results stay on screen, dimmed, until the new ones
+        // arrive -- clearing them up front collapsed the panel to its empty
+        // state for the whole run and then popped the chart back in. They are
+        // cleared on every path that will not replace them, so a stale result
+        // is never left looking like the answer to a run that failed.
         if (!dbPath) {
+            setResults([]);
             setErrorMsg("Pick a DuckDB file first.");
             return;
         }
@@ -526,12 +531,14 @@ function App() {
                 if (tomlPath) await WriteFile(tomlPath, tomlText);
                 if (luaPath) await WriteFile(luaPath, luaText);
             } catch (e: any) {
+                setResults([]);
                 setErrorMsg(`save failed: ${e?.message ?? e}`);
                 return;
             }
         }
         setRunning(true);
         setStatusMsg("Running…");
+        const started = performance.now();
         try {
             const res = await RunBacktest(
                 cfgText,
@@ -544,8 +551,12 @@ function App() {
             setErrorMsg(firstError(res.diagnostics ?? []));
             setVerdicts(res.verdicts ?? []);
             setHypothesisError(res.hypothesisError ?? "");
-            setStatusMsg(`Done — ${(res.results ?? []).length} result(s)`);
+            const secs = (performance.now() - started) / 1000;
+            setStatusMsg(
+                `Done — ${(res.results ?? []).length} result(s) in ${secs.toFixed(secs < 10 ? 1 : 0)}s`,
+            );
         } catch (e: any) {
+            setResults([]);
             setErrorMsg(String(e?.message ?? e));
             setStatusMsg("");
         } finally {
@@ -1010,7 +1021,11 @@ function App() {
                 title="Drag to resize results panel"
             />
 
-            <div className="results" style={{ height: resultsHeight * scale }}>
+            <div
+                className={running && results.length > 0 ? "results stale" : "results"}
+                style={{ height: resultsHeight * scale }}
+                aria-busy={running}
+            >
                 <ErrorBoundary label="The results view">
                     <ResultsView results={results} fontSize={fontSize} verdicts={verdicts} />
                 </ErrorBoundary>
