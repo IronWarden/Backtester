@@ -7,6 +7,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 )
 
 //go:embed all:frontend/dist
@@ -32,7 +33,10 @@ func main() {
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
+		// A non-nil Linux block replaces Wails' GPU-off fallback with our
+		// own, which is also off unless BACKTESTER_GPU asks otherwise.
+		Linux:     &linux.Options{WebviewGpuPolicy: gpuPolicy(os.Getenv)},
+		OnStartup: app.startup,
 		Bind: []interface{}{
 			app,
 		},

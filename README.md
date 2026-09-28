@@ -35,6 +35,13 @@ act on. The constant lives in `src/version/version.go` and nowhere else;
 has never been built or tested, and a report from either is answered
 differently from one that says `linux/amd64`.
 
+**If the window feels sluggish, try GPU rendering.** Wails paints the Linux
+webview on the CPU by default, because acceleration leaves a blank or crashing
+window on some NVIDIA/Wayland stacks. `BACKTESTER_GPU=on ./backtester` (or
+`auto` for WebKit's on-demand policy) turns it on for one launch; unset or
+`off` keeps the safe default. If the window comes up blank with it on, also try
+`WEBKIT_DISABLE_DMABUF_RENDERER=1`.
+
 `./package.sh` assembles a release directory. What ships and why:
 
 | file | why it has to be there |
