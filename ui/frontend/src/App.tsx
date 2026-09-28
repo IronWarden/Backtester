@@ -47,6 +47,7 @@ import { baseName, chipLabel } from "./paths";
 import { perFrame } from "./frame";
 import { registerLuaLanguageSupport } from "./luaEditor";
 import ResultsView from "./ResultsView";
+import Pane from "./Pane";
 import ErrorBoundary from "./ErrorBoundary";
 import { readStoredNumber, writeStored } from "./storage";
 import { readSession, writeSession } from "./session";
@@ -149,6 +150,7 @@ function firstError(diags: backtest.Diagnostic[]): string {
 function App() {
     const [mode, setMode] = useState<Mode>("simple");
     const [tab, setTab] = useState<Tab>("toml");
+    const visited = useRef(new Set<Mode>());
     const [tomlText, setTomlText] = useState<string>(DEFAULT_TOML);
     const [luaText, setLuaText] = useState<string>("");
     const [tomlPath, setTomlPath] = useState<string>("");
@@ -710,6 +712,10 @@ function App() {
         setStatusMsg(`Claude's strategy loaded — Save writes ${luaPath}.`);
     }
 
+    // The tabs visited so far, which are the ones kept mounted. Added to
+    // during render: idempotent, and it must hold before the JSX below reads it.
+    visited.current.add(mode);
+
     const language = tab === "toml" ? "ini" : "lua"; // monaco doesn't ship TOML, ini is close
     const value = tab === "toml" ? tomlText : luaText;
     const setValue = tab === "toml" ? setTomlText : setLuaText;
@@ -782,8 +788,10 @@ function App() {
 
             <div className="mid-row">
             <div className="mid-main">
-            {mode === "simple" ? (
-                <div className="main-scroll">
+            {/* Each tab mounts on its first visit and then stays mounted --
+                see Pane. First visits keep startup as cheap as before. */}
+            {visited.current.has("simple") && (
+                <Pane active={mode === "simple"} className="main-scroll">
                     <SimpleForm
                         dbPath={dbPath}
                         running={running}
@@ -798,13 +806,15 @@ function App() {
                             editAsToml(cfg);
                         }}
                     />
-                </div>
-            ) : mode === "data" ? (
-                <div className="data-pane">
+                </Pane>
+            )}
+            {visited.current.has("data") && (
+                <Pane active={mode === "data"} className="data-pane">
                     <QueryConsole dbPath={dbPath} fontSize={fontSize} />
-                </div>
-            ) : (
-                <>
+                </Pane>
+            )}
+            {visited.current.has("advanced") && (
+                <Pane active={mode === "advanced"} className="config-pane">
                     <div className="toolbar">
                         <button onClick={chooseConfig}>Open config…</button>
                         <button onClick={save} disabled={!tomlPath && !luaPath}>
@@ -964,7 +974,7 @@ function App() {
                             }}
                         />
                     </div>
-                </>
+                </Pane>
             )}
             </div>
             {chatOpen && (

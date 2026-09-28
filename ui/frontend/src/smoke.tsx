@@ -45,6 +45,7 @@ import {
 } from "./examples";
 import { chipLabel } from "./paths";
 import { perFrame } from "./frame";
+import Pane, { skipRender } from "./Pane";
 import {
     argsOf,
     detailFor,
@@ -1301,6 +1302,20 @@ check("a drag applies at most once per frame, and its last position", () => {
     } finally {
         [g.requestAnimationFrame, g.cancelAnimationFrame] = saved;
     }
+});
+
+check("a kept-mounted tab hides, and repaints only when it shows", () => {
+    const shown = renderToString(<Pane active={true} className="data-pane"><i>q</i></Pane>);
+    const hidden = renderToString(<Pane active={false} className="data-pane"><i>q</i></Pane>);
+    if (shown.includes("display:none")) throw new Error(shown);
+    if (!hidden.includes("display:none") || !hidden.includes("<i>q</i>")) {
+        throw new Error(`a hidden pane must keep its content, just not show it:\n${hidden}`);
+    }
+    const p = (active: boolean) => ({ active, className: "x", children: null });
+    eq("hidden -> hidden skips", skipRender(p(false), p(false)), true);
+    eq("hidden -> shown renders", skipRender(p(false), p(true)), false);
+    eq("shown -> hidden renders", skipRender(p(true), p(false)), false);
+    eq("shown -> shown renders", skipRender(p(true), p(true)), false);
 });
 
 if (process.env.SMOKE_UPDATE === "1") {

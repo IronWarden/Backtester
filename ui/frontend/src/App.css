@@ -2291,3 +2291,12 @@ td.num.dim {
   flex: 1;
 }
 
+
+/* The Config tab's column: toolbar, hypothesis, tabs, editor. Was a fragment
+   laid out by .mid-main directly; now a kept-mounted Pane (see Pane.tsx). */
+.config-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
