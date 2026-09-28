@@ -44,6 +44,7 @@ import {
     exampleHypothesis,
 } from "./examples";
 import { chipLabel } from "./paths";
+import { perFrame } from "./frame";
 import {
     argsOf,
     detailFor,
@@ -1272,6 +1273,33 @@ check("a chat message renders its markdown and insert actions", () => {
     );
     if (!panel.includes("chat-scroll") && !panel.includes("chat-setup")) {
         throw new Error(panel);
+    }
+});
+
+check("a drag applies at most once per frame, and its last position", () => {
+    const g = globalThis as any;
+    const saved = [g.requestAnimationFrame, g.cancelAnimationFrame];
+    const queued = new Map<number, () => void>();
+    let next = 1;
+    g.requestAnimationFrame = (cb: () => void) => (queued.set(next, cb), next++);
+    g.cancelAnimationFrame = (id: number) => queued.delete(id);
+    try {
+        const seen: number[] = [];
+        const f = perFrame((v: number) => seen.push(v));
+        f.push(1);
+        f.push(2);
+        f.push(3);
+        eq("frames requested for three moves", queued.size, 1);
+        for (const [id, cb] of [...queued]) (queued.delete(id), cb());
+        eq("applied after one frame", seen, [3]);
+        f.push(4);
+        f.flush();
+        eq("mouseup applies the pending move at once", seen, [3, 4]);
+        eq("and cancels its frame", queued.size, 0);
+        f.flush();
+        eq("a second flush applies nothing", seen, [3, 4]);
+    } finally {
+        [g.requestAnimationFrame, g.cancelAnimationFrame] = saved;
     }
 });
 

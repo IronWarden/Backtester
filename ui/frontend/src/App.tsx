@@ -44,6 +44,7 @@ import type {
     HypothesisForm as HypothesisFormData,
 } from "./buildToml";
 import { baseName, chipLabel } from "./paths";
+import { perFrame } from "./frame";
 import { registerLuaLanguageSupport } from "./luaEditor";
 import ResultsView from "./ResultsView";
 import ErrorBoundary from "./ErrorBoundary";
@@ -225,12 +226,14 @@ function App() {
         const startY = e.clientY;
         const maxRendered = window.innerHeight - 220 * scale;
         const minRendered = 60 * scale;
+        const frame = perFrame(setResultsHeight);
         const onMove = (ev: MouseEvent) => {
             const next = startRendered + (startY - ev.clientY);
             const clamped = Math.max(minRendered, Math.min(maxRendered, next));
-            setResultsHeight(clamped / scale);
+            frame.push(clamped / scale);
         };
         const onUp = () => {
+            frame.flush();
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
             document.body.style.cursor = "";
@@ -250,12 +253,14 @@ function App() {
         const startX = e.clientX;
         const maxRendered = window.innerWidth * 0.7;
         const minRendered = 220 * scale;
+        const frame = perFrame(setChatWidth);
         const onMove = (ev: MouseEvent) => {
             const next = startRendered + (startX - ev.clientX);
             const clamped = Math.max(minRendered, Math.min(maxRendered, next));
-            setChatWidth(clamped / scale);
+            frame.push(clamped / scale);
         };
         const onUp = () => {
+            frame.flush();
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
             document.body.style.cursor = "";
