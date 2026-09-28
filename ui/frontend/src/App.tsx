@@ -950,6 +950,13 @@ function App() {
                     <div className="editor">
                         <Editor
                             height="100%"
+                            // One Monaco model per file. Without a path the
+                            // two tabs shared a model, and every switch
+                            // replaced its whole text: slow on a long script,
+                            // and it lost the cursor, scroll and undo history
+                            // of the file being left. Keyed by path, each tab
+                            // keeps its own and switching is a model swap.
+                            path={tab === "toml" ? "backtester/config.toml" : "backtester/strategy.lua"}
                             language={language}
                             theme="backtester-dark"
                             value={value}
