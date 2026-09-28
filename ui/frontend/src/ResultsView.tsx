@@ -1,7 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { backtest, main } from "../wailsjs/go/models";
-import { readStored, readStoredObject, writeStored } from "./storage";
+import { readStored, writeStored } from "./storage";
+import { DockProvider, ResultPanel, useDock } from "./ResultPanel";
 
 // Categorical palette (Kanagawa), assigned by portfolio index in fixed slot
 // order: crystalBlue, surimiOrange, springGreen, sakuraPink, carpYellow,
@@ -219,10 +220,7 @@ type Hover = {
 function HypothesisVerdicts({ verdicts }: { verdicts: backtest.VerdictReport[] }) {
   if (verdicts.length === 0) return null;
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <span className="panel-title">Hypothesis verdict</span>
-      </div>
+    <ResultPanel id="verdict" title="Hypothesis verdict">
       <div className="verdicts">
         {verdicts.map((v, i) => (
           <div className="verdict-group" key={i}>
@@ -261,7 +259,7 @@ function HypothesisVerdicts({ verdicts }: { verdicts: backtest.VerdictReport[] }
           </div>
         ))}
       </div>
-    </div>
+    </ResultPanel>
   );
 }
 
@@ -281,10 +279,7 @@ function VerdictStrip({ results }: { results: main.RunResult[] }) {
   if (shown.length === 0) return null;
 
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <span className="panel-title">Does this survive the obvious objections?</span>
-      </div>
+    <ResultPanel id="objections" title="Does this survive the obvious objections?">
       <div className="verdicts">
         {shown.map((r, i) => (
           <div className="verdict-group" key={i}>
@@ -343,7 +338,7 @@ function VerdictStrip({ results }: { results: main.RunResult[] }) {
           </div>
         ))}
       </div>
-    </div>
+    </ResultPanel>
   );
 }
 
@@ -360,29 +355,6 @@ type Props = {
   fontSize: number;
   verdicts?: backtest.VerdictReport[];
 };
-
-// Panels below the headline ones open on click and remember it. Eleven panels
-// rendering expanded at once is most of what "overwhelmed on first open"
-// means, and the ones worth reading first — the verdicts, the curve, the
-// metrics — are not the ones that take the most room.
-//
-// Presentation only: nothing here changes a number, and every panel that
-// takes this treatment already hides itself when it has nothing to show, so a
-// collapsed header never stands for an empty body.
-const PANEL_STATE_KEY = "backtester-results-panels";
-
-// Shape-guarded, not just parse-guarded: the indexing that follows happens in
-// Collapsible, outside any try here, so a stored `"null"` would throw where
-// nothing catches it. See storage.ts.
-function readPanelState(): Record<string, boolean> {
-  return readStoredObject<boolean>(PANEL_STATE_KEY);
-}
-
-function writePanelOpen(id: string, open: boolean) {
-  // A browser that refuses storage still gets a working panel; it just
-  // forgets the choice, which is the right way to degrade.
-  writeStored(PANEL_STATE_KEY, JSON.stringify({ ...readPanelState(), [id]: open }));
-}
 
 // Which metric columns the table shows at rest.
 //
@@ -435,43 +407,13 @@ export function visibleColumn(view: MetricsView, key: string): boolean {
   return view === "full" || BASIC_COLUMNS.has(key);
 }
 
-function Collapsible({
-  id,
-  title,
-  children,
-}: {
-  id: string;
-  title: string;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(() => readPanelState()[id] ?? false);
-  function toggle() {
-    setOpen((prev) => {
-      writePanelOpen(id, !prev);
-      return !prev;
-    });
-  }
-  return (
-    <div className={`panel collapsible ${open ? "open" : "closed"}`}>
-      <button
-        type="button"
-        className="panel-head panel-toggle"
-        aria-expanded={open}
-        onClick={toggle}
-      >
-        <span className="panel-chevron" aria-hidden="true">
-          {open ? "\u25be" : "\u25b8"}
-        </span>
-        <span className="panel-title">{title}</span>
-      </button>
-      {open && children}
-    </div>
-  );
-}
-
 function ResultsView({ results, fontSize, verdicts }: Props) {
-  const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
+  // The chart's available height, used only while it is in a window of its
+  // own (docked, it has the strip's fixed height).
+  const [fillHeight, setFillHeight] = useState(0);
+  const dock = useDock();
+  const equityFloating = !!dock.floats["equity"];
   // Which metric columns to show. Remembered like the collapsible panels, so
   // a user who wants everything asks for it once.
   const [metricsView, setMetricsView] = useState<MetricsView>(readMetricsView);
@@ -484,23 +426,35 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
     [results],
   );
 
-  // Track the container width so the SVG is drawn in real pixels (crisp text,
-  // no aspect-ratio distortion) and reflows when the panel is resized. Re-runs
-  // when the chart appears/disappears because the observed div only exists
-  // while there is something to plot.
+  // Track the container's size so the SVG is drawn in real pixels (crisp
+  // text, no aspect-ratio distortion) and reflows when the panel is resized.
+  //
+  // A callback ref, not a ref plus an effect: the chart's container is a
+  // different element after every pop-out, dock, or run that removes and
+  // restores the chart, and an effect keyed on anything else kept observing
+  // the old, detached one -- the chart stayed at whatever width it had
+  // before, or at the 800px default. This re-attaches to whichever element is
+  // current, every time it changes.
+  const [wrapEl, wrapRef] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
+    if (!wrapEl) return;
     // Measure synchronously so the first paint is full-width; the observer's
     // initial delivery is async and would leave an 800px chart on screen.
-    if (el.clientWidth) setWidth(el.clientWidth);
+    // Content width, the same box the observer reports: clientWidth includes
+    // the padding, so the first paint used to be a few pixels wider than
+    // every later one.
+    const cs = getComputedStyle(wrapEl);
+    const w =
+      wrapEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (w > 0) setWidth(w);
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w) setWidth(w);
+      const r = entries[0]?.contentRect;
+      if (r?.width) setWidth(r.width);
+      if (r?.height) setFillHeight(r.height);
     });
-    ro.observe(el);
+    ro.observe(wrapEl);
     return () => ro.disconnect();
-  }, [plottable.length > 0]);
+  }, [wrapEl]);
 
   const chart = useMemo(() => {
     if (plottable.length === 0) return null;
@@ -590,7 +544,12 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
   // Direct end-of-line labels for 2–4 series (beyond that the legend carries
   // identity alone); they need reserved room on the right.
   const endLabeled = plottable.length >= 2 && plottable.length <= 4;
-  const H = Math.round(250 * scale);
+  // Docked, the chart is a fixed 250 (scaled); in its own window it takes the
+  // window's height, which is most of the point of taking it out.
+  const H =
+    equityFloating && fillHeight > 0
+      ? Math.max(Math.round(160 * scale), Math.floor(fillHeight))
+      : Math.round(250 * scale);
   const pad = {
     top: 14 * scale,
     right: (endLabeled ? 100 : 18) * scale,
@@ -708,6 +667,7 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
   const swept = results.some((r) => (r.trials ?? 0) > 1);
 
   return (
+    <DockProvider value={dock}>
     <div className="results-view">
       <div className="stat-grid">
         {results.map((r, i) => {
@@ -752,10 +712,12 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
       <VerdictStrip results={results} />
 
       {chart && (
-        <div className="panel">
-          <div className="panel-head">
-            <span className="panel-title">Equity curve</span>
-            {plottable.length >= 2 && (
+        <ResultPanel
+          id="equity"
+          title="Equity curve"
+          fillClass="fill"
+          head={
+            plottable.length >= 2 && (
               <div className="legend">
                 {plottable.map((r, i) => (
                   <span
@@ -768,8 +730,9 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
                   </span>
                 ))}
               </div>
-            )}
-          </div>
+            )
+          }
+        >
           {windowNote && <div className="panel-note">{windowNote}</div>}
           <div className="chart-wrap" ref={wrapRef}>
             <svg
@@ -889,12 +852,14 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
               </div>
             )}
           </div>
-        </div>
+        </ResultPanel>
       )}
 
-      <div className="panel">
-        <div className="panel-head">
-          <span className="panel-title">Metrics</span>
+      <ResultPanel
+        id="metrics"
+        title="Metrics"
+        head={
+          <>
           {/* Not a "show more" link: both views are named, so the basic one
               reads as a choice rather than as the table failing to load. */}
           <div className="metrics-view" role="group" aria-label="Metric columns">
@@ -918,7 +883,9 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
               </button>
             ))}
           </div>
-        </div>
+          </>
+        }
+      >
         <div className="table-scroll">
           <table>
             <thead>
@@ -1241,12 +1208,12 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
             </tbody>
           </table>
         </div>
-      </div>
+      </ResultPanel>
 
       <StrategyPlots results={results} />
 
       {results.some((r) => (r.walkForward?.windows ?? []).length > 0) && (
-        <Collapsible id="walk-forward" title="Walk-forward windows">
+        <ResultPanel id="walk-forward" title="Walk-forward windows" collapsible>
           <div className="table-scroll">
             <table>
               <thead>
@@ -1291,11 +1258,11 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </Collapsible>
+        </ResultPanel>
       )}
 
       {results.some((r) => (r.splits ?? []).length > 0) && (
-        <Collapsible id="splits" title="In-sample vs out-of-sample">
+        <ResultPanel id="splits" title="In-sample vs out-of-sample" collapsible>
           <div className="table-scroll">
             <table>
               <thead>
@@ -1348,11 +1315,11 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </Collapsible>
+        </ResultPanel>
       )}
 
       {results.some((r) => (r.drawdowns ?? []).length > 0) && (
-        <Collapsible id="drawdowns" title="Deepest drawdowns">
+        <ResultPanel id="drawdowns" title="Deepest drawdowns" collapsible>
           <div className="table-scroll">
             <table>
               <thead>
@@ -1388,11 +1355,11 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </Collapsible>
+        </ResultPanel>
       )}
 
       {results.some((r) => (r.tradeStats?.trades ?? 0) > 0) && (
-        <Collapsible id="trading" title="Trading">
+        <ResultPanel id="trading" title="Trading" collapsible>
           <div className="table-scroll">
             <table>
               <thead>
@@ -1442,11 +1409,11 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </Collapsible>
+        </ResultPanel>
       )}
 
       {results.some((r) => (r.tradeStats?.perTicker ?? []).length > 0) && (
-        <Collapsible id="attribution" title="Attribution — which position made the money">
+        <ResultPanel id="attribution" title="Attribution — which position made the money" collapsible>
           <div className="table-scroll">
             <table>
               <thead>
@@ -1497,11 +1464,11 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
               </tbody>
             </table>
           </div>
-        </Collapsible>
+        </ResultPanel>
       )}
 
       {results.some((r) => (r.yearlyReturns ?? []).length > 0) && (
-        <Collapsible id="yearly" title="Calendar year returns">
+        <ResultPanel id="yearly" title="Calendar year returns" collapsible>
           <div className="table-scroll">
             <table>
               <thead>
@@ -1552,11 +1519,11 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
             * partial period — the run does not span the whole year. Shown as
             the plain return over the days present, not annualized.
           </div>
-        </Collapsible>
+        </ResultPanel>
       )}
 
       {results.some((r) => (r.monthlyReturns ?? []).length > 0) && (
-        <Collapsible id="monthly" title="Monthly returns">
+        <ResultPanel id="monthly" title="Monthly returns" collapsible>
           {results.map((r, i) =>
             (r.monthlyReturns ?? []).length === 0 ? null : (
               <MonthGrid key={i} result={r} color={COLORS[i % COLORS.length]} showName={results.length > 1} />
@@ -1566,9 +1533,10 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
             * partial month — the run does not span the whole month. Shown as
             the plain return over the days present.
           </div>
-        </Collapsible>
+        </ResultPanel>
       )}
     </div>
+    </DockProvider>
   );
 }
 
@@ -1651,7 +1619,7 @@ function StrategyPlots({ results }: { results: main.RunResult[] }) {
   const withPlots = results.filter((r) => (r.plots ?? []).length > 0);
   if (withPlots.length === 0) return null;
   return (
-    <Collapsible id="plots" title="What the strategy plotted">
+    <ResultPanel id="plots" title="What the strategy plotted" collapsible>
       <div className="plots">
         {withPlots.map((r) => (
           <div className="plot-group" key={r.portfolioName}>
@@ -1667,7 +1635,7 @@ function StrategyPlots({ results }: { results: main.RunResult[] }) {
           </div>
         ))}
       </div>
-    </Collapsible>
+    </ResultPanel>
   );
 }
 

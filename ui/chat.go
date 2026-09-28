@@ -1184,6 +1184,13 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   the run did not produce it. A panel with nothing to show is hidden entirely
   rather than collapsed, so an absent title genuinely means absent data (no
   Sweep, no Validation block, no trades).
+  Any panel can also be POPPED OUT into its own movable window: double-click
+  its header or press the ⤢ button. The window drags by its header, resizes
+  from its corner, maximises on another double-click, and docks back with x or
+  Esc; the strip keeps a one-line "in its own window" stub with Show/Dock. So
+  a panel a user cannot find may be in a window -- possibly behind another one
+  -- rather than missing; "Show" on its stub brings it forward. To read the
+  equity curve or a wide table at a real size, suggest popping it out.
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -1980,7 +1987,9 @@ total US market.
   expanded; the other panels (walk-forward, in/out-of-sample, drawdowns,
   trading, attribution, calendar and monthly returns) are collapsed and open
   on click. A panel that is missing entirely had no data — a collapsed one is
-  just closed.
+  just closed. Any panel pops out into its own movable, resizable window on a
+  double-click of its header (or ⤢); a popped-out panel leaves an "in its own
+  window" stub with Show/Dock, so check for one before calling a panel missing.
 - The three tabs are Backtest (the form), Config (raw TOML + Lua) and Data
   (SQL). They were called Simple/Advanced/Data before 2026-08-22; a user
   saying "simple mode" means the Backtest tab.

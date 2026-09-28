@@ -2648,6 +2648,19 @@ A panel that has nothing to report is hidden rather than collapsed, so an
 absent title means absent data (no `[portfolio.Sweep]`, no
 `[portfolio.Validation]`, no trades) rather than a closed section.
 
+**Any panel can leave the strip for a window of its own.** Double-click its
+header, or press **⤢** at its right edge. The window drags by its header,
+resizes from its bottom-right corner, maximises on another double-click (or
+**□**), and goes back with **×** or **Esc**; clicking a window brings it to
+the front. The equity curve grows to the window's height, so popping it out is
+how to read it at a real size. The strip keeps a one-line stub — *in its own
+window* — with **Show** and **Dock** buttons, and which panels are out, and
+where, is remembered across runs and launches. A window is always pulled back
+on screen, whatever the display did since.
+
+The divider between the tab and the results drags to resize (double-click it
+to reset) and remembers its height; so does the assistant panel's left edge.
+
 ## AI assistant (UI) — Claude or local Ollama models
 
 The Wails UI has a built-in AI chat, toggled with the **✦ Assistant**

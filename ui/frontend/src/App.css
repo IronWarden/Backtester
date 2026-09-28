@@ -984,8 +984,10 @@ button.primary:hover:not(:disabled),
    is the entire grammar ParseCriterion accepts, laid out on one line so it
    reads as the sentence it is. */
 /* Collapsible result panels. The header is a button so the whole strip is
-   the hit target and the keyboard reaches it; it must not look like one. */
-.panel-toggle {
+   the hit target and the keyboard reaches it; it must not look like one.
+   Prefixed with .app to outrank the shared `.app button` rule, which would
+   otherwise give it a button's border, fill and padding. */
+.app .panel-toggle {
   width: 100%;
   background: none;
   border: none;
@@ -998,6 +1000,12 @@ button.primary:hover:not(:disabled),
   display: flex;
   align-items: center;
   gap: 0.45em;
+}
+
+.app .panel-toggle:hover:not(:disabled),
+.app .panel-toggle:active:not(:disabled) {
+  background: none;
+  transform: none;
 }
 
 .panel-toggle:hover .panel-title {
@@ -1481,7 +1489,9 @@ button.primary:hover:not(:disabled),
   overflow: hidden;
 }
 
-.metrics-view-btn {
+/* .app-prefixed for the same reason as .panel-toggle: `.app button` outranks a
+   bare class and was drawing these at full button size. */
+.app .metrics-view-btn {
   background: var(--bg-inset);
   color: var(--text-3);
   border: 0;
@@ -1490,15 +1500,15 @@ button.primary:hover:not(:disabled),
   line-height: 1.5;
 }
 
-.metrics-view-btn + .metrics-view-btn {
+.app .metrics-view-btn + .metrics-view-btn {
   border-left: 1px solid var(--border-strong);
 }
 
-.metrics-view-btn:hover {
+.app .metrics-view-btn:hover {
   color: var(--text-1);
 }
 
-.metrics-view-btn.on {
+.app .metrics-view-btn.on {
   background: var(--accent-soft);
   color: var(--text-1);
   font-weight: 600;
@@ -1606,15 +1616,15 @@ button.primary:hover:not(:disabled),
   overflow: auto;
 }
 
-.results table,
+:is(.results, .float-body) table,
 .query-console table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88em;
 }
 
-.results th,
-.results td,
+:is(.results, .float-body) th,
+:is(.results, .float-body) td,
 .query-console th,
 .query-console td {
   text-align: left;
@@ -1623,17 +1633,17 @@ button.primary:hover:not(:disabled),
   white-space: nowrap;
 }
 
-.results tbody tr:last-child td,
+:is(.results, .float-body) tbody tr:last-child td,
 .query-console tbody tr:last-child td {
   border-bottom: none;
 }
 
-.results tbody tr:hover td,
+:is(.results, .float-body) tbody tr:hover td,
 .query-console tbody tr:hover td {
   background: var(--bg-raised);
 }
 
-.results th,
+:is(.results, .float-body) th,
 .query-console th {
   color: var(--text-3);
   font-weight: 600;
@@ -1645,21 +1655,21 @@ button.primary:hover:not(:disabled),
   top: 0;
 }
 
-.results th.num,
-.results td.num,
+:is(.results, .float-body) th.num,
+:is(.results, .float-body) td.num,
 .query-console th.num,
 .query-console td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.results td.num,
+:is(.results, .float-body) td.num,
 .query-console td.num {
   font-family: var(--mono);
   font-size: 0.95em;
 }
 
-.results td.strategy {
+:is(.results, .float-body) td.strategy {
   color: var(--text-3);
   max-width: 14em;
   overflow: hidden;
@@ -1670,13 +1680,13 @@ button.primary:hover:not(:disabled),
    it reads as a footer to the table rather than as another result: separated
    by a rule, dimmed, and with the profit colouring muted so a green benchmark
    is never mistaken for a portfolio that did well. */
-.results tr.benchmark-row {
+:is(.results, .float-body) tr.benchmark-row {
   border-top: 1px solid var(--border);
   color: var(--text-3);
 }
 
-.results tr.benchmark-row td.num.pos,
-.results tr.benchmark-row td.num.neg {
+:is(.results, .float-body) tr.benchmark-row td.num.pos,
+:is(.results, .float-body) tr.benchmark-row td.num.neg {
   color: var(--text-3);
 }
 
@@ -2358,4 +2368,134 @@ td.num.dim {
   flex-direction: column;
   min-height: 0;
   flex: 1;
+}
+
+/* Result panels as their own windows (ResultPanel.tsx) --------------------- */
+
+.panel-head-spacer {
+  flex: 1;
+}
+
+/* The collapsible's toggle used to BE the header; it now sits inside one
+   beside the pop-out button, and still takes all the room it can so the
+   whole header row stays clickable. */
+.app .panel-head > .panel-toggle {
+  width: auto;
+  flex: 1 1 auto;
+}
+
+/* The toggle already takes the free space; a spacer beside it would split it. */
+.panel-toggle ~ .panel-head-spacer {
+  display: none;
+}
+
+.panel-head {
+  user-select: none;
+}
+
+.app .panel-icon {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-3);
+  padding: 0.1em 0.45em;
+  font-size: 0.85em;
+  line-height: 1.2;
+}
+
+.app .panel-icon:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* The stub left in the strip while the panel is out. */
+.panel-away {
+  opacity: 0.75;
+}
+
+.panel-away .panel-head {
+  border-bottom: none;
+}
+
+.panel-away-note {
+  font-size: 0.78em;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.float-win {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  /* Its own layer: moving it is a compositor job, and repainting it never
+     touches the app underneath. */
+  contain: layout paint;
+  outline: none;
+}
+
+.float-win.max {
+  inset: 3.6em 1em 2.4em 1em;
+}
+
+.float-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5em 1em;
+  padding: 0.5em 0.6em 0.5em 0.9em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.float-win.max .float-head {
+  cursor: default;
+}
+
+.float-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* A panel that lays itself out against the window: the equity curve's
+   container takes the remaining height, and the chart is drawn to it. */
+.float-body.fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.float-body.fill > .chart-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.float-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    var(--border-strong) 50%,
+    var(--border-strong) 60%,
+    transparent 60%,
+    transparent 72%,
+    var(--border-strong) 72%,
+    var(--border-strong) 82%,
+    transparent 82%
+  );
 }

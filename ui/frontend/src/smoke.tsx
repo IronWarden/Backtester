@@ -46,6 +46,8 @@ import {
 import { chipLabel } from "./paths";
 import { perFrame, trackDrag } from "./frame";
 import Pane, { skipRender } from "./Pane";
+import { ResultPanel, DockProvider, clampGeo, defaultGeo, readFloats } from "./ResultPanel";
+import type { Geo } from "./ResultPanel";
 import {
     argsOf,
     detailFor,
@@ -1339,6 +1341,86 @@ check("a drag ends on release wherever it happens, and never sticks", () => {
     } finally {
         [g.requestAnimationFrame, g.cancelAnimationFrame, g.document] = saved;
     }
+});
+
+check("every result panel can be popped out, and a popped-out one leaves a stub", () => {
+    const { results, verdicts } = load("full");
+    const docked = renderToString(
+        <ResultsView results={results} fontSize={16} verdicts={verdicts} />,
+    );
+    // One pop-out button per panel header, headline and collapsible alike.
+    const panels = (docked.match(/class="panel[ "]/g) ?? []).length;
+    const buttons = (docked.match(/aria-label="Open [^"]+ in its own window"/g) ?? []).length;
+    if (panels === 0 || buttons !== panels) {
+        throw new Error(`${panels} panels but ${buttons} pop-out buttons`);
+    }
+    if (docked.includes("float-win")) throw new Error("a window rendered with nothing floated");
+
+    const out = { equity: { x: 10, y: 20, w: 700, h: 400, max: false } };
+    const floated = withStorage(
+        { "backtester-float-panels": JSON.stringify(out) },
+        () => renderToString(<ResultsView results={results} fontSize={16} verdicts={verdicts} />),
+    );
+    const text = floated.replace(/<!-- -->/g, "");
+    if (!text.includes("in its own window")) throw new Error("no stub left in the strip");
+    if (!/class="float-win"[^>]*aria-label="Equity curve"/.test(text)) {
+        throw new Error(`the equity curve has no window:\n${text.slice(0, 400)}`);
+    }
+    // The window holds the real chart, not a copy or a placeholder.
+    const win = text.slice(text.indexOf('class="float-win"'));
+    if (!win.includes("equity-chart")) throw new Error("the window is empty");
+});
+
+check("a collapsed panel renders its header only, and opens from storage", () => {
+    const body = <p>body</p>;
+    const closed = renderToString(<ResultPanel id="t" title="T" collapsible>{body}</ResultPanel>);
+    if (closed.includes("<p>body</p>")) throw new Error("a closed panel rendered its body");
+    const open = withStorage({ "backtester-results-panels": '{"t":true}' }, () =>
+        renderToString(<ResultPanel id="t" title="T" collapsible>{body}</ResultPanel>),
+    );
+    if (!open.includes("<p>body</p>")) throw new Error("stored open state ignored");
+    // Outside a dock (no ResultsView) there is nothing to pop out into.
+    if (closed.includes("in its own window")) throw new Error(closed);
+    const withDock = renderToString(
+        <DockProvider
+            value={{
+                floats: {},
+                order: [],
+                float: () => {},
+                dock: () => {},
+                focus: () => {},
+                setGeo: () => {},
+            }}
+        >
+            <ResultPanel id="t" title="T">{body}</ResultPanel>
+        </DockProvider>,
+    );
+    if (!withDock.includes("Open T in its own window")) throw new Error(withDock);
+});
+
+check("a window can never be lost off screen or shrunk ungrabbable", () => {
+    const g = (x: number, y: number, w: number, h: number): Geo => ({ x, y, w, h, max: false });
+    // Placed on a big monitor, restored on a small one.
+    eq("pulled back on screen", clampGeo(g(3000, 2000, 900, 600), 1280, 720), g(1160, 680, 900, 600));
+    eq("never negative", clampGeo(g(-400, -50, 900, 600), 1280, 720), g(0, 0, 900, 600));
+    eq("never tiny", clampGeo(g(10, 10, 20, 10), 1280, 720), g(10, 10, 280, 160));
+    eq("never bigger than the screen", clampGeo(g(0, 0, 5000, 5000), 1280, 720), g(0, 0, 1280, 720));
+    const a = defaultGeo(0, 1400, 900);
+    const b = defaultGeo(1, 1400, 900);
+    eq("first window centred", [a.x + a.w / 2, a.y + a.h / 2], [700, 450]);
+    eq("second window offset from the first", [b.x - a.x, b.y - a.y], [28, 28]);
+});
+
+check("stored window positions are input: bad entries are dropped", () => {
+    const stored = JSON.stringify({
+        equity: { x: 1, y: 2, w: 300, h: 200, max: true },
+        metrics: { x: "1", y: 2, w: 300, h: 200, max: false },
+        drawdowns: { x: 1, y: 2, w: 300, h: 200 },
+        yearly: null,
+    });
+    const got = withStorage({ "backtester-float-panels": stored }, readFloats);
+    eq("only the valid entry survives", Object.keys(got), ["equity"]);
+    eq("garbage is empty, not a throw", withStorage({ "backtester-float-panels": "{[" }, readFloats), {});
 });
 
 check("a kept-mounted tab hides, and repaints only when it shows", () => {
