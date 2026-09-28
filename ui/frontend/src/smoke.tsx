@@ -20,6 +20,7 @@ import { join } from "node:path";
 
 import ResultsView, { differingWindows } from "./ResultsView";
 import SimpleFormView from "./SimpleForm";
+import ChatPanel, { ChatMessage } from "./ChatPanel";
 import { CRITERION_OPS, buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
 import {
@@ -1226,6 +1227,51 @@ check("every starter example registers a criterion the engine accepts", () => {
         if (buildHypothesis(h) === "") {
             throw new Error(`${ex.id} produced no hypothesis: ${JSON.stringify(h)}`);
         }
+    }
+});
+
+check("a chat message renders its markdown and insert actions", () => {
+    const noop = () => {};
+    const html = renderToString(
+        <ChatMessage
+            m={{
+                role: "assistant",
+                content: "Try **this**:\n```toml\n[Output]\n```\nor `sma(50)`.",
+                toolNotes: ["SELECT 1"],
+            }}
+            busy={false}
+            onApplyToml={noop}
+            onApplyLua={noop}
+        />,
+    );
+    const text = html.replace(/<!-- -->/g, "");
+    for (const want of ["<strong>this</strong>", "Insert into TOML editor", "[Output]", "SELECT 1"]) {
+        if (!text.includes(want)) throw new Error(`missing ${want}:\n${html}`);
+    }
+    // Streaming hides the insert action, so a half-written block cannot be
+    // applied; the empty reply shows the thinking placeholder instead.
+    const streaming = renderToString(
+        <ChatMessage
+            m={{ role: "assistant", content: "", streaming: true }}
+            busy={true}
+            onApplyToml={noop}
+            onApplyLua={noop}
+        />,
+    );
+    if (!streaming.includes("thinking")) throw new Error(streaming);
+    const panel = renderToString(
+        <ChatPanel
+            width={320}
+            dbPath=""
+            cfgText=""
+            luaText=""
+            onApplyToml={noop}
+            onApplyLua={noop}
+            onClose={noop}
+        />,
+    );
+    if (!panel.includes("chat-scroll") && !panel.includes("chat-setup")) {
+        throw new Error(panel);
     }
 });
 

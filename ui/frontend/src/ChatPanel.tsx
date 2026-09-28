@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
     Chat,
     HasClaudeKey,
@@ -217,6 +217,47 @@ function Markdown({
     return <>{nodes}</>;
 }
 
+// One message. Memoized because the panel re-renders on every keystroke in
+// the input box and on every streamed token, and re-parsing the markdown of
+// the whole conversation each time is what made long chats type and stream
+// sluggishly. Messages are replaced, never mutated, so an unchanged message
+// keeps its identity and skips the render; only the one streaming repaints.
+export const ChatMessage = memo(function ChatMessage({
+    m,
+    busy,
+    onApplyToml,
+    onApplyLua,
+}: {
+    m: Msg;
+    busy: boolean;
+    onApplyToml: (t: string) => void;
+    onApplyLua: (t: string) => void;
+}) {
+    return (
+        <div className={`chat-msg ${m.role}`}>
+            {m.toolNotes?.map((q, j) => (
+                <div key={j} className="chat-toolnote" title={q}>
+                    ⛁ {q}
+                </div>
+            ))}
+            {m.role === "assistant" ? (
+                <Markdown
+                    text={m.content}
+                    busy={busy}
+                    onApplyToml={onApplyToml}
+                    onApplyLua={onApplyLua}
+                />
+            ) : (
+                <p>{m.content}</p>
+            )}
+            {m.streaming && !m.content && (
+                <div className="chat-thinking">thinking…</div>
+            )}
+            {m.error && <div className="chat-error">{m.error}</div>}
+        </div>
+    );
+});
+
 // --- Panel -----------------------------------------------------------------
 
 export default function ChatPanel({
@@ -239,6 +280,17 @@ export default function ChatPanel({
     const [keyInput, setKeyInput] = useState("");
     const [keyError, setKeyError] = useState("");
     const scrollRef = useRef<HTMLDivElement>(null);
+    // Whether the view is parked at the bottom. Streaming follows the reply
+    // only while it is: someone who scrolled up to reread an earlier answer
+    // should not be yanked back down by every token of the current one.
+    const stickRef = useRef(true);
+
+    // App hands down fresh closures on every render, which would defeat the
+    // message memo; these stable wrappers always call the latest ones.
+    const applyRef = useRef({ onApplyToml, onApplyLua });
+    applyRef.current = { onApplyToml, onApplyLua };
+    const applyToml = useCallback((t: string) => applyRef.current.onApplyToml(t), []);
+    const applyLua = useCallback((t: string) => applyRef.current.onApplyLua(t), []);
 
     useEffect(() => {
         HasClaudeKey().then(setHasKey).catch(() => setHasKey(false));
@@ -290,10 +342,11 @@ export default function ChatPanel({
         };
     }, []);
 
-    // Keep the newest message in view as it streams.
+    // Keep the newest message in view as it streams, unless the user has
+    // scrolled away from the bottom.
     useEffect(() => {
         const el = scrollRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
+        if (el && stickRef.current) el.scrollTop = el.scrollHeight;
     }, [msgs]);
 
     async function saveKey() {
@@ -311,6 +364,8 @@ export default function ChatPanel({
         const trimmed = text.trim();
         if (!trimmed || busy) return;
         const history: Msg[] = [...msgs, { role: "user", content: trimmed }];
+        // Sending is a request to see the answer, wherever the view was.
+        stickRef.current = true;
         setMsgs([...history, { role: "assistant", content: "", streaming: true }]);
         setInput("");
         setBusy(true);
@@ -402,7 +457,15 @@ export default function ChatPanel({
                 </div>
             ) : (
                 <>
-                    <div className="chat-scroll" ref={scrollRef}>
+                    <div
+                        className="chat-scroll"
+                        ref={scrollRef}
+                        onScroll={(e) => {
+                            const el = e.currentTarget;
+                            stickRef.current =
+                                el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                        }}
+                    >
                         {msgs.length === 0 && (
                             <div className="chat-empty">
                                 <p>
@@ -422,27 +485,13 @@ export default function ChatPanel({
                             </div>
                         )}
                         {msgs.map((m, i) => (
-                            <div key={i} className={`chat-msg ${m.role}`}>
-                                {m.toolNotes?.map((q, j) => (
-                                    <div key={j} className="chat-toolnote" title={q}>
-                                        ⛁ {q}
-                                    </div>
-                                ))}
-                                {m.role === "assistant" ? (
-                                    <Markdown
-                                        text={m.content}
-                                        busy={busy}
-                                        onApplyToml={onApplyToml}
-                                        onApplyLua={onApplyLua}
-                                    />
-                                ) : (
-                                    <p>{m.content}</p>
-                                )}
-                                {m.streaming && !m.content && (
-                                    <div className="chat-thinking">thinking…</div>
-                                )}
-                                {m.error && <div className="chat-error">{m.error}</div>}
-                            </div>
+                            <ChatMessage
+                                key={i}
+                                m={m}
+                                busy={busy}
+                                onApplyToml={applyToml}
+                                onApplyLua={applyLua}
+                            />
                         ))}
                     </div>
                     <div className="chat-inputrow">
