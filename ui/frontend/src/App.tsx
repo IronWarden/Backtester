@@ -44,7 +44,7 @@ import type {
     HypothesisForm as HypothesisFormData,
 } from "./buildToml";
 import { baseName, chipLabel } from "./paths";
-import { perFrame } from "./frame";
+import { perFrame, trackDrag } from "./frame";
 import { registerLuaLanguageSupport } from "./luaEditor";
 import ResultsView from "./ResultsView";
 import Pane from "./Pane";
@@ -65,6 +65,15 @@ const FONT_STORAGE_KEY = "backtester-font-size-v2";
 // Assistant panel width in base pixels (at zoom 1), persisted like the font.
 const CHAT_WIDTH_STORAGE_KEY = "backtester-chat-width";
 const DEFAULT_CHAT_WIDTH = 432;
+const RESULTS_HEIGHT_STORAGE_KEY = "backtester-results-height";
+// Tall enough to show the headline cards and the top of the equity curve
+// without scrolling; the old 240 showed a single card.
+const DEFAULT_RESULTS_HEIGHT = 380;
+// Base pixels kept above the results panel. Config needs its toolbar, tabs
+// and the editor's 200px minimum on top of the topbar and status line; the
+// other tabs scroll, so they only need enough to stay usable.
+const RESERVED_TOP_CONFIG = 440;
+const RESERVED_TOP = 260;
 
 type Tab = "toml" | "lua";
 type Mode = "simple" | "advanced" | "data";
@@ -189,7 +198,33 @@ function App() {
     const scale = fontSize / BASE_FONT_SIZE;
     // Results-panel height in *base* pixels (i.e. at scale 1). It's rendered at
     // resultsHeight * scale so the panel grows and shrinks with the zoom.
-    const [resultsHeight, setResultsHeight] = useState<number>(240);
+    // Remembered, like the assistant's width: someone who made room for the
+    // results once should not have to again on every launch.
+    const [resultsHeight, setResultsHeight] = useState<number>(() =>
+        readStoredNumber(RESULTS_HEIGHT_STORAGE_KEY, DEFAULT_RESULTS_HEIGHT, (n) => n >= 60),
+    );
+    // The window's height, tracked so the results panel's bound follows it.
+    const [winHeight, setWinHeight] = useState(() => window.innerHeight);
+    useEffect(() => {
+        const frame = perFrame(setWinHeight);
+        const onResize = () => frame.push(window.innerHeight);
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+    }, []);
+    // The results panel may take the window down to RESERVED_TOP* of room
+    // above it and no further. The old bound left 220px for the topbar,
+    // status line AND the tab above, so a tall results panel squeezed the
+    // Config tab below its editor's own minimum and the two overlapped.
+    const clampResults = (px: number) =>
+        Math.max(
+            60 * scale,
+            Math.min(
+                winHeight -
+                    (mode === "advanced" ? RESERVED_TOP_CONFIG : RESERVED_TOP) * scale,
+                px,
+            ),
+        );
+    const resultsRendered = clampResults(resultsHeight * scale);
     // Simple-mode form data lives here (not inside SimpleForm) so it survives
     // running a backtest and round-tripping through the Advanced editor.
     // A LIST since the Backtest tab learned to run several portfolios at once.
@@ -220,58 +255,30 @@ function App() {
 
     // Drag the handle between editor and results to resize. The pointer moves in
     // real screen pixels, but resultsHeight is stored in base pixels, so the
-    // delta and bounds are converted through `scale`. The reserved chrome and
-    // the floor scale with the zoom too, keeping the feel consistent at any size.
-    function startResize(e: React.MouseEvent) {
+    // delta is converted through `scale`. The bounds are applied at render
+    // (see resultsRendered), so a window that shrinks after the drag cannot
+    // leave the results taller than the room there is for them.
+    function startResize(e: React.PointerEvent) {
+        if (e.button !== 0) return;
         e.preventDefault();
-        const startRendered = resultsHeight * scale;
-        const startY = e.clientY;
-        const maxRendered = window.innerHeight - 220 * scale;
-        const minRendered = 60 * scale;
-        const frame = perFrame(setResultsHeight);
-        const onMove = (ev: MouseEvent) => {
-            const next = startRendered + (startY - ev.clientY);
-            const clamped = Math.max(minRendered, Math.min(maxRendered, next));
-            frame.push(clamped / scale);
-        };
-        const onUp = () => {
-            frame.flush();
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-            document.body.style.cursor = "";
-            document.body.style.userSelect = "";
-        };
-        document.body.style.cursor = "ns-resize";
-        document.body.style.userSelect = "none";
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
+        const start = resultsRendered;
+        trackDrag(e, "ns-resize", (_dx, dy) =>
+            setResultsHeight(clampResults(start - dy) / scale),
+        );
     }
 
     // Same idea horizontally, for the handle on the assistant panel's left
     // edge: dragging left widens the panel. Bounds scale with the zoom.
-    function startChatResize(e: React.MouseEvent) {
+    function startChatResize(e: React.PointerEvent) {
+        if (e.button !== 0) return;
         e.preventDefault();
         const startRendered = chatWidth * scale;
-        const startX = e.clientX;
         const maxRendered = window.innerWidth * 0.7;
         const minRendered = 220 * scale;
-        const frame = perFrame(setChatWidth);
-        const onMove = (ev: MouseEvent) => {
-            const next = startRendered + (startX - ev.clientX);
-            const clamped = Math.max(minRendered, Math.min(maxRendered, next));
-            frame.push(clamped / scale);
-        };
-        const onUp = () => {
-            frame.flush();
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-            document.body.style.cursor = "";
-            document.body.style.userSelect = "";
-        };
-        document.body.style.cursor = "ew-resize";
-        document.body.style.userSelect = "none";
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
+        trackDrag(e, "ew-resize", (dx) => {
+            const clamped = Math.max(minRendered, Math.min(maxRendered, startRendered - dx));
+            setChatWidth(clamped / scale);
+        });
     }
 
     // Ctrl + scroll wheel / Ctrl + ArrowUp/Down adjust font size for the
@@ -412,6 +419,10 @@ function App() {
     useEffect(() => {
         writeStored(CHAT_WIDTH_STORAGE_KEY, String(Math.round(chatWidth)));
     }, [chatWidth]);
+
+    useEffect(() => {
+        writeStored(RESULTS_HEIGHT_STORAGE_KEY, String(Math.round(resultsHeight)));
+    }, [resultsHeight]);
 
     // Whenever the TOML changes (or its on-disk path), look for a lua:<path>
     // strategy and reload the referenced script into the Lua tab. When no
@@ -999,8 +1010,9 @@ function App() {
                 <>
                     <div
                         className="vresize-handle"
-                        onMouseDown={startChatResize}
-                        title="Drag to resize assistant panel"
+                        onPointerDown={startChatResize}
+                        onDoubleClick={() => setChatWidth(DEFAULT_CHAT_WIDTH)}
+                        title="Drag to resize the assistant panel · double-click to reset"
                     />
                     <ChatPanel
                         width={chatWidth * scale}
@@ -1017,13 +1029,14 @@ function App() {
 
             <div
                 className="resize-handle"
-                onMouseDown={startResize}
-                title="Drag to resize results panel"
+                onPointerDown={startResize}
+                onDoubleClick={() => setResultsHeight(DEFAULT_RESULTS_HEIGHT)}
+                title="Drag to resize the results panel · double-click to reset"
             />
 
             <div
                 className={running && results.length > 0 ? "results stale" : "results"}
-                style={{ height: resultsHeight * scale }}
+                style={{ height: resultsRendered }}
                 aria-busy={running}
             >
                 <ErrorBoundary label="The results view">

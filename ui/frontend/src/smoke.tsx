@@ -44,7 +44,7 @@ import {
     exampleHypothesis,
 } from "./examples";
 import { chipLabel } from "./paths";
-import { perFrame } from "./frame";
+import { perFrame, trackDrag } from "./frame";
 import Pane, { skipRender } from "./Pane";
 import {
     argsOf,
@@ -1301,6 +1301,43 @@ check("a drag applies at most once per frame, and its last position", () => {
         eq("a second flush applies nothing", seen, [3, 4]);
     } finally {
         [g.requestAnimationFrame, g.cancelAnimationFrame] = saved;
+    }
+});
+
+check("a drag ends on release wherever it happens, and never sticks", () => {
+    const g = globalThis as any;
+    const saved = [g.requestAnimationFrame, g.cancelAnimationFrame, g.document];
+    // Frames run immediately here; coalescing is covered by the perFrame case.
+    g.requestAnimationFrame = (cb: () => void) => (cb(), 0);
+    g.cancelAnimationFrame = () => {};
+    g.document = { body: { style: {} as Record<string, string> } };
+    try {
+        const listeners = new Map<string, (e: any) => void>();
+        let captured = -1;
+        const el = {
+            setPointerCapture: (id: number) => (captured = id),
+            addEventListener: (t: string, f: (e: any) => void) => listeners.set(t, f),
+            removeEventListener: (t: string) => listeners.delete(t),
+        };
+        const moves: number[][] = [];
+        let ended = 0;
+        trackDrag(
+            { currentTarget: el as any, pointerId: 7, clientX: 100, clientY: 500 },
+            "ns-resize",
+            (dx, dy) => moves.push([dx, dy]),
+            () => ended++,
+        );
+        eq("pointer captured", captured, 7);
+        eq("cursor held for the drag", g.document.body.style.cursor, "ns-resize");
+        listeners.get("pointermove")!({ clientX: 110, clientY: 350 });
+        eq("delta reported", moves, [[10, -150]]);
+        // Released far outside the handle: capture still routes it here.
+        listeners.get("pointerup")!({ clientX: 1399, clientY: 899 });
+        eq("ended once", ended, 1);
+        eq("every listener removed", listeners.size, 0);
+        eq("cursor restored", g.document.body.style.cursor, "");
+    } finally {
+        [g.requestAnimationFrame, g.cancelAnimationFrame, g.document] = saved;
     }
 });
 

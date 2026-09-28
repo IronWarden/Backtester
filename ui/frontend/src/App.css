@@ -1145,7 +1145,21 @@ button.primary:hover:not(:disabled),
   cursor: ns-resize;
   border-top: 1px solid var(--border);
   position: relative;
+  z-index: 3;
+  touch-action: none;
   transition: background 0.12s;
+}
+
+/* The bar stays 6px to look at but is 16px to hit: a 6px target is what made
+   the handle feel like it "missed". The overhang is transparent and sits
+   above both neighbours (z-index), so it takes the pointer, not the layout. */
+.resize-handle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -5px;
+  bottom: -5px;
 }
 
 /* Grip affordance: a short centered bar. */
@@ -1747,6 +1761,10 @@ button.primary:hover:not(:disabled),
   flex: 1;
   display: flex;
   min-height: 0;
+  /* Clip, so nothing in the tabs or the assistant can paint over the results
+     panel below: without it the assistant's key form and the Config editor
+     both spilled into the results when the row got short. */
+  overflow: hidden;
 }
 
 .mid-main {
@@ -1754,6 +1772,7 @@ button.primary:hover:not(:disabled),
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 /* Width comes inline from App (drag-resizable); these are just guards. */
@@ -1765,6 +1784,7 @@ button.primary:hover:not(:disabled),
   flex-direction: column;
   background: var(--bg-panel);
   font-size: 0.95em;
+  min-height: 0;
 }
 
 /* Vertical drag handle on the assistant panel's left edge. */
@@ -1775,7 +1795,18 @@ button.primary:hover:not(:disabled),
   cursor: ew-resize;
   border-left: 1px solid var(--border);
   position: relative;
+  z-index: 3;
+  touch-action: none;
   transition: background 0.12s;
+}
+
+.vresize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  right: -5px;
 }
 
 .vresize-handle::after {
@@ -2023,6 +2054,9 @@ button.primary:hover:not(:disabled),
   flex-direction: column;
   gap: 0.6em;
   color: var(--text-2);
+  /* Scrolls in a short panel rather than being clipped by .mid-row. */
+  overflow: auto;
+  min-height: 0;
 }
 
 .chat-setup p {
