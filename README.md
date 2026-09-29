@@ -2658,8 +2658,14 @@ window* — with **Show** and **Dock** buttons, and which panels are out, and
 where, is remembered across runs and launches. A window is always pulled back
 on screen, whatever the display did since.
 
-The divider between the tab and the results drags to resize (double-click it
+The bar between the tab and the results drags to resize (double-click it
 to reset) and remembers its height; so does the assistant panel's left edge.
+Its **▁** button minimises the results down to the bar, giving the tab the
+whole window, and **□** maximises them over the tab; pressing the same button
+again (**▴** / **❐**) restores, and dragging the bar restores from either. A
+minimised panel reopens by itself when a run produces results, and stays
+minimised across launches; maximised does not survive a restart, so the app
+never opens with its tabs hidden.
 
 ## AI assistant (UI) — Claude or local Ollama models
 

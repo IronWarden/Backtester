@@ -46,6 +46,7 @@ import {
 import { chipLabel } from "./paths";
 import { perFrame, trackDrag } from "./frame";
 import Pane, { skipRender } from "./Pane";
+import ResultsBar, { nextResultsLayout, parseResultsLayout } from "./ResultsBar";
 import { ResultPanel, DockProvider, clampGeo, defaultGeo, readFloats } from "./ResultPanel";
 import type { Geo } from "./ResultPanel";
 import {
@@ -1435,6 +1436,36 @@ check("a kept-mounted tab hides, and repaints only when it shows", () => {
     eq("hidden -> shown renders", skipRender(p(false), p(true)), false);
     eq("shown -> hidden renders", skipRender(p(true), p(false)), false);
     eq("shown -> shown renders", skipRender(p(true), p(true)), false);
+});
+
+check("the results bar minimises, maximises and restores", () => {
+    // Each button toggles its own state off and switches straight across.
+    eq("min from normal", nextResultsLayout("normal", "min"), "min");
+    eq("min again restores", nextResultsLayout("min", "min"), "normal");
+    eq("max from min", nextResultsLayout("min", "max"), "max");
+    eq("max again restores", nextResultsLayout("max", "max"), "normal");
+    // Stored state is input; maximised never comes back at launch.
+    eq("stored min", parseResultsLayout("min"), "min");
+    eq("stored max", parseResultsLayout("max"), "normal");
+    eq("junk", parseResultsLayout("sideways"), "normal");
+    eq("absent", parseResultsLayout(null), "normal");
+
+    const noop = () => {};
+    const bar = (view: "normal" | "min" | "max", count = 0) =>
+        renderToString(
+            <ResultsBar view={view} onView={noop} onResizeStart={noop} onReset={noop} count={count} />,
+        );
+    const normal = bar("normal", 3);
+    for (const want of ["Minimise results", "Maximise results", "Results · 3", "resize-handle"]) {
+        if (!normal.includes(want)) throw new Error(`normal bar lacks ${want}:\n${normal}`);
+    }
+    if (!bar("min").includes("Restore results") || bar("min").includes("Minimise results")) {
+        throw new Error(`a minimised bar must offer restore:\n${bar("min")}`);
+    }
+    if (!bar("max").includes("Restore results") || bar("max").includes("Maximise results")) {
+        throw new Error(`a maximised bar must offer restore:\n${bar("max")}`);
+    }
+    if (bar("normal", 0).includes("Results ·")) throw new Error("no count before a run");
 });
 
 if (process.env.SMOKE_UPDATE === "1") {

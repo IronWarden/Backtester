@@ -45,11 +45,12 @@ import type {
 } from "./buildToml";
 import { baseName, chipLabel } from "./paths";
 import { perFrame, trackDrag } from "./frame";
+import ResultsBar, { parseResultsLayout, type ResultsLayout } from "./ResultsBar";
 import { registerLuaLanguageSupport } from "./luaEditor";
 import ResultsView from "./ResultsView";
 import Pane from "./Pane";
 import ErrorBoundary from "./ErrorBoundary";
-import { readStoredNumber, writeStored } from "./storage";
+import { readStored, readStoredNumber, writeStored } from "./storage";
 import { readSession, writeSession } from "./session";
 import type { Session } from "./session";
 import ChatPanel from "./ChatPanel";
@@ -66,6 +67,9 @@ const FONT_STORAGE_KEY = "backtester-font-size-v2";
 const CHAT_WIDTH_STORAGE_KEY = "backtester-chat-width";
 const DEFAULT_CHAT_WIDTH = 432;
 const RESULTS_HEIGHT_STORAGE_KEY = "backtester-results-height";
+// Minimised / normal, remembered across launches. Maximised is not (see
+// parseResultsLayout).
+const RESULTS_LAYOUT_STORAGE_KEY = "backtester-results-layout";
 // Tall enough to show the headline cards and the top of the equity curve
 // without scrolling; the old 240 showed a single card.
 const DEFAULT_RESULTS_HEIGHT = 380;
@@ -203,6 +207,12 @@ function App() {
     const [resultsHeight, setResultsHeight] = useState<number>(() =>
         readStoredNumber(RESULTS_HEIGHT_STORAGE_KEY, DEFAULT_RESULTS_HEIGHT, (n) => n >= 60),
     );
+    // Minimised to its bar, normal, or maximised over the tabs. Orthogonal to
+    // resultsHeight, which is kept so restoring returns to the same size.
+    const [resultsLayout, setResultsLayout] = useState<ResultsLayout>(() =>
+        parseResultsLayout(readStored(RESULTS_LAYOUT_STORAGE_KEY)),
+    );
+    const resultsRef = useRef<HTMLDivElement>(null);
     // The window's height, tracked so the results panel's bound follows it.
     const [winHeight, setWinHeight] = useState(() => window.innerHeight);
     useEffect(() => {
@@ -258,13 +268,17 @@ function App() {
     // delta is converted through `scale`. The bounds are applied at render
     // (see resultsRendered), so a window that shrinks after the drag cannot
     // leave the results taller than the room there is for them.
+    // Dragging a minimised or maximised panel restores it and starts from the
+    // height it actually has on screen (0 minimised, the full room maximised),
+    // so the panel follows the pointer instead of jumping to the stored size.
     function startResize(e: React.PointerEvent) {
         if (e.button !== 0) return;
         e.preventDefault();
-        const start = resultsRendered;
-        trackDrag(e, "ns-resize", (_dx, dy) =>
-            setResultsHeight(clampResults(start - dy) / scale),
-        );
+        const start = resultsRef.current?.getBoundingClientRect().height ?? resultsRendered;
+        trackDrag(e, "ns-resize", (_dx, dy) => {
+            setResultsLayout("normal");
+            setResultsHeight(clampResults(start - dy) / scale);
+        });
     }
 
     // Same idea horizontally, for the handle on the assistant panel's left
@@ -424,6 +438,10 @@ function App() {
         writeStored(RESULTS_HEIGHT_STORAGE_KEY, String(Math.round(resultsHeight)));
     }, [resultsHeight]);
 
+    useEffect(() => {
+        writeStored(RESULTS_LAYOUT_STORAGE_KEY, resultsLayout);
+    }, [resultsLayout]);
+
     // Whenever the TOML changes (or its on-disk path), look for a lua:<path>
     // strategy and reload the referenced script into the Lua tab. When no
     // lua: strategy is present, fall back to DEFAULT_LUA_PATH so the tab is
@@ -558,6 +576,11 @@ function App() {
                 hypothesisText ?? hypothesis,
             );
             setResults(res.results ?? []);
+            // A run's answer should be seen: a minimised panel reopens.
+            // A maximised one stays as it is.
+            if ((res.results ?? []).length > 0) {
+                setResultsLayout((v) => (v === "min" ? "normal" : v));
+            }
             setDiagnostics(res.diagnostics ?? []);
             setErrorMsg(firstError(res.diagnostics ?? []));
             setVerdicts(res.verdicts ?? []);
@@ -808,7 +831,7 @@ function App() {
                 </button>
             </header>
 
-            <div className="mid-row">
+            <div className={resultsLayout === "max" ? "mid-row hidden" : "mid-row"}>
             <div className="mid-main">
             {/* Each tab mounts on its first visit and then stays mounted --
                 see Pane. First visits keep startup as cheap as before. */}
@@ -1027,16 +1050,25 @@ function App() {
             )}
             </div>
 
-            <div
-                className="resize-handle"
-                onPointerDown={startResize}
-                onDoubleClick={() => setResultsHeight(DEFAULT_RESULTS_HEIGHT)}
-                title="Drag to resize the results panel · double-click to reset"
+            <ResultsBar
+                view={resultsLayout}
+                onView={setResultsLayout}
+                onResizeStart={startResize}
+                onReset={() => {
+                    setResultsLayout("normal");
+                    setResultsHeight(DEFAULT_RESULTS_HEIGHT);
+                }}
+                count={results.length}
             />
 
             <div
-                className={running && results.length > 0 ? "results stale" : "results"}
-                style={{ height: resultsRendered }}
+                ref={resultsRef}
+                className={
+                    "results" +
+                    (running && results.length > 0 ? " stale" : "") +
+                    (resultsLayout === "normal" ? "" : ` ${resultsLayout}`)
+                }
+                style={resultsLayout === "normal" ? { height: resultsRendered } : undefined}
                 aria-busy={running}
             >
                 <ErrorBoundary label="The results view">

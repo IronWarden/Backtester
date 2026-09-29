@@ -2499,3 +2499,46 @@ td.num.dim {
     transparent 82%
   );
 }
+
+/* Results bar: the resize handle grown into a strip that also carries the
+   minimise / maximise buttons. Still the drag target end to end; the grip
+   (::after) stays centred. */
+.resize-handle.results-bar {
+  height: auto;
+  min-height: 1.7em;
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0 0.5em 0 1em;
+  font-size: var(--fs-s);
+}
+
+.results-bar-title {
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* The grip hides behind nothing, but the buttons must sit above it. */
+.results-bar .panel-icon {
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+}
+
+/* Minimised: only the bar is left. Kept mounted rather than unmounted, so
+   collapsed panels, the metric view and chart state survive a restore. */
+.results.min {
+  display: none;
+}
+
+/* Maximised: the results take the row the tabs had; the tabs stay mounted
+   (Monaco keeps its model and undo history) but take no room. */
+.results.max {
+  flex: 1;
+  min-height: 0;
+}
+
+.mid-row.hidden {
+  display: none;
+}

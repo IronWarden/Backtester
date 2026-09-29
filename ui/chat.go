@@ -1191,6 +1191,12 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   a panel a user cannot find may be in a window -- possibly behind another one
   -- rather than missing; "Show" on its stub brings it forward. To read the
   equity curve or a wide table at a real size, suggest popping it out.
+  The whole results area also has a bar above it with MINIMISE (▁) and
+  MAXIMISE (□) buttons: minimised leaves only the bar, maximised hides the
+  tabs; the same button again, or dragging the bar, restores. A user who
+  "lost" the form or editor has probably maximised the results; one who sees
+  no results after a run may have them minimised (a run with results reopens
+  them, but a failed one does not).
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -1990,6 +1996,8 @@ total US market.
   just closed. Any panel pops out into its own movable, resizable window on a
   double-click of its header (or ⤢); a popped-out panel leaves an "in its own
   window" stub with Show/Dock, so check for one before calling a panel missing.
+  The bar above the results minimises (▁) or maximises (□) the whole results
+  area; if the form or editor seems gone, the results are probably maximised.
 - The three tabs are Backtest (the form), Config (raw TOML + Lua) and Data
   (SQL). They were called Simple/Advanced/Data before 2026-08-22; a user
   saying "simple mode" means the Backtest tab.
