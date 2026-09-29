@@ -359,3 +359,19 @@ func tableExists(name string) bool {
 	}
 	return n > 0
 }
+
+// columnExists reports whether a table has a column, so a loader can add one
+// without every older copy of that table becoming a query error.
+func columnExists(table, column string) bool {
+	var n int
+	err := db.QueryRow(
+		`SELECT COUNT(*) FROM information_schema.columns
+		 WHERE table_name = ? AND column_name = ?`,
+		table, column,
+	).Scan(&n)
+	if err != nil {
+		log.Printf("checking for column %s.%s: %v", table, column, err)
+		return false
+	}
+	return n > 0
+}

@@ -61,9 +61,17 @@ type SECFundamental struct {
 	FilingPeriod time.Time
 	Value        float64
 	Form         string
-	// Frequency is "instant" (a balance-sheet figure), "quarterly", or
-	// "annual". Year-to-date partials are not loaded.
+	// Frequency is "instant" (a balance-sheet figure), "quarterly", "annual",
+	// or "year_to_date" (six or nine months, which is the only way a 10-Q
+	// reports its cash flow statement). Qtrs is the span in quarters: 0 for an
+	// instant, 1 a quarter, 2-3 year-to-date, 4 a year.
 	Frequency string
+	Qtrs      int
+	// TagRank orders the XBRL tags that map to one Metric, 0 being preferred.
+	// A filer can report two of them for the same period with different
+	// values (LongTermDebt includes the current portion, LongTermDebtNoncurrent
+	// does not), so without it the figure would depend on row order.
+	TagRank   int
 	Accession string
 }
 
@@ -81,10 +89,14 @@ func (f SECFundamental) PublicationLag() time.Duration {
 }
 
 // FundamentalKey identifies one figure independently of which filing carried it.
+// Frequency is part of the identity: a Q2 10-Q reports net income for the three
+// months AND the six months ending on the same date, and those are two figures,
+// not a figure and its restatement.
 type FundamentalKey struct {
 	CIK       string
 	Metric    string
 	PeriodEnd time.Time
+	Frequency string
 }
 
 // FirstKnown reduces rows to the earliest filing that carried each figure —
@@ -93,15 +105,25 @@ type FundamentalKey struct {
 // here on purpose: acting on a restated figure at the original filing's date
 // would be look-ahead bias wearing a plausible disguise.
 //
-// Pure, so the rule can be tested without a database. Ties (the same figure in
-// two filings published the same day) keep the first row seen, which is stable
-// because the loader inserts in quarter order.
+// Two rows filed the same day — in practice two tags for one metric in one
+// filing — are settled by TagRank, lower preferred. Earliness still comes
+// first: a figure knowable under a less-preferred tag is not pushed later just
+// because a better tag carried it afterwards. Exact ties keep the first row
+// seen, which is stable because the loader inserts in quarter order.
+//
+// Pure, so the rule can be tested without a database.
 func FirstKnown(rows []SECFundamental) map[FundamentalKey]SECFundamental {
 	out := make(map[FundamentalKey]SECFundamental, len(rows))
 	for _, r := range rows {
-		key := FundamentalKey{CIK: r.CIK, Metric: r.Metric, PeriodEnd: r.PeriodEnd}
-		if prev, ok := out[key]; ok && !r.Filed.Before(prev.Filed) {
-			continue
+		key := FundamentalKey{CIK: r.CIK, Metric: r.Metric, PeriodEnd: r.PeriodEnd,
+			Frequency: r.Frequency}
+		if prev, ok := out[key]; ok {
+			if r.Filed.After(prev.Filed) {
+				continue
+			}
+			if r.Filed.Equal(prev.Filed) && r.TagRank >= prev.TagRank {
+				continue
+			}
 		}
 		out[key] = r
 	}
@@ -135,9 +157,15 @@ func LoadSECFundamentals(tickers []string) ([]SECFundamental, error) {
 		return nil, nil
 	}
 
+	// tag_rank and qtrs arrived with the 2026-09 loader; a table loaded before
+	// then has neither, and reads as rank 0 / qtrs unknown rather than failing.
+	extra := `, 0, -1`
+	if columnExists("sec_financials", "tag_rank") {
+		extra = `, tag_rank, qtrs`
+	}
 	query := `SELECT cik, ticker, company_name, sic, metric, tag,
 	                 period_end, filed, filing_period, value, form,
-	                 frequency, accession
+	                 frequency, accession` + extra + `
 	          FROM sec_financials`
 	args := make([]any, 0, len(tickers))
 	if len(tickers) > 0 {
@@ -160,10 +188,11 @@ func LoadSECFundamentals(tickers []string) ([]SECFundamental, error) {
 		var ticker, name, sic, tag, form, frequency, accession sql.NullString
 		var filingPeriod sql.NullTime
 		var value sql.NullFloat64
+		var tagRank, qtrs sql.NullInt64
 		if err := rows.Scan(
 			&f.CIK, &ticker, &name, &sic, &f.Metric, &tag,
 			&f.PeriodEnd, &f.Filed, &filingPeriod, &value, &form,
-			&frequency, &accession,
+			&frequency, &accession, &tagRank, &qtrs,
 		); err != nil {
 			log.Printf("scanning sec_financials: %v", err)
 			continue
@@ -177,6 +206,11 @@ func LoadSECFundamentals(tickers []string) ([]SECFundamental, error) {
 		f.Form = form.String
 		f.Frequency = frequency.String
 		f.Accession = accession.String
+		f.TagRank = int(tagRank.Int64)
+		f.Qtrs = int(qtrs.Int64)
+		if !qtrs.Valid {
+			f.Qtrs = -1
+		}
 		out = append(out, f)
 	}
 	return out, rows.Err()

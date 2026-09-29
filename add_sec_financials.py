@@ -28,10 +28,11 @@ Usage:
     python3 add_sec_financials.py                                # 2009 -> now
 Requires the UI app closed for a real write (DuckDB is single-writer).
 
-WHAT IT COSTS, measured 2026-08-17: each quarterly ZIP is ~124 MB and takes ~7 s
-to fetch and ~8 s to parse, and it yields ~102,000 rows for the tags below. A
-full 2009->2026 run is therefore ~69 quarters, ~7 GB of transfer, ~20 minutes,
-and ~7 million rows. Quarters are processed and inserted one at a time and the
+WHAT IT COSTS, measured 2026-08-17 with the original 12 tags: each quarterly ZIP
+is ~124 MB and takes ~7 s to fetch and ~8 s to parse. A full 2009->2026 run is
+~69 quarters, ~7 GB of transfer and ~20 minutes. The wider tag list and the
+year-to-date rows (2026-09-29) raise the row count well above the original ~7
+million; the dry run reports the real figure. Quarters are processed and inserted one at a time and the
 ZIP is discarded, so the disk cost is the table, not the archive. --from-year
 bounds it.
 
@@ -42,8 +43,14 @@ LIMITS worth knowing before trusting a row:
   * Rows with a `segments` or `coreg` value are skipped: those are per-segment or
     per-subsidiary breakdowns, and summing them double-counts the parent.
   * `qtrs` says what a duration covers -- 0 is an instant (balance sheet), 1 a
-    single quarter, 4 a full year. Rows with 2 or 3 are year-to-date partials and
-    are skipped rather than mislabelled.
+    single quarter, 4 a full year, 2 and 3 year-to-date. Year-to-date rows are
+    kept under frequency `year_to_date` (never labelled as a quarter), because a
+    10-Q reports its cash flow statement ONLY year-to-date; the reader
+    differences them into single quarters.
+  * Several tags can mean one metric and a filer may report two of them with
+    different values, so each row carries `tag_rank` (0 = preferred).
+  * Cash outflows (capex, dividends, buybacks) are negated to match the sign
+    `financials` uses.
   * The same (company, metric, period) legitimately appears more than once with
     different `filed` dates: an original figure and a later restatement. Both are
     kept, because which one was knowable on a given date is the entire point.
@@ -90,25 +97,102 @@ FIRST_YEAR, FIRST_QUARTER = 2009, 1
 
 # XBRL tag -> the metric vocabulary `financials` already uses, so the two tables
 # can be compared over their overlap without a translation layer. Several tags
-# map to one metric because the standard tag for revenue changed with ASC 606;
-# whichever a filer used lands under the same name.
-TAG_TO_METRIC = {
-    "Revenues": "Total Revenue",
-    "RevenueFromContractWithCustomerExcludingAssessedTax": "Total Revenue",
-    "RevenueFromContractWithCustomerIncludingAssessedTax": "Total Revenue",
-    "SalesRevenueNet": "Total Revenue",
-    "NetIncomeLoss": "Net Income",
-    "OperatingIncomeLoss": "Operating Income",
-    "StockholdersEquity": "Stockholders Equity",
-    "Assets": "Total Assets",
-    "Liabilities": "Total Liabilities Net Minority Interest",
-    "CashAndCashEquivalentsAtCarryingValue": "Cash And Cash Equivalents",
-    "CommonStockSharesOutstanding": "Ordinary Shares Number",
-    "WeightedAverageNumberOfDilutedSharesOutstanding": "Diluted Average Shares",
+# map to one metric because filers disagree on which to use (the standard tag
+# for revenue changed with ASC 606, for one), and a filer may report two of them
+# for the same period with DIFFERENT values -- LongTermDebt includes the current
+# portion and LongTermDebtNoncurrent does not. So order matters: within a
+# metric, earlier tags are preferred, and the position is stored as `tag_rank`
+# for the reader to pick by. Never reorder an existing metric's tags without
+# reloading, or the stored ranks stop meaning what the reader assumes.
+TAGS: list[tuple[str, str]] = [
+    # Income statement -- flows.
+    ("Revenues", "Total Revenue"),
+    ("RevenueFromContractWithCustomerExcludingAssessedTax", "Total Revenue"),
+    ("RevenueFromContractWithCustomerIncludingAssessedTax", "Total Revenue"),
+    ("SalesRevenueNet", "Total Revenue"),
+    ("SalesRevenueGoodsNet", "Total Revenue"),
+    ("CostOfRevenue", "Cost Of Revenue"),
+    ("CostOfGoodsAndServicesSold", "Cost Of Revenue"),
+    ("CostOfGoodsSold", "Cost Of Revenue"),
+    ("GrossProfit", "Gross Profit"),
+    ("ResearchAndDevelopmentExpense", "Research And Development"),
+    ("OperatingIncomeLoss", "Operating Income"),
+    ("InterestExpense", "Interest Expense"),
+    # The 2024 taxonomy split interest by where it sits on the statement.
+    ("InterestExpenseNonoperating", "Interest Expense"),
+    ("InterestExpenseDebt", "Interest Expense"),
+    ("IncomeLossFromContinuingOperationsBeforeIncomeTaxes"
+     "ExtraordinaryItemsNoncontrollingInterest", "Pretax Income"),
+    ("IncomeLossFromContinuingOperationsBeforeIncomeTaxes"
+     "MinorityInterestAndIncomeLossFromEquityMethodInvestments", "Pretax Income"),
+    ("IncomeTaxExpenseBenefit", "Tax Provision"),
+    ("NetIncomeLoss", "Net Income"),
+    ("EarningsPerShareDiluted", "Diluted EPS"),
+    ("EarningsPerShareBasic", "Basic EPS"),
+    ("WeightedAverageNumberOfDilutedSharesOutstanding", "Diluted Average Shares"),
+    # Cash flow statement -- flows, and in a 10-Q reported ONLY year-to-date,
+    # which is why year-to-date rows are kept (see QTRS_TO_FREQUENCY).
+    ("NetCashProvidedByUsedInOperatingActivities", "Operating Cash Flow"),
+    ("NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+     "Operating Cash Flow"),
+    ("PaymentsToAcquirePropertyPlantAndEquipment", "Capital Expenditure"),
+    ("DepreciationDepletionAndAmortization", "Depreciation And Amortization"),
+    ("DepreciationAndAmortization", "Depreciation And Amortization"),
+    ("PaymentsOfDividends", "Cash Dividends Paid"),
+    ("PaymentsOfDividendsCommonStock", "Cash Dividends Paid"),
+    ("PaymentsForRepurchaseOfCommonStock", "Repurchase Of Capital Stock"),
+    # Balance sheet -- instants.
+    ("Assets", "Total Assets"),
+    ("AssetsCurrent", "Current Assets"),
+    ("Liabilities", "Total Liabilities Net Minority Interest"),
+    ("LiabilitiesCurrent", "Current Liabilities"),
+    ("StockholdersEquity", "Stockholders Equity"),
+    ("CashAndCashEquivalentsAtCarryingValue", "Cash And Cash Equivalents"),
+    ("AccountsReceivableNetCurrent", "Accounts Receivable"),
+    ("InventoryNet", "Inventory"),
+    ("PropertyPlantAndEquipmentNet", "Net PPE"),
+    ("Goodwill", "Goodwill"),
+    ("RetainedEarningsAccumulatedDeficit", "Retained Earnings"),
+    ("LongTermDebt", "Long Term Debt"),
+    ("LongTermDebtNoncurrent", "Long Term Debt"),
+    ("CommonStockSharesOutstanding", "Ordinary Shares Number"),
+]
+TAG_TO_METRIC = {tag: metric for tag, metric in TAGS}
+
+
+def _ranks() -> dict[str, int]:
+    seen: dict[str, int] = {}
+    out: dict[str, int] = {}
+    for tag, metric in TAGS:
+        out[tag] = seen.get(metric, 0)
+        seen[metric] = out[tag] + 1
+    return out
+
+
+TAG_RANK = _ranks()
+
+# Cash OUTFLOWS that XBRL reports as positive payments. `financials` (Yahoo's
+# vocabulary) signs them negative -- a capex of 10bn is -10bn there -- so they
+# are negated here to keep the two tables comparable. Free cash flow is then
+# Operating Cash Flow + Capital Expenditure in both.
+NEGATED_TAGS = {
+    "PaymentsToAcquirePropertyPlantAndEquipment",
+    "PaymentsOfDividends",
+    "PaymentsOfDividendsCommonStock",
+    "PaymentsForRepurchaseOfCommonStock",
 }
 
-# qtrs -> frequency. 2 and 3 are year-to-date partials and are dropped.
-QTRS_TO_FREQUENCY = {"0": "instant", "1": "quarterly", "4": "annual"}
+# Units kept: money, share counts, and money per share (EPS).
+UNITS = {"USD", "shares", "USD/shares"}
+
+# qtrs -> frequency. 0 is an instant (balance sheet), 1 a single quarter, 4 a
+# full year. 2 and 3 are YEAR-TO-DATE totals (six and nine months). They used to
+# be dropped, which lost every quarterly cash flow after Q1: a 10-Q's cash flow
+# statement is reported only year-to-date. They are kept under their own
+# frequency, never labelled as a quarter, and `qtrs` is stored so the reader can
+# difference them into single quarters (Q3 = nine months - six months).
+QTRS_TO_FREQUENCY = {"0": "instant", "1": "quarterly", "2": "year_to_date",
+                     "3": "year_to_date", "4": "annual"}
 
 FORMS = {"10-K", "10-Q"}
 
@@ -196,7 +280,7 @@ def quarter_rows(year: int, qtr: int, tickers: dict[str, str]) -> pd.DataFrame:
             # Segment and subsidiary breakdowns would double-count the parent.
             if row.get("segments") or row.get("coreg"):
                 continue
-            if row["uom"] not in ("USD", "shares"):
+            if row["uom"] not in UNITS:
                 continue
             frequency = QTRS_TO_FREQUENCY.get(row["qtrs"])
             if frequency is None:
@@ -208,6 +292,8 @@ def quarter_rows(year: int, qtr: int, tickers: dict[str, str]) -> pd.DataFrame:
                 value = float(row["value"])
             except (TypeError, ValueError):
                 continue
+            if row["tag"] in NEGATED_TAGS:
+                value = -value
 
             out.append({
                 "cik": sub["cik"],
@@ -216,6 +302,7 @@ def quarter_rows(year: int, qtr: int, tickers: dict[str, str]) -> pd.DataFrame:
                 "sic": sub["sic"],
                 "metric": metric,
                 "tag": row["tag"],
+                "tag_rank": TAG_RANK[row["tag"]],
                 "period_end": period_end,
                 "filed": sub["filed"],
                 "filing_period": sub["filing_period"],
@@ -224,6 +311,7 @@ def quarter_rows(year: int, qtr: int, tickers: dict[str, str]) -> pd.DataFrame:
                 "fy": sub["fy"],
                 "fp": sub["fp"],
                 "frequency": frequency,
+                "qtrs": int(row["qtrs"]),
                 "accession": row["adsh"],
             })
     return pd.DataFrame(out)
@@ -266,7 +354,12 @@ def create_table(con: duckdb.DuckDBPyConnection) -> None:
             fy           VARCHAR,
             fp           VARCHAR,
             frequency    VARCHAR,
-            accession    VARCHAR
+            accession    VARCHAR,
+            -- Preference among the tags that map to one metric; 0 is best.
+            tag_rank     SMALLINT,
+            -- Quarters the figure spans: 0 instant, 1 a quarter, 2-3
+            -- year-to-date, 4 a full year.
+            qtrs         SMALLINT
         )
     """)
 
@@ -375,7 +468,8 @@ def main() -> int:
                             "company_name, sic, metric, tag, "
                             "CAST(period_end AS DATE), CAST(filed AS DATE), "
                             "CAST(filing_period AS DATE), "
-                            "value, form, fy, fp, frequency, accession "
+                            "value, form, fy, fp, frequency, accession, "
+                            "tag_rank, qtrs "
                             "FROM incoming")
                 con.unregister("incoming")
 

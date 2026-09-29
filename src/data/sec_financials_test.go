@@ -137,3 +137,51 @@ func TestFirstKnownSeparatesCompaniesAndMetrics(t *testing.T) {
 			"separate companies and metrics", len(rows), len(got))
 	}
 }
+
+// A Q2 10-Q reports net income for the three months and for the six months
+// ending on the same date. Those are two different figures; keyed without the
+// frequency, one would silently replace the other.
+func TestFirstKnownKeepsQuarterAndYearToDateApart(t *testing.T) {
+	rows := []SECFundamental{
+		{CIK: "1", Metric: "Net Income", PeriodEnd: day("2024-06-30"),
+			Filed: day("2024-08-05"), Frequency: "quarterly", Qtrs: 1, Value: 120},
+		{CIK: "1", Metric: "Net Income", PeriodEnd: day("2024-06-30"),
+			Filed: day("2024-08-05"), Frequency: "year_to_date", Qtrs: 2, Value: 230},
+	}
+	got := FirstKnown(rows)
+	if len(got) != 2 {
+		t.Fatalf("reduced to %d figures, want 2 (a quarter and a half-year)", len(got))
+	}
+	q := got[FundamentalKey{CIK: "1", Metric: "Net Income",
+		PeriodEnd: day("2024-06-30"), Frequency: "quarterly"}]
+	if q.Value != 120 {
+		t.Errorf("quarter = %v, want 120", q.Value)
+	}
+}
+
+// Two tags for one metric in the SAME filing, with different values: the rank
+// decides, in either order. A LATER filing under the better tag does not
+// displace the earlier figure, because the earlier one was already public.
+func TestFirstKnownSettlesSameDayTagsByRank(t *testing.T) {
+	best := SECFundamental{CIK: "1", Metric: "Long Term Debt",
+		PeriodEnd: day("2024-06-30"), Filed: day("2024-08-05"),
+		Frequency: "instant", TagRank: 0, Value: 100}
+	worse := best
+	worse.TagRank, worse.Value = 1, 90
+
+	for _, rows := range [][]SECFundamental{{best, worse}, {worse, best}} {
+		for _, f := range FirstKnown(rows) {
+			if f.Value != 100 {
+				t.Errorf("same-day tags gave %v, want the rank-0 figure 100", f.Value)
+			}
+		}
+	}
+
+	later := best
+	later.Filed = day("2024-11-05")
+	for _, f := range FirstKnown([]SECFundamental{worse, later}) {
+		if f.Value != 90 || !f.Filed.Equal(day("2024-08-05")) {
+			t.Errorf("got %v filed %v; the earlier figure must stand", f.Value, f.Filed)
+		}
+	}
+}
