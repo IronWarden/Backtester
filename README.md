@@ -1064,6 +1064,13 @@ and what to leave alone), `sync_prices.py` (the batched download; like
 
 Define one `[[portfolio]]` block per portfolio in `config.toml`. Each block names exactly one strategy; to compare strategies, write one block per strategy. Every portfolio runs as its own job.
 
+In the app, the **Config** tab opens on a template that lists every setting
+below — the two example portfolios live, every other key and section commented
+out at its zero value with a one-line note on what it takes. Delete the leading
+`# ` to turn one on; left alone, the template runs exactly the two portfolios.
+`ui/default_toml_test.go` fails when a config key is added to the engine but not
+to that template.
+
 ```toml
 [[portfolio]]
 Name        = "Tech Giants"

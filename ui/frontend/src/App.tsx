@@ -128,9 +128,21 @@ function defaultSession(): Session {
     };
 }
 
+// Every key the engine reads appears below, active or commented out, so the
+// Config tab doubles as the reference for what can be configured. Only the two
+// portfolios' first six keys are live: the commented options are the zero
+// values, and an untouched tab runs exactly what it always ran
+// (ui/default_toml_test.go holds both promises). Nothing commented may read
+// `Strategy = "lua:...`: FindLuaPathInConfig matches that text even behind a #,
+// and would swap the script the Lua tab opens.
 const DEFAULT_TOML = `# Edit your portfolio config here. Add as many [[portfolio]] blocks as
 # you like — they all run and their metrics appear in the results table.
 # Omit Strategy to use the Lua script open in the Lua tab.
+#
+# Every setting the engine understands is listed in the first block, turned
+# off. Delete the leading "# " on a line to turn it on. A [portfolio.X]
+# section belongs to the [[portfolio]] above it, and must come after that
+# portfolio's plain settings.
 
 [[portfolio]]
 Name = "Default Lua"
@@ -139,6 +151,45 @@ StartDate = "2020-01-01"
 EndDate = "2024-01-01"
 Tickers = ["AAPL", "MSFT"]
 
+# Strategy        = ""     # empty: the Lua tab's script. Or a library script
+#                          #   ("lua:strategies/rsi.lua"), "buyAndHold:equalWeights",
+#                          #   "buyAndHold:greedy", "smaCross:50:200:equalWeights"
+# Benchmark       = ""     # ticker to compare against, e.g. "$SP500"; never traded
+# Fundamentals    = []     # reported figures a Lua strategy reads with
+#                          #   fundamental(), e.g. ["Net Income", "Total Revenue"]
+# AllowShort      = false  # true: a sell past zero opens a short
+# DelistingReturn = 0.0    # loss taken if a holding goes bankrupt, -1.0 to 0.0
+
+# [portfolio.Params]       # values a Lua strategy reads as params.<name>
+# lookback = 126
+
+# [portfolio.Costs]        # trading costs; all zero = no costs
+# commission_per_trade = 0.0  # flat dollars per order
+# commission_bps       = 0.0  # share of each order, in basis points (1 bp = 0.01%)
+# slippage_bps         = 0.0  # price lost to the spread on each fill, in bp
+# borrow_bps_annual    = 0.0  # yearly cost of borrowing shares you are short
+
+# [portfolio.Margin]       # only with AllowShort; 0 = Reg T (50% / 30%)
+# initial_pct     = 0.0    # collateral to open a short, e.g. 0.5 = 50%
+# maintenance_pct = 0.0    # collateral to keep it open, e.g. 0.3 = 30%
+
+# [portfolio.Cashflow]     # a recurring deposit (+) or withdrawal (-)
+# Amount    = 0.0
+# Frequency = ""           # "monthly", "quarterly" or "annually"
+# Start     = ""           # YYYY-MM-DD; empty = StartDate
+
+# [portfolio.Sweep]        # run every combination of these Params values
+# lookback = [63, 126, 252]
+
+# [portfolio.Validation]   # judge the end of the window as unseen data
+# in_sample_end = ""       # YYYY-MM-DD between StartDate and EndDate
+
+# [portfolio.WalkForward]  # re-pick the best Sweep setting on rolling windows
+# train_days = 0           # trading days each choice is made on
+# test_days  = 0           # trading days each choice is then scored on
+# step_days  = 0           # 0 = test_days
+# objective  = ""          # "SharpeRatio" (default), "SortinoRatio" or "AnnualReturn"
+
 [[portfolio]]
 Name = "Buy and Hold"
 BuyingPower = 100000.0
@@ -146,6 +197,16 @@ StartDate = "2020-01-01"
 EndDate = "2024-01-01"
 Tickers = ["AAPL", "MSFT"]
 Strategy = "buyAndHold:equalWeights"
+
+# [Output]                 # also write the results to a file (the app shows
+#                          #   them either way); goes after every portfolio
+# path    = ""             # e.g. "results.csv"
+# format  = ""             # "txt" (default), "csv" or "json"
+# fields  = []             # columns, e.g. ["PortfolioName", "SharpeRatio"]
+# filter  = ""             # e.g. "Trades > 0 && SharpeRatio > 0.5"
+# sort_by = ""             # e.g. "SharpeRatio"
+# order   = ""             # "desc" (default) or "asc"
+# limit   = 0              # at most this many rows; 0 = all
 `;
 
 // There is no console panel: the Backtest form refuses bad input up front, so
