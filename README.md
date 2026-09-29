@@ -57,9 +57,12 @@ window on some NVIDIA/Wayland stacks. `BACKTESTER_GPU=on ./backtester` (or
 ## Prerequisites
 
 - Go 1.25+ (module pinned to `go 1.25.0`).
-- A DuckDB file named `stock_data.db` in the repository root containing:
+- A DuckDB file named `stock_data.db` in the repository root (or any file you
+  open with the app's database picker) containing:
   - `stock_data_optimized(Date, Ticker, Open, High, Low, Close, Volume)`
   - `"3MTreasuryYields"(Date, daily_risk_free_rate_decimal)`
+
+  Don't have one? [Build your own](#build-your-own-database) with one command.
 - A `config.toml` in the repository root (see below).
 
 Dependencies (`github.com/duckdb/duckdb-go/v2`, `gonum.org/v1/gonum`, `github.com/BurntSushi/toml`, `github.com/yuin/gopher-lua`, and the Wails runtime) are pulled via `go mod`.
@@ -154,6 +157,65 @@ message into a sentence naming the program and PID to close, instead of
 showing `IO Error: Could not set lock on file …: Conflicting lock is held in
 …` at the user. In the desktop app the notice arrives through
 `DatabaseNotice`, which the header calls whenever the database changes.
+
+## Build your own database
+
+The database this project was developed against cannot be shared — its prices
+come from Yahoo, whose terms forbid redistribution (see `DATA-LICENSE.md`). So
+anyone else builds their own, from the same free sources, with one command:
+
+```bash
+pip install -r requirements.txt            # needs DuckDB 1.5.x, like the app
+python3 build_db.py --db my.db --dry-run   # show the plan, download nothing
+python3 build_db.py --db my.db             # build it (a few minutes)
+```
+
+Then open `my.db` with the app's database picker, or name it `stock_data.db`
+and put it in the repository root. **No API keys are needed**: prices come from
+Yahoo via `yfinance`, rates and macro series from FRED's public CSV download
+(`fred_public.py`), and everything else from SEC EDGAR and Wikipedia.
+
+`--universe` chooses what to download, and the choices combine:
+
+| universe | what | how long |
+|---|---|---|
+| `starter` (default) | ~80 well-known stocks and ETFs: the broad index, bond, sector and factor funds, gold, and large companies across sectors | a few minutes |
+| `sp500` | today's S&P 500 members | ~15–30 minutes |
+| `us-stocks`, `us-etfs`, `us-all` | every US-listed common stock and/or ETF, from NASDAQ's official symbol directory (~5,800 of each) | hours — Yahoo will rate-limit you; re-run to resume |
+| `@file.txt` | your own list, one symbol per line (`#` comments allowed) | |
+| `AAPL KO BRK.B` | just these | |
+
+`SPY` is always included: the benchmark step builds the market calendar from it.
+
+The build runs these steps in order; `--steps` picks a subset, and every one is
+safe to re-run:
+
+| step | what it writes | source |
+|---|---|---|
+| `prices` | `stock_data_optimized` — daily split- and dividend-adjusted OHLCV. Batched (`--batch`, default 50 symbols per request), and **resumable**: tickers already present are skipped unless `--refresh`. `--start` limits history. Symbols Yahoo has no data for are listed at the end, not fatal. | Yahoo |
+| `rates` | `"3MTreasuryYields"` and `"10YrTreasuryYields"`, 1981+ / 1962+ | FRED `DGS3MO`, `DGS10` |
+| `macro` | `economic_indicators` — CPI, fed funds, GDP, industrial production, M2, unemployment | FRED |
+| `benchmarks` | `index_levels` (the S&P 500 price index back to 1927, from `^GSPC`), then the [`$` series](#long-history-benchmark-assets) via `add_collections.py`, then `extend_risk_free.py` to carry the risk-free rate back to 1928 | Yahoo, FRED, Shiller, Ken French |
+| `sectors` | `company_profile` for the tickers you have | SEC EDGAR |
+| `index` | `index_membership` — point-in-time S&P 500 membership | Wikipedia |
+| `quality` | `data_quality` — the per-ticker defect audit | computed |
+| `fundamentals` | `sec_financials`, 2009+ — **not in the default set**: `--with-fundamentals` or `--steps fundamentals` (~7 GB of downloads, ~30–40 minutes) | SEC EDGAR |
+
+A failed step is reported and the rest carry on; the summary names what to
+re-run. The build ends by scanning every ticker the way the app does — a
+cross-ticker `GROUP BY`, which is the query that exposed the one real storage
+incompatibility this project has had — and prints what the database holds.
+
+Two limits carry over unchanged from the original database. The universe holds
+**only companies still trading** (Yahoo serves no history for delisted
+symbols), so a backtest that picks among them is picking among survivors. And
+the delisting tables (`delistings`, `delisting_reasons`) are not built: the
+first needs an Alpha Vantage key, so run `add_delistings.py` yourself if you
+have one.
+
+`build_db.py` refuses to write with a Python DuckDB outside 1.5.x
+(`--any-duckdb` overrides), for the reason given under
+[Prerequisites](#prerequisites).
 
 ## Long-history benchmark assets
 

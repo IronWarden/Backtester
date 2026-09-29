@@ -223,9 +223,12 @@ def fred_tbill_returns(series_id: str) -> pd.Series:
     from fredapi import Fred
     load_dotenv(ROOT / ".env")
     key = os.environ.get("FRED_API_KEY")
-    if not key:
-        raise RuntimeError("FRED_API_KEY not set (needed for $CASH)")
-    raw = Fred(api_key=key).get_series(series_id).dropna()
+    if key:
+        raw = Fred(api_key=key).get_series(series_id).dropna()
+    else:
+        # No key: the same series from FRED's public CSV download.
+        from fred_public import fred_series
+        raw = fred_series(series_id)
     raw.index = pd.DatetimeIndex(raw.index).normalize()
     daily = (1.0 + raw.astype(float) / 100.0) ** (1.0 / TRADING_DAYS) - 1.0
     return daily

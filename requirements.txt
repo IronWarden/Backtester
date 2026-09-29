@@ -1,6 +1,6 @@
 pandas
 numpy
-duckdb>=1.1.0
+duckdb>=1.5,<1.6
 scikit-learn
 matplotlib
 scipy

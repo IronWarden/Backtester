@@ -640,6 +640,16 @@ preference to the built-in. Same directory for the Anthropic API key: the
 first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
+A user with NO database at all builds one with build_db.py, from the repo
+root, with the app closed: "python3 build_db.py --db my.db" (a starter set of
+~80 well-known stocks and ETFs plus rates, CPI, the $ benchmarks back to 1927,
+index membership and the quality audit — a few minutes, no API keys).
+--universe takes sp500, us-stocks, us-etfs, us-all, @file or plain symbols;
+--with-fundamentals adds SEC fundamentals (2009+, ~30-40 min); re-running
+resumes and skips tickers already present; --dry-run shows the plan. Then
+they open the file with the database picker. Like the original, a built
+database holds only companies still trading (Yahoo keeps no history for
+dead ones), so it carries the same survivorship caveat.
 
 THIS IS A BETA, AND IT NAMES ITSELF. The version is beside the app's name in
 the header and from "-version" on the CLI; ask a user to quote it when they
@@ -1988,7 +1998,9 @@ total US market.
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
   fetch_history for one missing ticker; when the database as a whole is
-  behind, tell the user to close the app and run "ui --sync <db>".
+  behind, tell the user to close the app and run "ui --sync <db>". A user
+  with no database builds one: "python3 build_db.py --db my.db" from the
+  repo root (starter universe, no API keys; --universe sp500 etc. for more).
 - The results view opens with the verdicts, equity curve and metrics
   expanded; the other panels (walk-forward, in/out-of-sample, drawdowns,
   trading, attribution, calendar and monthly returns) are collapsed and open

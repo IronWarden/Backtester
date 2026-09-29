@@ -21,7 +21,10 @@ data below comes from providers whose own terms forbid redistribution, and the
 copy shipped with Backtester is provided to you on the same basis.
 
 If you need data you can redistribute, rebuild the database from the loader
-scripts against sources you have your own rights to.
+scripts against sources you have your own rights to. `build_db.py` builds a
+complete database of your own in one command (see "Build your own database" in
+README.md); the same terms apply to what it downloads, since it uses the same
+sources.
 
 ## No warranty of accuracy
 
