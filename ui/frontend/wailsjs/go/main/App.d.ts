@@ -21,6 +21,8 @@ export function FindLuaPathInConfig(arg1:string,arg2:string):Promise<string>;
 
 export function HasClaudeKey():Promise<boolean>;
 
+export function ImportHoldings(arg1:string):Promise<main.HoldingsImport>;
+
 export function ListChatModels():Promise<Array<main.ModelOption>>;
 
 export function ListStrategies():Promise<Array<backtest.StrategyCard>>;

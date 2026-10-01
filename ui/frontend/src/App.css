@@ -792,6 +792,37 @@ button.primary:hover:not(:disabled),
   font-style: italic;
 }
 
+/* What an import changed or left out. Not italic like other hints: these are
+   facts about the user's own book that they need to read, not asides. */
+.simple-form .import-note {
+  font-style: normal;
+  margin-top: 0.5em;
+  padding: 0.5em 0.8em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+}
+
+.simple-form .import-note.err {
+  color: var(--neg);
+  background: var(--neg-soft);
+  border-color: var(--neg-line);
+}
+
+.simple-form .import-note button.link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-3);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 1em;
+}
+
 /* Starter baskets, inside an empty holdings box. Same idea as the starter
    examples one level down: a holdings list to accept and then edit, for
    someone who does not know which symbols they want. Not offered while the

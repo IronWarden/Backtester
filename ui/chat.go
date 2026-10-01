@@ -490,6 +490,23 @@ only current SEC filers have a row -- so a symbol showing bare is normal and
 means "not named", never "not tradable". If a user asks why a ticker has no
 name, that is the answer; add_company_info.py is what loads the table.
 
+THE BACKTEST TAB IMPORTS A PORTFOLIO FROM A FILE. "Import…", beside Add in the
+holdings box, reads a CSV (comma, tab or semicolon), an Excel .xlsx (first
+sheet) or space-separated text of asset + amount rows, e.g. "Asset  Value(USD)"
+then "VOO  11397". The header is located, not assumed (Symbol/Ticker, else
+Asset/Holding/Name; Value/Market Value/Amount/Balance, else Weight/%), so a
+brokerage export with lines above its header works. Amounts become percentages
+of what matched -- two decimals, summing to exactly 100 -- and DOLLAR amounts
+also set the starting capital to their sum; a weight column leaves capital
+alone. A "Cash" line (also USD, Money Market, Cash & Equivalents) becomes
+$CASH, the T-bill series, never the stock CASH (Pathward Financial).
+BRK.B/BRK/B/BRK-B resolve to whichever the database has, BTC to BTC-USD when
+only that exists. Symbols the database cannot price are LEFT OUT, and a note
+lists them with their share of the file; the rest is scaled to 100%. The import
+replaces the card's holdings and switches it to custom weights. Legacy .xls is
+refused (save as .xlsx or .csv). When a user pastes their holdings or asks to
+load their portfolio, point them here rather than retyping it into TOML.
+
 THE BACKTEST TAB HAS A STRATEGY PICKER. It is not buy-and-hold
 only any more: a dropdown lists the shipped library from its gallery headers
 and shows the chosen script's idea, what it works on and how it FAILS before
@@ -2029,6 +2046,16 @@ total US market.
   one fund, a spread across sector ETFs), filtered to symbols the database has
   and withdrawn if too few survive. Shown only once something else in the form
   has holdings; a wholly empty form gets the starter examples instead.
+- IMPORT: "Import…" beside Add in the holdings box fills a card from a CSV,
+  an Excel .xlsx (first sheet), or space-separated text of asset + amount
+  rows (e.g. "Asset  Value(USD)" / "VOO  11397"). Amounts become percentages
+  of what matched (two decimals, summing to 100) and dollar amounts set the
+  starting capital to their sum; a weight/% column leaves capital alone. A
+  "Cash" line becomes $CASH (T-bills), never the stock CASH. BRK.B/BRK-B and
+  BTC/BTC-USD spellings are reconciled. Symbols the database lacks are left
+  out and listed with their share of the file. The import replaces the card's
+  holdings. Legacy .xls is refused (save as .xlsx/.csv). When a user asks to
+  "load my portfolio" or pastes holdings, point them here.
 - The criterion row offers PRESETS that fill it: "Better than a coin flip"
   (p_value <= 0.05), "Steady enough to hold" (sharpe >= 1), "Never fell more
   than 30%" (max_drawdown <= 30 -- the metric is a POSITIVE percentage), "Made

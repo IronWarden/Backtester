@@ -38,6 +38,10 @@ export function HasClaudeKey() {
   return window['go']['main']['App']['HasClaudeKey']();
 }
 
+export function ImportHoldings(arg1) {
+  return window['go']['main']['App']['ImportHoldings'](arg1);
+}
+
 export function ListChatModels() {
   return window['go']['main']['App']['ListChatModels']();
 }

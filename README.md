@@ -2577,6 +2577,47 @@ resolves to two names. They appear only once something else in the form has
 holdings: on a wholly empty form the starter examples above are the better
 answer, and offering both would be two answers to one question.
 
+### Importing the portfolio you already hold
+
+**Import…**, beside *Add* in the holdings box, fills the card from a file of
+what you own: a **CSV** (comma, tab or semicolon), an **Excel `.xlsx`** (first
+sheet), or plain text with the columns separated by spaces — a table pasted out
+of a spreadsheet or a web page works as-is:
+
+```
+Asset    Value(USD)
+VOO      11397
+BRK-B    3530
+Cash     60569
+```
+
+- **Columns are found, not assumed.** The header is the early row naming the
+  most recognisable columns (`Symbol`/`Ticker`, else `Asset`/`Holding`/`Name`…,
+  and `Value`/`Market Value`/`Amount`/`Balance`, else `Weight`/`%`), so a
+  brokerage export with account details above its header still reads. Without
+  a header, the first column is the asset and the rightmost numeric column the
+  amount. `$8,889`, `(1,200)` and `4.5%` all parse.
+- **Amounts become exact percentages** of what matched, to two decimals and
+  summing to exactly 100 — and the allocation boxes now accept decimals. Dollar
+  amounts also set the **starting capital** to their sum, so the backtest starts
+  from your real book; a file of weights leaves capital alone. One symbol on two
+  rows (two accounts) is merged. Total lines and zero or negative amounts are
+  skipped and listed.
+- **A `Cash` line becomes `$CASH`**, the T-bill series — never the stock `CASH`,
+  which is Pathward Financial. `USD`, `Money Market`, `Cash & Equivalents` and
+  a few broker spellings are treated the same.
+- **Spellings are reconciled**: `BRK.B` / `BRK/B` / `BRK-B` resolve to whichever
+  the database has, and `BTC` to `BTC-USD` when only that exists.
+- **Nothing disappears silently.** A note under the box says what was mapped,
+  and which symbols the database cannot price were left out and what share of
+  the file they were; the rest is scaled to 100%.
+
+The import **replaces** the card's holdings and switches it to custom weights.
+Legacy binary `.xls` is refused with a message to save as `.xlsx` or `.csv`.
+Parsed in Go (`ui/holdings.go`, `App.ImportHoldings`) with the standard library
+only. Holdings that started trading recently (an IPO in 2024) pull the window
+forward like any other ticker — the dates re-snap to what every holding covers.
+
 ### Several portfolios in one run
 
 **+ Add portfolio** appends another card, and the run carries all of them: one

@@ -23,6 +23,8 @@ import SimpleFormView from "./SimpleForm";
 import ChatPanel, { ChatMessage } from "./ChatPanel";
 import { CRITERION_OPS, buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
+import { applyImport, importSummary } from "./holdingsImport";
+import type { HoldingsImport } from "./holdingsImport";
 import {
     dateBounds,
     duplicateNames,
@@ -685,6 +687,67 @@ for (const [label, fs] of [
         );
     });
 }
+
+// An imported holdings file, shaped as App.ImportHoldings returns it: decimal
+// percentages, a Cash line mapped to $CASH, and two symbols left out.
+const imported: HoldingsImport = {
+    file: "my holdings.csv",
+    tickers: ["VOO", "$CASH", "BRK.B"],
+    allocations: { VOO: 12.35, "$CASH": 65.4, "BRK.B": 22.25 },
+    total: 92617.4,
+    percent: false,
+    mapped: [{ from: "Cash", to: "$CASH", reason: "uninvested cash" }],
+    unmatched: [
+        { symbol: "SOL", pct: 0.51 },
+        { symbol: "ETH", pct: 0.68 },
+    ],
+    unmatchedPct: 1.19,
+    skipped: null,
+};
+
+check("import replaces the holdings and sets capital from the file", () => {
+    const got = applyImport({ ...form, name: "", evenSplit: true }, imported);
+    eq("tickers", got.tickers, ["VOO", "$CASH", "BRK.B"]);
+    eq("allocations", got.allocations, imported.allocations);
+    eq("evenSplit", got.evenSplit, false);
+    eq("buyingPower", got.buyingPower, 92617);
+    eq("name", got.name, "my holdings");
+    // A file of weights says nothing about capital.
+    eq(
+        "percent file keeps capital",
+        applyImport(form, { ...imported, percent: true, total: 0 }).buyingPower,
+        form.buyingPower,
+    );
+    const toml = buildToml([got]);
+    if (!toml.includes('"$CASH" = 65.4') || !toml.includes('"BRK.B" = 22.25')) {
+        throw new Error(`weights not emitted:\n${toml}`);
+    }
+});
+
+check("import summary names what was mapped and what was left out", () => {
+    const lines = importSummary(imported).join("\n");
+    for (const want of ["Cash → $CASH", "SOL (0.51%)", "1.19% of the file", "$92,617"]) {
+        if (!lines.includes(want)) throw new Error(`missing ${want}:\n${lines}`);
+    }
+});
+
+check("SimpleForm / an imported portfolio with decimal weights", () => {
+    const html = renderToString(
+        <SimpleFormView
+            dbPath=""
+            running={false}
+            onOpenAssistant={noop}
+            forms={[applyImport(form, imported)]}
+            onChange={noop}
+            hypothesis={emptyHypothesis}
+            onHypothesisChange={noop}
+            onRun={noop}
+            onEditAsToml={noop}
+        />,
+    );
+    if (!html.includes('value="22.25"')) throw new Error("decimal allocation not rendered");
+    if (!html.includes("Import…")) throw new Error("no Import button");
+});
 
 // What the app remembers between launches. A stored session outlives shape
 // changes and upgrades, so it is INPUT: the check is that a session which no

@@ -18,12 +18,16 @@ import {
     hasRanges,
     isValidDate,
     maskDate,
+    maskDecimal,
     normalizeDates,
     resolveTicker,
     tickerFilter,
     uniqueName,
 } from "./portfolioCheck";
 import type { Ranges } from "./portfolioCheck";
+import { ImportHoldings } from "../wailsjs/go/main/App";
+import { applyImport, importSummary } from "./holdingsImport";
+import type { HoldingsImport } from "./holdingsImport";
 
 // One [[Portfolio]] block, as a card.
 //
@@ -127,6 +131,13 @@ export default function PortfolioCard({
     // has changed.
     const [highlight, setHighlight] = useState(-1);
     const [pickerOpen, setPickerOpen] = useState(false);
+    // What the last import changed or left out, shown until dismissed.
+    const [importNote, setImportNote] = useState<{ lines: string[]; err: boolean } | null>(
+        null,
+    );
+    // The allocation box being typed in, as typed. The form holds a number,
+    // and "4." or "4.0" do not survive a round trip through one.
+    const [pctDraft, setPctDraft] = useState<{ t: string; text: string } | null>(null);
     // Which date box has focus. A half-typed date is left alone while the
     // user is still typing it; it is normalized when they leave the box.
     const editingDate = useRef<"start" | "end" | null>(null);
@@ -204,6 +215,17 @@ export default function PortfolioCard({
             evenSplit: false,
             allocations: { ...form.allocations, [t]: clampPct(value) },
         });
+    }
+
+    async function importHoldings() {
+        try {
+            const imp = (await ImportHoldings(dbPath)) as unknown as HoldingsImport;
+            if (!imp || !imp.file) return; // picker cancelled
+            onChange(applyImport(form, imp));
+            setImportNote({ lines: importSummary(imp), err: false });
+        } catch (e) {
+            setImportNote({ lines: [String(e)], err: true });
+        }
     }
 
     function distributeEvenly() {
@@ -649,7 +671,28 @@ export default function PortfolioCard({
                     >
                         Add
                     </button>
+                    <button
+                        disabled={!dbPath}
+                        title="Fill this portfolio from a CSV or Excel (.xlsx) file of assets and amounts"
+                        onClick={importHoldings}
+                    >
+                        Import…
+                    </button>
                 </div>
+                {importNote && (
+                    <div className={`hint import-note${importNote.err ? " err" : ""}`}>
+                        {importNote.lines.map((l, i) => (
+                            <div key={i}>{l}</div>
+                        ))}
+                        <button
+                            className="link"
+                            title="Dismiss"
+                            onClick={() => setImportNote(null)}
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                )}
 
                 {!allocationsApply && form.tickers.length > 0 && (
                     <div className="hint">
@@ -660,7 +703,7 @@ export default function PortfolioCard({
                 )}
                 {form.tickers.length === 0 ? (
                     <div className="empty">
-                        No holdings yet — add a ticker to allocate to it.
+                        No holdings yet — add a ticker to allocate to it, or Import… a CSV or Excel file of what you hold.
                         {showBaskets && (
                             <div className="baskets">
                                 {BASKETS.map((b) => {
@@ -705,12 +748,20 @@ export default function PortfolioCard({
                                 <div className="alloc-pct">
                                     <input
                                         type="text"
-                                        inputMode="numeric"
-                                        value={form.allocations[t] ?? 0}
+                                        inputMode="decimal"
+                                        value={
+                                            pctDraft?.t === t
+                                                ? pctDraft.text
+                                                : (form.allocations[t] ?? 0)
+                                        }
                                         onChange={(e) => {
-                                            const digits = e.target.value.replace(/[^0-9]/g, "");
-                                            setAllocation(t, digits ? Number(digits) : 0);
+                                            const text = maskDecimal(
+                                                e.target.value.replace("-", ""),
+                                            );
+                                            setPctDraft({ t, text });
+                                            setAllocation(t, text ? Number(text) || 0 : 0);
                                         }}
+                                        onBlur={() => setPctDraft(null)}
                                     />
                                     <span className="pct-sign">%</span>
                                 </div>
