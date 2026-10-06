@@ -2617,6 +2617,7 @@ a company* does the same):
 | `AAPL` or `AAPL DES` | what the company is: name, industry (SIC), exchange, state of incorporation, former names, SEC CIK with a link to its filings on EDGAR; S&P 500 membership spans; last close and 52-week closing range; the data-quality verdict on its price series | `company_profile`, `index_membership`, `stock_data_optimized`, `data_quality` |
 | `AAPL FA` | reported financials — revenue through shares outstanding — for the last 5 fiscal years, or 8 quarters with *Quarterly*. Each figure **as first filed**: hover a cell for the filing date and form. Later restatements are not shown, so this is what the market could know at the time | `sec_financials` |
 | `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it | `earnings_calendar`, `stock_data_optimized` |
+| `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — timed to the minute EDGAR accepted it. Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
 
 The function may come first (`FA AAPL`), case does not matter, and a name
 resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
@@ -2637,11 +2638,42 @@ Honest edges, each said in the view rather than discovered:
   is measured from the prior close, so it includes that morning's trading, and
   the view says so.
 
+**CN reads SEC EDGAR live**, because filings are where company news starts: an
+earnings headline is a rewrite of the 8-K's exhibit 99.1, an executive
+departure is an 8-K item 5.02, an insider sale is a Form 4. Reading the filing
+skips the rewrite, the adverts and the spin.
+
+- **Filters.** *Events & reports* is the default and leaves out insider forms
+  (3/4/5/144), which for a large company are most of what it files and bury
+  the events; *Insiders* and *All* bring them back.
+- **The reader** fetches the document and strips it to text — no scripts,
+  styles, trackers or the hidden inline-XBRL header — with *On sec.gov ↗* for
+  the original. It fetches only documents under `www.sec.gov/Archives/`, so a
+  link cannot point it anywhere else. Very long documents (a 10-K) are cut at
+  400,000 characters and say so.
+- **Polite by construction.** Every request carries `SEC_CONTACT` in its
+  User-Agent (from the environment or `.env`, else the same default as the
+  Python loaders), the whole app stays under ~8 requests a second, 429s and
+  5xx back off and retry, and a filing list is cached for five minutes and a
+  document for a day — in memory only; nothing is written to the database.
+- **EDGAR's API mis-states acceptance times.** `acceptanceDateTime` in the
+  submissions JSON is not the UTC instant its `Z` claims: it is the Eastern
+  time shifted by *twice* the UTC offset (+8 hours in summer, +10 in winter).
+  Apple's July 2026 earnings 8-K reads `2026-07-31T00:30:28Z` there and
+  *Accepted 2026-07-30 16:30:28* on EDGAR's own filing page. The app corrects
+  it; `TestAcceptedTimesMatchEDGARsFilingPages` pins four filings, summer and
+  winter, against those pages.
+- CN finds a company by its SEC CIK from `company_profile`, so it needs that
+  table, and works for current filers only (delisted symbols have no profile).
+- Wire-service press releases and media headlines are deliberately absent.
+
 Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
 `EarningsReactions`, `SummarizePrices` — plus thin readers), `ui/research.go`
 (the `CompanyOverview` / `CompanyFinancials` / `CompanyEarnings` bindings), and
-`ui/frontend/src/Research.tsx`. Filings, economic releases, a watchlist and
-full-text search are T142b–e.
+`ui/frontend/src/Research.tsx`; CN is `src/edgar` (the client, parsing and the
+text reader, tested against SEC responses recorded in `src/edgar/testdata`) and
+`ui/filings.go`. Economic releases, a watchlist and full-text search are
+T142c–e.
 
 ## The Backtest tab (UI)
 

@@ -1392,8 +1392,17 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   from the last close before each report to the first close after it. All of
   it is primary data with its date; there are no headlines, ads or live
   quotes, by design. Missing tables are named with the loader that fills them.
+  "AAPL CN": the company's own news — its SEC filings live from EDGAR, newest
+  first, in plain words (8-K items: Earnings results, Directors or officers
+  changed, Material agreement, Bankruptcy…; 10-K/10-Q; 13D/13G; proxies),
+  timed when EDGAR accepted them (US Eastern). Default filter "Events &
+  reports" hides insider Forms 3/4/5/144 ("Insiders" shows them). Clicking one
+  opens a reader with the document as clean text (an earnings 8-K opens on
+  its EX-99.1 press release) and a link to sec.gov. No media headlines or
+  wire stories, by design. Needs company_profile for the CIK and a network.
   Send a user there for "what does X do / what did it earn / how did it react
-  to earnings" before reaching for screen_stocks or lookup_quote.
+  to earnings / what has X announced" before reaching for screen_stocks or
+  lookup_quote. You cannot read filings yourself yet — point at CN.
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -2269,7 +2278,7 @@ total US market.
   leaving an "in its own window" stub. The bar above minimises (▁) or
   maximises (□) the results; a vanished form means they are maximised.
 - Tabs: Backtest (form), Config (TOML+Lua), Data (SQL), Research (Ctrl+4:
-  "AAPL DES|FA|ERN", dated primary data); "simple mode" = Backtest.
+  "AAPL DES|FA|ERN|CN", dated primary data); "simple mode" = Backtest.
 - The Backtest tab can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

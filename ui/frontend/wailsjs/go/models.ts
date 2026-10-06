@@ -730,6 +730,76 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class FilingRow {
+	    accession: string;
+	    form: string;
+	    kind: string;
+	    title: string;
+	    filed: string;
+	    accepted: string;
+	    reportDate: string;
+	    items: string[];
+	    indexUrl: string;
+	    primaryUrl: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilingRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accession = source["accession"];
+	        this.form = source["form"];
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.filed = source["filed"];
+	        this.accepted = source["accepted"];
+	        this.reportDate = source["reportDate"];
+	        this.items = source["items"];
+	        this.indexUrl = source["indexUrl"];
+	        this.primaryUrl = source["primaryUrl"];
+	    }
+	}
+	export class CompanyFilings {
+	    ticker: string;
+	    cik: string;
+	    company: string;
+	    filings: FilingRow[];
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompanyFilings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.cik = source["cik"];
+	        this.company = source["company"];
+	        this.filings = this.convertValues(source["filings"], FilingRow);
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class FinancialsCell {
 	    value: number;
 	    filed: string;
@@ -921,6 +991,57 @@ export namespace main {
 		}
 	}
 	
+	export class FilingDocument {
+	    name: string;
+	    type: string;
+	    description: string;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilingDocument(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.description = source["description"];
+	        this.url = source["url"];
+	    }
+	}
+	export class FilingDocuments {
+	    documents: FilingDocument[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilingDocuments(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.documents = this.convertValues(source["documents"], FilingDocument);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	
 	
 	export class HoldingMapping {
@@ -1065,6 +1186,24 @@ export namespace main {
 	        this.rows = source["rows"];
 	        this.truncated = source["truncated"];
 	        this.elapsedMs = source["elapsedMs"];
+	    }
+	}
+	export class ReaderDoc {
+	    url: string;
+	    text: string;
+	    truncated: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReaderDoc(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.text = source["text"];
+	        this.truncated = source["truncated"];
+	        this.error = source["error"];
 	    }
 	}
 	export class RulesReading {

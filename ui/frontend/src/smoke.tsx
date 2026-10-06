@@ -81,8 +81,15 @@ import {
 } from "./luaApi";
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
-import Research, { DesView, ErnView, FaView, edgarURL } from "./Research";
-import { formatFigure, formatMove, parseResearchCommand, resolveQuery } from "./researchCommand";
+import Research, { DesView, ErnView, FaView, FilingsView, ReaderView, edgarURL } from "./Research";
+import {
+    filterFilings,
+    firstDocument,
+    formatFigure,
+    formatMove,
+    parseResearchCommand,
+    resolveQuery,
+} from "./researchCommand";
 import {
     DEFAULT_RULES,
     RULES_STRATEGY,
@@ -2435,12 +2442,61 @@ check("ERN shows each report and the move across it", () => {
 
 check("the Research tab explains itself before the first lookup", () => {
     const html = renderToString(<Research dbPath="x.db" />).replace(/<!-- -->/g, "");
-    for (const want of ["DES", "FA", "ERN", "primary data", "e.g. AAPL FA"]) {
+    for (const want of ["DES", "FA", "ERN", "CN", "primary data", "e.g. AAPL CN"]) {
         if (!html.includes(want)) throw new Error(`empty Research lacks ${want}`);
     }
     if (!renderToString(<Research dbPath="" />).includes("Choose a database first")) {
         throw new Error("no database must say so");
     }
+});
+
+
+// CN (T142b): real EDGAR responses for Apple, recorded in src/edgar/testdata
+// and passed through the bindings by ui/filings_test.go.
+
+check("CN leaves insider paperwork out by default", () => {
+    const c = fixture<main.CompanyFilings>("research-cn");
+    eq("parse", parseResearchCommand("aapl cn"), { query: "aapl", fn: "CN" });
+    const news = filterFilings(c.filings, "news");
+    if (news.some((f) => f.kind === "insider")) throw new Error("Form 4s in the default view");
+    if (!news.some((f) => f.title === "Earnings results")) throw new Error("no earnings 8-K");
+    eq("all", filterFilings(c.filings, "all").length, c.filings.length);
+    if (filterFilings(c.filings, "insider").some((f) => f.kind !== "insider")) {
+        throw new Error("the insider filter let other filings through");
+    }
+
+    const html = renderToString(<FilingsView c={c} filter="news" onFilter={noop}
+        selected="0000320193-26-000018" onSelect={noop} />).replace(/<!-- -->/g, "");
+    for (const want of ["Apple Inc.", "AAPL CN", "Earnings results", "2026-07-30 16:30 ET",
+        "Directors or officers changed", "Annual report", "Events &amp; reports",
+        "filing-row active", "Straight from SEC EDGAR"]) {
+        if (!html.includes(want)) throw new Error(`CN lacks ${want}`);
+    }
+    if (html.includes("Insider transaction")) throw new Error("the default list shows Form 4s");
+});
+
+check("an earnings 8-K opens on its press release, read as clean text", () => {
+    const docs = fixture<main.FilingDocuments>("research-docs").documents;
+    eq("8-K opens EX-99.1", firstDocument(docs, "8-K")?.type, "EX-99.1");
+    eq("10-K opens itself", firstDocument([{ type: "EX-21" }, { type: "10-K" }], "10-K")?.type, "10-K");
+    eq("nothing", firstDocument([], "8-K"), undefined);
+
+    const c = fixture<main.CompanyFilings>("research-cn");
+    const filing = c.filings.find((f) => f.accession === "0000320193-26-000018")!;
+    const doc = fixture<main.ReaderDoc>("research-reader");
+    const html = renderToString(<ReaderView filing={filing} docs={docs} doc={doc}
+        loading={false} onOpen={noop} />).replace(/<!-- -->/g, "");
+    for (const want of ["Earnings results", "accepted 2026-07-30 16:30 ET", "On sec.gov",
+        "EX-99.1", "Apple reports third quarter results", "reader-text"]) {
+        if (!html.includes(want)) throw new Error(`reader lacks ${want}`);
+    }
+    for (const never of ["<script", "font-family:", "&amp;nbsp;"]) {
+        if (html.includes(never)) throw new Error(`reader carries ${never}`);
+    }
+    const failed = renderToString(<ReaderView filing={filing} docs={[]} loading={false}
+        onOpen={noop} doc={main.ReaderDoc.createFrom({ url: "x", text: "", truncated: false,
+            error: "EDGAR did not answer" })} />);
+    if (!failed.includes("EDGAR did not answer")) throw new Error("a failed read is not explained");
 });
 
 if (process.env.SMOKE_UPDATE === "1") {

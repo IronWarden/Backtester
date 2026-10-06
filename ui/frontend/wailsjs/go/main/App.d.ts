@@ -11,6 +11,8 @@ export function CheckLuaScript(arg1:string,arg2:string,arg3:string):Promise<main
 
 export function CompanyEarnings(arg1:string,arg2:string):Promise<main.CompanyEarnings>;
 
+export function CompanyFilings(arg1:string,arg2:string):Promise<main.CompanyFilings>;
+
 export function CompanyFinancials(arg1:string,arg2:string,arg3:string):Promise<main.CompanyFinancials>;
 
 export function CompanyOverview(arg1:string,arg2:string):Promise<main.CompanyOverview>;
@@ -22,6 +24,8 @@ export function DatabaseNotice(arg1:string):Promise<string>;
 export function DefaultDBPath():Promise<string>;
 
 export function FileExists(arg1:string):Promise<boolean>;
+
+export function FilingDocuments(arg1:string,arg2:string):Promise<main.FilingDocuments>;
 
 export function FindLuaPathInConfig(arg1:string,arg2:string):Promise<string>;
 
@@ -50,6 +54,8 @@ export function PickDBFile():Promise<string>;
 export function PickLuaFile():Promise<string>;
 
 export function ReadFile(arg1:string):Promise<string>;
+
+export function ReadFiling(arg1:string):Promise<main.ReaderDoc>;
 
 export function ReadRules(arg1:backtest.RulesConfig,arg2:Array<string>,arg3:string,arg4:string,arg5:string):Promise<main.RulesReading>;
 

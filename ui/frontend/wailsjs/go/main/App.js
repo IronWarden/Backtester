@@ -18,6 +18,10 @@ export function CompanyEarnings(arg1, arg2) {
   return window['go']['main']['App']['CompanyEarnings'](arg1, arg2);
 }
 
+export function CompanyFilings(arg1, arg2) {
+  return window['go']['main']['App']['CompanyFilings'](arg1, arg2);
+}
+
 export function CompanyFinancials(arg1, arg2, arg3) {
   return window['go']['main']['App']['CompanyFinancials'](arg1, arg2, arg3);
 }
@@ -40,6 +44,10 @@ export function DefaultDBPath() {
 
 export function FileExists(arg1) {
   return window['go']['main']['App']['FileExists'](arg1);
+}
+
+export function FilingDocuments(arg1, arg2) {
+  return window['go']['main']['App']['FilingDocuments'](arg1, arg2);
 }
 
 export function FindLuaPathInConfig(arg1, arg2) {
@@ -96,6 +104,10 @@ export function PickLuaFile() {
 
 export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
+}
+
+export function ReadFiling(arg1) {
+  return window['go']['main']['App']['ReadFiling'](arg1);
 }
 
 export function ReadRules(arg1, arg2, arg3, arg4, arg5) {

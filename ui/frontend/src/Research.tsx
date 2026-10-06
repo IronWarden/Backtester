@@ -14,21 +14,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     CompanyEarnings,
+    CompanyFilings,
     CompanyFinancials,
     CompanyOverview,
+    FilingDocuments,
     ListTickers,
+    ReadFiling,
     TickerNames,
 } from "../wailsjs/go/main/App";
 import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 import type { main } from "../wailsjs/go/models";
 import { searchTickers } from "./tickerSearch";
 import {
+    FILING_FILTERS,
     RESEARCH_FUNCTIONS,
+    filterFilings,
+    firstDocument,
     formatFigure,
     formatMove,
     formatPrice,
     parseResearchCommand,
     resolveQuery,
+    type FilingFilter,
     type ResearchFn,
 } from "./researchCommand";
 
@@ -280,10 +287,136 @@ export function ErnView({ e }: { e: main.CompanyEarnings }) {
     );
 }
 
+export function FilingsView({
+    c,
+    filter,
+    onFilter,
+    selected,
+    onSelect,
+}: {
+    c: main.CompanyFilings;
+    filter: FilingFilter;
+    onFilter: (f: FilingFilter) => void;
+    selected: string;
+    onSelect: (row: main.FilingRow) => void;
+}) {
+    const shown = filterFilings(c.filings, filter);
+    return (
+        <div className="research-view">
+            <h2 className="research-title">
+                {c.company || c.ticker} <span className="research-ticker">{c.ticker} CN</span>
+            </h2>
+            {c.filings.length > 0 && (
+                <div className="research-toggle" role="group" aria-label="Show">
+                    {FILING_FILTERS.map((f) => (
+                        <button
+                            key={f.id}
+                            type="button"
+                            className={filter === f.id ? "active" : ""}
+                            onClick={() => onFilter(f.id)}
+                        >
+                            {f.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {c.filings.length > 0 && shown.length === 0 && (
+                <p className="research-dim">None of the recent filings are of this kind.</p>
+            )}
+            {shown.length > 0 && (
+                <ul className="filing-list">
+                    {shown.map((f) => (
+                        <li key={f.accession}>
+                            <button
+                                type="button"
+                                className={`filing-row${selected === f.accession ? " active" : ""}`}
+                                onClick={() => onSelect(f)}
+                            >
+                                <span className="filing-when">{f.accepted || f.filed}</span>
+                                <span className={`filing-form kind-${f.kind}`}>{f.form}</span>
+                                <span className="filing-title">{f.title}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {c.filings.length > 0 && (
+                <p className="research-dim">
+                    Straight from SEC EDGAR: the company's own filings, newest first, timed when EDGAR
+                    accepted them (US Eastern) — the moment each became public.
+                </p>
+            )}
+            <Notes notes={c.notes} />
+        </div>
+    );
+}
+
+export function ReaderView({
+    filing,
+    docs,
+    doc,
+    loading,
+    onOpen,
+}: {
+    filing: main.FilingRow;
+    docs: main.FilingDocument[];
+    doc: main.ReaderDoc | null;
+    loading: boolean;
+    onOpen: (url: string) => void;
+}) {
+    return (
+        <div className="reader">
+            <div className="reader-head">
+                <strong>{filing.title}</strong>
+                <span className="research-dim">
+                    {filing.form} · accepted {filing.accepted || filing.filed}
+                </span>
+                <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => openExternal(filing.indexUrl)}
+                    title="Open this filing on sec.gov in your browser"
+                >
+                    On sec.gov ↗
+                </button>
+            </div>
+            {docs.length > 1 && (
+                <div className="research-toggle" role="group" aria-label="Document">
+                    {docs.map((d) => (
+                        <button
+                            key={d.url}
+                            type="button"
+                            className={doc?.url === d.url ? "active" : ""}
+                            onClick={() => onOpen(d.url)}
+                            title={d.name}
+                        >
+                            {d.type}
+                            {d.description && d.description !== d.type ? ` — ${d.description}` : ""}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {loading && <p className="research-dim">Reading from SEC EDGAR…</p>}
+            {!loading && doc?.error && <div className="coverage-msg err">{doc.error}</div>}
+            {!loading && doc && !doc.error && (
+                <>
+                    <pre className="reader-text">{doc.text}</pre>
+                    {doc.truncated && (
+                        <p className="research-dim">
+                            Long document: the rest is on sec.gov.
+                        </p>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+
 type Result =
     | { fn: "DES"; data: main.CompanyOverview }
     | { fn: "FA"; data: main.CompanyFinancials }
-    | { fn: "ERN"; data: main.CompanyEarnings };
+    | { fn: "ERN"; data: main.CompanyEarnings }
+    | { fn: "CN"; data: main.CompanyFilings };
 
 export default function Research({
     dbPath,
@@ -302,6 +435,15 @@ export default function Research({
     const [pool, setPool] = useState<string[]>([]);
     const [names, setNames] = useState<Record<string, string>>({});
     const inputRef = useRef<HTMLInputElement>(null);
+    // CN: the filter, the filing open in the reader, its documents and text.
+    const [filter, setFilter] = useState<FilingFilter>("news");
+    const [filing, setFiling] = useState<main.FilingRow | null>(null);
+    const [docs, setDocs] = useState<main.FilingDocument[]>([]);
+    const [doc, setDoc] = useState<main.ReaderDoc | null>(null);
+    const [reading, setReading] = useState(false);
+    // Only the newest request may land, so a slow document cannot replace
+    // the one clicked after it.
+    const readSeq = useRef(0);
 
     useEffect(() => {
         if (focusSignal > 0) inputRef.current?.focus();
@@ -337,6 +479,8 @@ export default function Research({
             CompanyOverview(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
         } else if (fn === "FA") {
             CompanyFinancials(dbPath, ticker, freq).then((data) => done({ fn, data })).catch(fail);
+        } else if (fn === "CN") {
+            CompanyFilings(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
         } else {
             CompanyEarnings(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
         }
@@ -344,6 +488,61 @@ export default function Research({
             cancelled = true;
         };
     }, [ticker, fn, freq, dbPath]);
+
+    // A new company closes the reader.
+    useEffect(() => {
+        setFiling(null);
+        setDocs([]);
+        setDoc(null);
+    }, [ticker]);
+
+    function openDocument(url: string) {
+        const seq = ++readSeq.current;
+        setReading(true);
+        ReadFiling(url)
+            .then((d) => {
+                if (seq === readSeq.current) {
+                    setDoc(d);
+                    setReading(false);
+                }
+            })
+            .catch((e) => {
+                if (seq === readSeq.current) {
+                    setDoc({ url, text: "", truncated: false, error: String(e) });
+                    setReading(false);
+                }
+            });
+    }
+
+    function selectFiling(row: main.FilingRow) {
+        const cik = result?.fn === "CN" ? result.data.cik : "";
+        const seq = ++readSeq.current;
+        setFiling(row);
+        setDocs([]);
+        setDoc(null);
+        setReading(true);
+        FilingDocuments(cik, row.accession)
+            .then((list) => {
+                if (seq !== readSeq.current) return;
+                const ds = list.documents ?? [];
+                setDocs(ds);
+                const first = firstDocument(ds, row.form);
+                if (first) {
+                    openDocument(first.url);
+                } else if (row.primaryUrl) {
+                    openDocument(row.primaryUrl);
+                } else {
+                    setDoc({ url: row.indexUrl, text: "", truncated: false,
+                        error: list.error || "This filing has no readable document." });
+                    setReading(false);
+                }
+            })
+            .catch((e) => {
+                if (seq !== readSeq.current) return;
+                setDoc({ url: row.indexUrl, text: "", truncated: false, error: String(e) });
+                setReading(false);
+            });
+    }
 
     const named = useMemo(() => (ticker && names[ticker] ? names[ticker] : ""), [ticker, names]);
 
@@ -370,7 +569,7 @@ export default function Research({
                     ref={inputRef}
                     className="research-input"
                     data-shortcut="research"
-                    placeholder="A ticker or company name, then DES, FA or ERN — e.g. AAPL FA"
+                    placeholder="A ticker or company name, then DES, FA, ERN or CN — e.g. AAPL CN"
                     value={input}
                     spellCheck={false}
                     onChange={(e) => setInput(e.target.value)}
@@ -416,6 +615,26 @@ export default function Research({
             {!loading && !error && result?.fn === "DES" && <DesView d={result.data} />}
             {!loading && !error && result?.fn === "FA" && <FaView f={result.data} onFrequency={setFreq} />}
             {!loading && !error && result?.fn === "ERN" && <ErnView e={result.data} />}
+            {!loading && !error && result?.fn === "CN" && (
+                <div className={filing ? "cn-split" : ""}>
+                    <FilingsView
+                        c={result.data}
+                        filter={filter}
+                        onFilter={setFilter}
+                        selected={filing?.accession ?? ""}
+                        onSelect={selectFiling}
+                    />
+                    {filing && (
+                        <ReaderView
+                            filing={filing}
+                            docs={docs}
+                            doc={doc}
+                            loading={reading}
+                            onOpen={openDocument}
+                        />
+                    )}
+                </div>
+            )}
         </div>
     );
 }

@@ -12,6 +12,7 @@ export const RESEARCH_FUNCTIONS = [
   { code: "DES", label: "Description", hint: "What the company is" },
   { code: "FA", label: "Financials", hint: "Reported figures, as first filed" },
   { code: "ERN", label: "Earnings", hint: "Report dates and the price's answer" },
+  { code: "CN", label: "Filings", hint: "The company's own news: its SEC filings, read as clean text" },
 ] as const;
 
 export type ResearchFn = (typeof RESEARCH_FUNCTIONS)[number]["code"];
@@ -80,4 +81,33 @@ export function formatPrice(v: number): string {
 export function formatMove(v: number): string {
   const pct = (v * 100).toFixed(2);
   return v > 0 ? `+${pct}%` : v < 0 ? `−${pct.slice(1)}%` : "0.00%";
+}
+
+// CN's filters. The default leaves out insider paperwork (Forms 3/4/5/144),
+// which for a large company is most of what it files and buries the events.
+export const FILING_FILTERS = [
+  { id: "news", label: "Events & reports", kinds: ["event", "report", "ownership", "proxy"] },
+  { id: "event", label: "Events (8-K)", kinds: ["event"] },
+  { id: "report", label: "Reports (10-K, 10-Q)", kinds: ["report"] },
+  { id: "insider", label: "Insiders", kinds: ["insider"] },
+  { id: "all", label: "All", kinds: [] as string[] },
+] as const;
+
+export type FilingFilter = (typeof FILING_FILTERS)[number]["id"];
+
+export function filterFilings<T extends { kind: string }>(rows: T[], filter: FilingFilter): T[] {
+  const f = FILING_FILTERS.find((x) => x.id === filter);
+  if (!f || f.kinds.length === 0) return rows;
+  return rows.filter((r) => (f.kinds as readonly string[]).includes(r.kind));
+}
+
+// Which document the reader opens first: for an 8-K the press release
+// (EX-99.1) is the substance and the 8-K a cover sheet; otherwise the
+// filing's own main document.
+export function firstDocument<T extends { type: string }>(docs: T[], form: string): T | undefined {
+  if (form.startsWith("8-K") || form.startsWith("6-K")) {
+    const release = docs.find((d) => /^EX-99/.test(d.type));
+    if (release) return release;
+  }
+  return docs.find((d) => d.type === form) ?? docs[0];
 }
