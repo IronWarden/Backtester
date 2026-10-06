@@ -81,6 +81,8 @@ import {
 } from "./luaApi";
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
+import Research, { DesView, ErnView, FaView, edgarURL } from "./Research";
+import { formatFigure, formatMove, parseResearchCommand, resolveQuery } from "./researchCommand";
 import {
     DEFAULT_RULES,
     RULES_STRATEGY,
@@ -2350,6 +2352,94 @@ check("a library card offers its twin as rules", () => {
     }
     if (card("trend_following.lua").includes("As rules:")) {
         throw new Error("a script with no exact twin claims one");
+    }
+});
+
+
+// ---------------------------------------------------------------------------
+// The Research tab (T142a). Fixtures are the bindings' real output on a
+// scratch database (ui/research_test.go).
+
+const fixture = <T,>(name: string): T =>
+    JSON.parse(readFileSync(join(testdata, `${name}.json`), "utf8")) as T;
+
+check("research commands read like a terminal's", () => {
+    eq("bare ticker", parseResearchCommand("aapl"), { query: "aapl", fn: "DES" });
+    eq("ticker then fn", parseResearchCommand("  AAPL   fa "), { query: "AAPL", fn: "FA" });
+    eq("fn first", parseResearchCommand("ern MSFT"), { query: "MSFT", fn: "ERN" });
+    eq("a name", parseResearchCommand("apple inc fa"), { query: "apple inc", fn: "FA" });
+    // A lone code is a symbol, not a function with nothing to look up.
+    eq("lone code", parseResearchCommand("FA"), { query: "FA", fn: "DES" });
+    eq("empty", parseResearchCommand("   "), null);
+    const pool = ["AAPL", "MSFT"];
+    const names = { AAPL: "Apple Inc.", MSFT: "Microsoft Corp" };
+    const search = (q: string) => searchTickers(pool, names, q, 1);
+    eq("listed symbol", resolveQuery("msft", pool, search), "MSFT");
+    eq("by name", resolveQuery("apple", pool, search), "AAPL");
+    eq("no pool yet", resolveQuery("zzz", [], search), "ZZZ");
+});
+
+check("figures read as money, per-share and share counts", () => {
+    eq("revenue", formatFigure("Total Revenue", 416161000000), "$416.16B");
+    eq("loss", formatFigure("Net Income", -1.5e9), "−$1.50B");
+    eq("eps", formatFigure("Diluted EPS", 6.42), "$6.42");
+    eq("shares", formatFigure("Diluted Average Shares", 15.4e9), "15.40B");
+    eq("move up", formatMove(0.0324), "+3.24%");
+    eq("move down", formatMove(-0.025), "−2.50%");
+});
+
+check("DES shows what the company is, with every date", () => {
+    const d = fixture<main.CompanyOverview>("research-des");
+    const html = renderToString(<DesView d={d} />).replace(/<!-- -->/g, "").replace(/&amp;/g, "&");
+    for (const want of ["Acme Corp", "ACME", "Electronic Computers", "Nasdaq", "121.00",
+        "2025-01-29", "not a live quote", "A member at least since 2011-01-03",
+        "Filings on EDGAR", "add_data_quality.py"]) {
+        if (!html.includes(want)) throw new Error(`DES lacks ${want}:\n${html}`);
+    }
+    if (!edgarURL("0000320193").startsWith("https://www.sec.gov/")) {
+        throw new Error("the EDGAR link is not to sec.gov");
+    }
+    // A ticker the database knows nothing about still renders.
+    renderToString(<DesView d={main.CompanyOverview.createFrom({ ticker: "ZZZ", formerNames: [],
+        index: [], notes: ["ZZZ has no price history in this database."] })} />);
+});
+
+check("FA shows first-filed figures, gaps as a dash, filing dates on hover", () => {
+    const f = fixture<main.CompanyFinancials>("research-fa");
+    const html = renderToString(<FaView f={f} onFrequency={noop} />).replace(/<!-- -->/g, "");
+    for (const want of ["ACME CORP", "2024-12-31", "$420.00B", "−$1.50B", "$6.42",
+        "Filed 2025-02-14 in a 10-K", "as first filed", "Quarterly"]) {
+        if (!html.includes(want)) throw new Error(`FA lacks ${want}:\n${html}`);
+    }
+    if (!html.includes(">—<")) throw new Error("a missing figure is not shown as a dash");
+    const none = renderToString(<FaView f={main.CompanyFinancials.createFrom({ ticker: "ACME",
+        frequency: "annual", periods: [], rows: [], notes: ["No SEC financials in this database."] })}
+        onFrequency={noop} />);
+    if (none.includes("<table") || !none.includes("No SEC financials")) {
+        throw new Error("an empty FA must say why, without an empty table");
+    }
+});
+
+check("ERN shows each report and the move across it", () => {
+    const e = fixture<main.CompanyEarnings>("research-ern");
+    const html = renderToString(<ErnView e={e} />).replace(/<!-- -->/g, "");
+    for (const want of ["2025-01-28 16:00", "after close", "+10.00%",
+        "close 2025-01-28 → close 2025-01-29"]) {
+        if (!html.includes(want)) throw new Error(`ERN lacks ${want}:\n${html}`);
+    }
+    const upcoming = renderToString(<ErnView e={main.CompanyEarnings.createFrom({ ticker: "ACME",
+        reports: [{ reported: "2099-01-28 16:00", timing: "after close", from: "", to: "",
+            move: 0, hasMove: false, upcoming: true }], notes: [] })} />);
+    if (!upcoming.includes("upcoming, after close")) throw new Error(upcoming);
+});
+
+check("the Research tab explains itself before the first lookup", () => {
+    const html = renderToString(<Research dbPath="x.db" />).replace(/<!-- -->/g, "");
+    for (const want of ["DES", "FA", "ERN", "primary data", "e.g. AAPL FA"]) {
+        if (!html.includes(want)) throw new Error(`empty Research lacks ${want}`);
+    }
+    if (!renderToString(<Research dbPath="" />).includes("Choose a database first")) {
+        throw new Error("no database must say so");
     }
 });
 

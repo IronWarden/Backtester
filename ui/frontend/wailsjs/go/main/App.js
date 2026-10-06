@@ -14,6 +14,18 @@ export function CheckLuaScript(arg1, arg2, arg3) {
   return window['go']['main']['App']['CheckLuaScript'](arg1, arg2, arg3);
 }
 
+export function CompanyEarnings(arg1, arg2) {
+  return window['go']['main']['App']['CompanyEarnings'](arg1, arg2);
+}
+
+export function CompanyFinancials(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CompanyFinancials'](arg1, arg2, arg3);
+}
+
+export function CompanyOverview(arg1, arg2) {
+  return window['go']['main']['App']['CompanyOverview'](arg1, arg2);
+}
+
 export function CriterionMetrics() {
   return window['go']['main']['App']['CriterionMetrics']();
 }

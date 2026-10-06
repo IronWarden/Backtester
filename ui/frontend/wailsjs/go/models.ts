@@ -670,6 +670,259 @@ export namespace main {
 	        this.content = source["content"];
 	    }
 	}
+	export class EarningsRow {
+	    reported: string;
+	    timing: string;
+	    from: string;
+	    to: string;
+	    move: number;
+	    hasMove: boolean;
+	    upcoming: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new EarningsRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.reported = source["reported"];
+	        this.timing = source["timing"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.move = source["move"];
+	        this.hasMove = source["hasMove"];
+	        this.upcoming = source["upcoming"];
+	    }
+	}
+	export class CompanyEarnings {
+	    ticker: string;
+	    reports: EarningsRow[];
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompanyEarnings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.reports = this.convertValues(source["reports"], EarningsRow);
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class FinancialsCell {
+	    value: number;
+	    filed: string;
+	    form: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FinancialsCell(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.filed = source["filed"];
+	        this.form = source["form"];
+	    }
+	}
+	export class FinancialsRow {
+	    metric: string;
+	    cells: FinancialsCell[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FinancialsRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.metric = source["metric"];
+	        this.cells = this.convertValues(source["cells"], FinancialsCell);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CompanyFinancials {
+	    ticker: string;
+	    cik: string;
+	    company: string;
+	    frequency: string;
+	    periods: string[];
+	    rows: FinancialsRow[];
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompanyFinancials(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.cik = source["cik"];
+	        this.company = source["company"];
+	        this.frequency = source["frequency"];
+	        this.periods = source["periods"];
+	        this.rows = this.convertValues(source["rows"], FinancialsRow);
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class IndexSpan {
+	    index: string;
+	    start: string;
+	    end: string;
+	    atLeastSince: boolean;
+	    confidence: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndexSpan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.start = source["start"];
+	        this.end = source["end"];
+	        this.atLeastSince = source["atLeastSince"];
+	        this.confidence = source["confidence"];
+	    }
+	}
+	export class PriceLine {
+	    firstDate: string;
+	    lastDate: string;
+	    bars: number;
+	    lastClose: number;
+	    high52: number;
+	    low52: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PriceLine(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.firstDate = source["firstDate"];
+	        this.lastDate = source["lastDate"];
+	        this.bars = source["bars"];
+	        this.lastClose = source["lastClose"];
+	        this.high52 = source["high52"];
+	        this.low52 = source["low52"];
+	    }
+	}
+	export class CompanyOverview {
+	    ticker: string;
+	    name: string;
+	    cik: string;
+	    sector: string;
+	    sicDescription: string;
+	    exchange: string;
+	    incorporated: string;
+	    formerNames: string[];
+	    price?: PriceLine;
+	    index: IndexSpan[];
+	    quality: string;
+	    qualityReason: string;
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompanyOverview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.name = source["name"];
+	        this.cik = source["cik"];
+	        this.sector = source["sector"];
+	        this.sicDescription = source["sicDescription"];
+	        this.exchange = source["exchange"];
+	        this.incorporated = source["incorporated"];
+	        this.formerNames = source["formerNames"];
+	        this.price = this.convertValues(source["price"], PriceLine);
+	        this.index = this.convertValues(source["index"], IndexSpan);
+	        this.quality = source["quality"];
+	        this.qualityReason = source["qualityReason"];
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
 	export class HoldingMapping {
 	    from: string;
 	    to: string;
@@ -746,6 +999,7 @@ export namespace main {
 		    return a;
 		}
 	}
+	
 	export class LibraryTwin {
 	    file: string;
 	    rules: backtest.RulesConfig;
@@ -794,6 +1048,7 @@ export namespace main {
 	        this.label = source["label"];
 	    }
 	}
+	
 	export class QueryResult {
 	    columns: string[];
 	    rows: string[][];

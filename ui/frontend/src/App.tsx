@@ -72,6 +72,7 @@ import { RULES_STRATEGY, fromRulesConfig } from "./rules";
 import type { Session } from "./session";
 import ChatPanel from "./ChatPanel";
 import QueryConsole from "./QueryConsole";
+import Research from "./Research";
 import "./App.css";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -94,7 +95,7 @@ const RESERVED_TOP_CONFIG = 440;
 const RESERVED_TOP = 260;
 
 type Tab = "toml" | "lua";
-type Mode = "simple" | "advanced" | "data";
+type Mode = "simple" | "advanced" | "data" | "research";
 
 // Fallback DB path, relative to the app's working directory (ui/). The real
 // answer comes from Go (DefaultDBPath), which knows where the binary lives;
@@ -282,6 +283,8 @@ function App() {
     // ticking timer; null when nothing is running.
     const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
     const [chatOpen, setChatOpen] = useState(false);
+    // Bumped to put the cursor in the Research tab's command line.
+    const [researchFocus, setResearchFocus] = useState(0);
     // What "Describe my own idea…" puts in the assistant's input box, and
     // which Backtest card asked, so "Use these rules" lands back on it.
     const [chatSeed, setChatSeed] = useState<{ text: string; id: number }>();
@@ -441,8 +444,9 @@ function App() {
     const perform = (action: ShortcutAction): boolean => {
         switch (action) {
             case "run": {
-                // The Data tab's query editor binds Ctrl+Enter itself.
-                if (mode === "data") return false;
+                // The Data tab's query editor binds Ctrl+Enter itself, and
+                // the Research tab has nothing to run.
+                if (mode === "data" || mode === "research") return false;
                 // Click the visible Run button, so the shortcut obeys exactly
                 // what the button does -- disabled while a portfolio is not
                 // runnable or a run is going, the Config tab's own semantics.
@@ -471,6 +475,10 @@ function App() {
                 return true;
             case "tab-data":
                 setMode("data");
+                return true;
+            case "tab-research":
+                setMode("research");
+                setResearchFocus((n) => n + 1);
                 return true;
             case "toggle-assistant":
                 setChatOpen((o) => !o);
@@ -535,8 +543,8 @@ function App() {
         const onConfig = mode === "advanced";
         return [
             act("run", "Run backtest", {
-                disabled: mode === "data" || running,
-                hint: running ? "a run is going" : "not on the Data tab",
+                disabled: mode === "data" || mode === "research" || running,
+                hint: running ? "a run is going" : "not on the Data or Research tab",
             }),
             // Not through perform(): the palette's own input still has focus
             // when this runs, which the bare-key guard would read as typing.
@@ -549,6 +557,14 @@ function App() {
             act("tab-backtest", "Go to Backtest tab"),
             act("tab-config", "Go to Config tab"),
             act("tab-data", "Go to Data tab"),
+            act("tab-research", "Look up a company (Research: DES / FA / ERN)", {
+                // Deferred, like Find a ticker: the palette must unmount
+                // before the command line takes focus.
+                run: () => {
+                    setMode("research");
+                    setTimeout(() => setResearchFocus((n) => n + 1), 0);
+                },
+            }),
             act("toggle-assistant", chatOpen ? "Hide assistant" : "Show assistant"),
             act("max-assistant", chatOpen && chatMax ? "Restore assistant" : "Maximise assistant"),
             act("toggle-results", resultsLayout === "min" ? "Open results" : "Minimise results"),
@@ -1221,6 +1237,13 @@ function App() {
                     >
                         Data
                     </button>
+                    <button
+                        className={mode === "research" ? "active" : ""}
+                        onClick={() => setMode("research")}
+                        title={`Look a company up from primary sources: DES, FA, ERN (${keysFor("tab-research")})`}
+                    >
+                        Research
+                    </button>
                 </div>
                 <div className="topbar-spacer" />
                 <button
@@ -1277,6 +1300,11 @@ function App() {
             {visited.current.has("data") && (
                 <Pane active={mode === "data"} className="data-pane">
                     <QueryConsole dbPath={dbPath} fontSize={fontSize} />
+                </Pane>
+            )}
+            {visited.current.has("research") && (
+                <Pane active={mode === "research"} className="main-scroll">
+                    <Research dbPath={dbPath} focusSignal={researchFocus} />
                 </Pane>
             )}
             {visited.current.has("advanced") && (

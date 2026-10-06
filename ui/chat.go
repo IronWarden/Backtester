@@ -1375,10 +1375,25 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Check config/script, Open config file, Choose database, zoom) -- point a
   user who cannot find something there. "/" jumps to the ticker search (Backtest tab, not while typing in a field),
   Ctrl+Enter run (Data tab: run the query; when Run is disabled the status
-  line says why, and the form shows the same reason beside the button), Ctrl+1/2/3 Backtest/Config/Data,
+  line says why, and the form shows the same reason beside the button), Ctrl+1/2/3/4 Backtest/Config/Data/Research,
   Ctrl+J assistant, Ctrl+Shift+J maximise assistant, Ctrl+M minimise/restore
   results, Ctrl+Shift+M maximise results, Ctrl+S save (Config), Esc restore,
   Ctrl+= / Ctrl+- / Ctrl+0 zoom (also Ctrl+Up/Down, Ctrl+scroll).
+
+- THE RESEARCH TAB (Ctrl+4, or "Look up a company" in the palette) looks a
+  company up like a terminal: a ticker or company name, then a function.
+  "AAPL" or "AAPL DES": SEC EDGAR profile (industry, exchange, former names,
+  CIK with a link to its EDGAR filings), S&P 500 membership spans, last close
+  and 52-week closing range FROM THE DATABASE'S OWN BARS (dated — never a
+  live quote), and the data-quality verdict. "AAPL FA": reported financials
+  from sec_financials, annual (5 years) or quarterly (8), each figure AS FIRST
+  FILED with its filing date and form on hover; restatements are not shown.
+  "AAPL ERN": earnings_calendar report times (US Eastern) and the price move
+  from the last close before each report to the first close after it. All of
+  it is primary data with its date; there are no headlines, ads or live
+  quotes, by design. Missing tables are named with the loader that fills them.
+  Send a user there for "what does X do / what did it earn / how did it react
+  to earnings" before reaching for screen_stocks or lookup_quote.
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -2253,8 +2268,8 @@ total US market.
   MISSING panel had no data). A panel pops out on a header double-click (⤢),
   leaving an "in its own window" stub. The bar above minimises (▁) or
   maximises (□) the results; a vanished form means they are maximised.
-- The three tabs are Backtest (the form), Config (raw TOML + Lua) and Data
-  (SQL); "simple mode" means the Backtest tab.
+- Tabs: Backtest (form), Config (TOML+Lua), Data (SQL), Research (Ctrl+4:
+  "AAPL DES|FA|ERN", dated primary data); "simple mode" = Backtest.
 - The Backtest tab can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

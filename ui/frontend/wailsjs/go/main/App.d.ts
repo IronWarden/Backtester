@@ -9,6 +9,12 @@ export function CheckConfig(arg1:string,arg2:string):Promise<main.RunOutput>;
 
 export function CheckLuaScript(arg1:string,arg2:string,arg3:string):Promise<main.RunOutput>;
 
+export function CompanyEarnings(arg1:string,arg2:string):Promise<main.CompanyEarnings>;
+
+export function CompanyFinancials(arg1:string,arg2:string,arg3:string):Promise<main.CompanyFinancials>;
+
+export function CompanyOverview(arg1:string,arg2:string):Promise<main.CompanyOverview>;
+
 export function CriterionMetrics():Promise<Array<string>>;
 
 export function DatabaseNotice(arg1:string):Promise<string>;

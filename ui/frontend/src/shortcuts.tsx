@@ -10,6 +10,7 @@ export type ShortcutAction =
     | "tab-backtest"
     | "tab-config"
     | "tab-data"
+    | "tab-research"
     | "toggle-assistant"
     | "max-assistant"
     | "toggle-results"
@@ -36,6 +37,7 @@ export const SHORTCUTS: Shortcut[] = [
     { action: "tab-backtest", keys: "Ctrl+1", label: "Backtest tab" },
     { action: "tab-config", keys: "Ctrl+2", label: "Config tab" },
     { action: "tab-data", keys: "Ctrl+3", label: "Data tab" },
+    { action: "tab-research", keys: "Ctrl+4", label: "Research tab (look a company up: DES / FA / ERN)" },
     { action: "toggle-assistant", keys: "Ctrl+J", label: "Show or hide the assistant" },
     { action: "max-assistant", keys: "Ctrl+Shift+J", label: "Maximise or restore the assistant" },
     { action: "toggle-results", keys: "Ctrl+M", label: "Minimise or restore the results" },
@@ -135,6 +137,8 @@ export function shortcutFor(e: KeyLike): ShortcutAction | null {
             return "tab-config";
         case "3":
             return "tab-data";
+        case "4":
+            return "tab-research";
         case "j":
             return "toggle-assistant";
         case "m":

@@ -2905,3 +2905,150 @@ td.num.dim {
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
+
+/* Research tab (T142a). A command line on top, a plain reading view under it:
+   the content is facts with their dates, so the layout stays out of the way. */
+.research {
+  max-width: 68em;
+  margin: 0 auto;
+  padding: 1.25em 1.25em 2em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+}
+
+.research-bar {
+  display: flex;
+  gap: 0.5em;
+}
+
+.research-input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-l);
+  padding: 0.45em 0.7em;
+}
+
+.research-fns,
+.research-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.research-fns button.active,
+.research-toggle button.active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.research-resolved {
+  margin-left: 0.4em;
+}
+
+.research-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+}
+
+.research-title {
+  margin: 0.2em 0 0;
+  font-size: var(--fs-xl);
+  color: var(--text-1);
+}
+
+.research-ticker {
+  font-family: var(--mono);
+  font-size: var(--fs-m);
+  color: var(--text-3);
+  margin-left: 0.4em;
+}
+
+.research-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35em 1em;
+  font-size: var(--fs-m);
+}
+
+.research-facts dt {
+  color: var(--text-3);
+}
+
+.research-facts dd {
+  margin: 0;
+}
+
+.research-section h3 {
+  margin: 0 0 0.3em;
+  font-size: var(--fs-m);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.research-section p {
+  margin: 0 0 0.25em;
+}
+
+.research-dim {
+  color: var(--text-3);
+  font-size: var(--fs-s);
+}
+
+.research-list,
+.research-notes {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: var(--fs-s);
+  color: var(--text-3);
+}
+
+.research-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+}
+
+.research-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-m);
+}
+
+.research-table th,
+.research-table td {
+  padding: 0.35em 0.7em;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.research-table th[scope="row"],
+.research-table thead th:first-child {
+  text-align: left;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.research-table tr:last-child th,
+.research-table tr:last-child td {
+  border-bottom: none;
+}
+
+.research-upcoming td {
+  font-style: italic;
+}
+
+.research-empty {
+  color: var(--text-2);
+}
+
+.research-table td:first-child {
+  text-align: left;
+}

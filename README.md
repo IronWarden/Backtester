@@ -2601,11 +2601,54 @@ At most 200 diagnostics are kept per run; beyond that a final one says how many
 were suppressed. A strategy that raises on every trading day is the case this
 bounds.
 
+## The Research tab (UI)
+
+A company lookup that works like a terminal's command line, in limited scope
+and on purpose without noise: **no headlines, no adverts, no live quotes**.
+Everything it shows is primary data — SEC filings and the database's own
+prices — and says where it came from and as of when.
+
+Type a ticker or a company name, then a function, and press Enter
+(`Ctrl+4` jumps here with the cursor in the box; the command palette's *Look up
+a company* does the same):
+
+| command | shows | from |
+|---|---|---|
+| `AAPL` or `AAPL DES` | what the company is: name, industry (SIC), exchange, state of incorporation, former names, SEC CIK with a link to its filings on EDGAR; S&P 500 membership spans; last close and 52-week closing range; the data-quality verdict on its price series | `company_profile`, `index_membership`, `stock_data_optimized`, `data_quality` |
+| `AAPL FA` | reported financials — revenue through shares outstanding — for the last 5 fiscal years, or 8 quarters with *Quarterly*. Each figure **as first filed**: hover a cell for the filing date and form. Later restatements are not shown, so this is what the market could know at the time | `sec_financials` |
+| `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it | `earnings_calendar`, `stock_data_optimized` |
+
+The function may come first (`FA AAPL`), case does not matter, and a name
+resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
+Backtest tab's ticker search does. The function buttons under the box switch
+view without retyping the ticker.
+
+Honest edges, each said in the view rather than discovered:
+
+- The price line is **history, not a quote**: it names the session its close
+  comes from. A 52-week range is of daily closes, not intraday highs and lows.
+- A table the database lacks is named together with the loader that fills it
+  (`add_company_info.py`, `add_index_membership.py`, `add_data_quality.py`,
+  `add_sec_financials.py`); the rest of the view still renders.
+- SEC EDGAR lists only current tickers, so a delisted symbol has prices but no
+  profile. `company_profile` pads CIKs to ten digits and `sec_financials` does
+  not; FA matches them either way.
+- `earnings_calendar` covers about 1,000 tickers. A report during the session
+  is measured from the prior close, so it includes that morning's trading, and
+  the view says so.
+
+Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
+`EarningsReactions`, `SummarizePrices` — plus thin readers), `ui/research.go`
+(the `CompanyOverview` / `CompanyFinancials` / `CompanyEarnings` bindings), and
+`ui/frontend/src/Research.tsx`. Filings, economic releases, a watchlist and
+full-text search are T142b–e.
+
 ## The Backtest tab (UI)
 
-The topbar has three tabs, named for what they operate on rather than for how
+The topbar has four tabs, named for what they operate on rather than for how
 advanced they are: **Backtest** (the form below), **Config** (the raw TOML and
-Lua editors) and **Data** (a SQL console over the database).
+Lua editors), **Data** (a SQL console over the database) and **Research**
+(look a company up — see [The Research tab](#the-research-tab-ui)).
 
 The desktop app opens on the **Backtest** tab: a form for the things every
 backtest needs — name, starting capital, a date window with `Max`/`YTD`/`1Y`/`5Y`
@@ -3122,7 +3165,7 @@ on a Mac.
 | Ctrl+Shift+P | **Command palette** (Ctrl+K also opens it): every action by name — type any words of it, ↑/↓, Enter. Includes the actions with no key (Check config/script, Open config file…, Choose database…, zoom), and shows each one's shortcut, so it also teaches them. An action that does not apply here (Save on the Backtest tab) is listed greyed out with the reason. |
 | / | Jump to the ticker search on the Backtest tab (only when you are not typing in a field — there it types a `/`) |
 | Ctrl+Enter | Run the backtest — the visible Run button, so it is refused exactly when the button is disabled, and then the status line says why (*Can't run yet: add at least one holding.*). On the Data tab it runs the query, as before. |
-| Ctrl+1 / 2 / 3 | Backtest / Config / Data tab |
+| Ctrl+1 / 2 / 3 / 4 | Backtest / Config / Data / Research tab (Ctrl+4 also puts the cursor in the Research command line) |
 | Ctrl+J | Show or hide the assistant |
 | Ctrl+Shift+J | Maximise or restore the assistant |
 | Ctrl+M | Minimise or restore the results |
