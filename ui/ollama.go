@@ -153,6 +153,14 @@ func ollamaTools() []map[string]any {
 				"parameters":  screenStocksToolSchema(),
 			},
 		},
+		{
+			"type": "function",
+			"function": map[string]any{
+				"name":        checkRulesToolName,
+				"description": checkRulesToolDescription,
+				"parameters":  checkRulesToolSchema(),
+			},
+		},
 	}
 }
 
@@ -310,6 +318,9 @@ func ollamaChat(
 			case screenStocksToolName:
 				em.tool("screen_stocks: " + screenPreview(call.Function.Arguments))
 				out = runScreenTool(ctx, call.Function.Arguments)
+			case checkRulesToolName:
+				em.tool("check_rules: " + checkRulesPreview(call.Function.Arguments))
+				out = runCheckRulesTool(dbPath, call.Function.Arguments)
 			default:
 				out = fmt.Sprintf("ERROR: unknown tool %q", call.Function.Name)
 			}

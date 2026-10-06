@@ -3117,6 +3117,22 @@ open (even unsaved) in the editors.
   inline in the chat. Local models get the tool too if they advertise the
   `tools` capability (qwen3.5 does); models that don't simply chat over
   the embedded context.
+- **It writes strategies as rules first.** Asked to turn an idea into a
+  strategy, it proposes a [`[portfolio.Rules]`](#portfoliorules) block and
+  writes Lua only when the menu cannot say what you mean — and then says
+  what the menu was missing. Before showing a rule set it calls the
+  `check_rules` tool, which runs the rules through the same construction a
+  backtest does and returns either the errors or the engine's own sentence
+  for them (`DescribeRules`) plus the window the database covers for those
+  tickers. The assistant shows you that sentence verbatim, so what you
+  confirm is the engine's reading of the strategy, not the model's
+  paraphrase. When your idea leaves out how often to re-decide or what to
+  hold when the market turns, it proposes a default and says so ("checked
+  monthly — say if you meant weekly") rather than choosing silently.
+  Small local models follow this less reliably than Claude: in testing,
+  qwen3.5:4b called `check_rules` on about half of attempts and otherwise
+  wrote rules from memory, once with an entry that is not on the menu — the
+  app's ✓ Check catches those before a run.
 - Fenced ` ```toml `/` ```lua ` blocks in its replies get an
   **Insert into … editor** button, so a generated config or strategy lands
   directly in the corresponding editor tab.

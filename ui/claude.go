@@ -153,6 +153,11 @@ func anthropicTools() []map[string]any {
 			"description":  screenStocksToolDescription,
 			"input_schema": screenStocksToolSchema(),
 		},
+		{
+			"name":         checkRulesToolName,
+			"description":  checkRulesToolDescription,
+			"input_schema": checkRulesToolSchema(),
+		},
 	}
 }
 
@@ -391,6 +396,9 @@ func anthropicChat(
 			case screenStocksToolName:
 				em.tool("screen_stocks: " + screenPreview(tu.Input))
 				out = runScreenTool(ctx, tu.Input)
+			case checkRulesToolName:
+				em.tool("check_rules: " + checkRulesPreview(tu.Input))
+				out = runCheckRulesTool(dbPath, tu.Input)
 			default:
 				out = fmt.Sprintf("ERROR: unknown tool %q", tu.Name)
 			}
