@@ -25,9 +25,9 @@ export function ImportHoldings(arg1:string):Promise<main.HoldingsImport>;
 
 export function IsLibraryScript(arg1:string):Promise<boolean>;
 
-export function ListChatModels():Promise<Array<main.ModelOption>>;
+export function LibraryRules():Promise<Array<main.LibraryTwin>>;
 
-export function LibraryRules():Promise<Record<string, main.LibraryTwin>>;
+export function ListChatModels():Promise<Array<main.ModelOption>>;
 
 export function ListStrategies():Promise<Array<backtest.StrategyCard>>;
 

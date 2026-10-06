@@ -747,6 +747,7 @@ export namespace main {
 		}
 	}
 	export class LibraryTwin {
+	    file: string;
 	    rules: backtest.RulesConfig;
 	    sentence: string;
 	
@@ -756,6 +757,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.file = source["file"];
 	        this.rules = this.convertValues(source["rules"], backtest.RulesConfig);
 	        this.sentence = source["sentence"];
 	    }

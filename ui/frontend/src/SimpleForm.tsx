@@ -317,8 +317,10 @@ export default function SimpleForm({
                 if (!cancelled) setGallery([]);
             });
         LibraryRules()
-            .then((t) => {
-                if (!cancelled) setTwins(t ?? {});
+            .then((list) => {
+                if (!cancelled) {
+                    setTwins(Object.fromEntries((list ?? []).map((t) => [t.file, t])));
+                }
             })
             .catch(() => {
                 if (!cancelled) setTwins({});

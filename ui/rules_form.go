@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -109,17 +110,30 @@ func (a *App) RulesFromToml(text string) (backtest.RulesConfig, error) {
 
 // LibraryTwin is a shipped script restated as rules, with its sentence.
 type LibraryTwin struct {
+	File     string               `json:"file"`
 	Rules    backtest.RulesConfig `json:"rules"`
 	Sentence string               `json:"sentence"`
 }
 
 // LibraryRules returns the twin of every library script the menu can say
-// exactly (backtest.LibraryTwins), keyed by file name. The sentence is read
-// without a portfolio: it never names the tickers, so placeholders stand in
-// for as many as the twin picks, and none of the twins reads a benchmark.
-func (a *App) LibraryRules() map[string]LibraryTwin {
-	out := map[string]LibraryTwin{}
-	for file, rc := range backtest.LibraryTwins() {
+// exactly (backtest.LibraryTwins), sorted by file name. A list rather than a
+// map keyed by file: Wails' binding generator emits no TypeScript class for a
+// struct that appears only as a map value, which broke `wails build` while
+// the hand-written binding hid it.
+//
+// The sentence is read without a portfolio: it never names the tickers, so
+// placeholders stand in for as many as the twin picks, and none of the twins
+// reads a benchmark.
+func (a *App) LibraryRules() []LibraryTwin {
+	twins := backtest.LibraryTwins()
+	files := make([]string, 0, len(twins))
+	for f := range twins {
+		files = append(files, f)
+	}
+	sort.Strings(files)
+	out := make([]LibraryTwin, 0, len(files))
+	for _, file := range files {
+		rc := twins[file]
 		n := rc.Pick
 		if n < 1 {
 			n = 1
@@ -128,7 +142,8 @@ func (a *App) LibraryRules() map[string]LibraryTwin {
 		for i := range placeholders {
 			placeholders[i] = fmt.Sprintf("T%d", i)
 		}
-		out[file] = LibraryTwin{Rules: rc, Sentence: backtest.DescribeRules(rc, placeholders, "")}
+		out = append(out, LibraryTwin{File: file, Rules: rc,
+			Sentence: backtest.DescribeRules(rc, placeholders, "")})
 	}
 	return out
 }

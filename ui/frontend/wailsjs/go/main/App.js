@@ -46,12 +46,12 @@ export function IsLibraryScript(arg1) {
   return window['go']['main']['App']['IsLibraryScript'](arg1);
 }
 
-export function ListChatModels() {
-  return window['go']['main']['App']['ListChatModels']();
-}
-
 export function LibraryRules() {
   return window['go']['main']['App']['LibraryRules']();
+}
+
+export function ListChatModels() {
+  return window['go']['main']['App']['ListChatModels']();
 }
 
 export function ListStrategies() {

@@ -2288,8 +2288,11 @@ check("rules entries the card lists are exactly the engine's", () => {
 // The library and the starter examples, restated as rules (T136). The twins
 // are the engine's (App.LibraryRules, written by ui/rules_form_test.go), and
 // src/backtest holds each one to the cent against its script.
-const LIBRARY_TWINS: Record<string, main.LibraryTwin> = JSON.parse(
-    readFileSync(join(testdata, "library-rules.json"), "utf8"),
+// Served as a list (Wails emits no class for a map-valued struct); keyed by
+// file here exactly as SimpleForm keys it.
+const LIBRARY_TWINS: Record<string, main.LibraryTwin> = Object.fromEntries(
+    (JSON.parse(readFileSync(join(testdata, "library-rules.json"), "utf8")) as main.LibraryTwin[])
+        .map((t) => [t.file, t]),
 );
 
 check("a rules example is exactly its library twin", () => {

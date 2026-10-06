@@ -176,9 +176,13 @@ func TestRulesCardTomlIsAConfigTheEngineAccepts(t *testing.T) {
 }
 
 func TestLibraryRulesReadAsSentences(t *testing.T) {
-	twins := (&App{}).LibraryRules()
-	if len(twins) == 0 {
+	list := (&App{}).LibraryRules()
+	if len(list) == 0 {
 		t.Fatal("no library twins")
+	}
+	twins := map[string]LibraryTwin{}
+	for _, tw := range list {
+		twins[tw.File] = tw
 	}
 	for file, tw := range twins {
 		if strings.HasPrefix(tw.Sentence, "These rules cannot run") || tw.Sentence == "" {
