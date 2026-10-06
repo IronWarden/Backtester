@@ -27,6 +27,8 @@ export function IsLibraryScript(arg1:string):Promise<boolean>;
 
 export function ListChatModels():Promise<Array<main.ModelOption>>;
 
+export function LibraryRules():Promise<Record<string, main.LibraryTwin>>;
+
 export function ListStrategies():Promise<Array<backtest.StrategyCard>>;
 
 export function ListTickers(arg1:string):Promise<Array<string>>;

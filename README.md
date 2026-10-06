@@ -2807,6 +2807,32 @@ One click fills the holdings, the window, the strategy, the benchmark and a
 matching pre-registered hypothesis — a complete run you are then meant to
 **edit**, which is a much easier first act than assembling one from nothing.
 
+*Chase the winners* is written as [rules](#portfoliorules), so its button and
+its card read as a sentence — "Every 21 trading days (about monthly), hold the 2
+stocks that rose most over the last 126 trading days, counting only those up
+over the last 126 trading days…" — rather than as a script you would have to
+open. It is the exact twin of `momentum_rotation.lua` (see below). *Step out of
+falls* and *Drip money in* stay scripts and say why on their buttons: one buys
+and sells on the crossing itself, which a target-weight rule set does not
+reproduce, and the other is driven by deposits, which no rule describes.
+
+**Library scripts with a rules twin.** Two shipped scripts can be said exactly
+by the menu, at their default parameters:
+
+| script | the same strategy as rules |
+|---|---|
+| `momentum_rotation.lua` | `Rebalance = "monthly"`, `Rank = "return_126"`, `Pick = 2`, `Filter = "rising_126"` (the script only funds winners with positive momentum) |
+| `rebalance.lua` | `Rebalance = "quarterly"`; its optional `weights` are `Weight = "allocations"` |
+
+Pick either on the Backtest tab and its card shows the sentence under the
+works/fails text, with **Use as rules →** to switch the card over.
+`TestLibraryTwinsMatchTheirScripts` (`src/backtest/rules_test.go`) runs each twin
+against its script and requires the same equity curve to the cent, so the two
+cannot drift apart; the Lua originals stay in `strategies/` unchanged. Nothing
+else in the library has an exact twin — `trend_following.lua` was tried as a
+daily `above_sma_200` filter and differs from the first trade, because the
+script sizes with `buy_max` rather than to a target weight.
+
 Every example is built against the database you have loaded: symbols it does
 not carry are dropped, the window is clamped to what the remaining holdings
 **and** the benchmark both cover, and an example that cannot be made runnable

@@ -547,3 +547,18 @@ end`
 		t.Fatalf("compared only %d values; the probe's log lines were not parsed", checked)
 	}
 }
+
+// Every library twin, against its script at the script's DEFAULT parameters
+// (nil params), to the cent. This is what lets the gallery and the starter
+// examples offer the twin as "the same strategy, as rules".
+func TestLibraryTwinsMatchTheirScripts(t *testing.T) {
+	if len(LibraryTwins()) == 0 {
+		t.Fatal("no library twins")
+	}
+	for file, rc := range LibraryTwins() {
+		t.Run(file, func(t *testing.T) {
+			lua, r := runBoth(t, "lua:strategies/"+file, nil, rc)
+			sameCurve(t, lua, r)
+		})
+	}
+}

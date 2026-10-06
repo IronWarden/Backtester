@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import ResultsView, { benchmarkLines, differingWindows } from "./ResultsView";
-import SimpleFormView, { Investors } from "./SimpleForm";
+import SimpleFormView, { Examples, Investors } from "./SimpleForm";
 import PortfolioCard from "./PortfolioCard";
 import {
     addBuffer,
@@ -87,6 +87,7 @@ import {
     argsOf as ruleArgs,
     entriesOf,
     formatRule,
+    fromRulesConfig,
     hasRulesBlock,
     parseRule,
     rulesBlocker,
@@ -2280,6 +2281,72 @@ check("only a rules block offers to go to the form", () => {
 check("rules entries the card lists are exactly the engine's", () => {
     for (const kind of ["rebalance", "rank", "filter", "weight", "riskoff"]) {
         if (entriesOf(RULES_MENU, kind).length === 0) throw new Error(`no ${kind} entries`);
+    }
+});
+
+
+// The library and the starter examples, restated as rules (T136). The twins
+// are the engine's (App.LibraryRules, written by ui/rules_form_test.go), and
+// src/backtest holds each one to the cent against its script.
+const LIBRARY_TWINS: Record<string, main.LibraryTwin> = JSON.parse(
+    readFileSync(join(testdata, "library-rules.json"), "utf8"),
+);
+
+check("a rules example is exactly its library twin", () => {
+    const ruled = EXAMPLES.filter((ex) => ex.rules);
+    if (ruled.length === 0) throw new Error("no starter example is written as rules");
+    for (const ex of ruled) {
+        const twin = ex.twin ? LIBRARY_TWINS[ex.twin] : undefined;
+        if (!twin) throw new Error(`${ex.id}: twin ${ex.twin} is not one the engine serves`);
+        eq(`${ex.id} rules`, ex.rules, fromRulesConfig(twin.rules));
+        eq(`${ex.id} strategy`, ex.strategy, RULES_STRATEGY);
+    }
+    // An example that is not rules says why it stays a script.
+    for (const ex of EXAMPLES) {
+        if (!ex.rules && ex.strategy && !ex.scriptReason) {
+            throw new Error(`${ex.id} is a script and does not say why`);
+        }
+    }
+});
+
+check("the starter examples show their sentence, or why they are a script", () => {
+    const html = renderToString(
+        <Examples ranges={EXAMPLE_RANGES} onPick={noop} twins={LIBRARY_TWINS} />,
+    ).replace(/&amp;/g, "&");
+    const momentum = LIBRARY_TWINS["momentum_rotation.lua"].sentence;
+    if (!html.includes(momentum)) throw new Error("the rules example does not show its sentence");
+    for (const ex of EXAMPLES.filter((e) => e.scriptReason)) {
+        if (!html.includes(ex.scriptReason!)) throw new Error(`${ex.id} hides why it is a script`);
+    }
+    // Without the twins loaded (no backend yet), nothing breaks.
+    renderToString(<Examples ranges={EXAMPLE_RANGES} onPick={noop} />);
+});
+
+check("a library card offers its twin as rules", () => {
+    const card = (strategy: string, twin?: main.LibraryTwin) =>
+        renderToString(
+            <PortfolioCard
+                form={{ ...form, strategy }}
+                onChange={noop}
+                onRemove={null}
+                otherNames={[]}
+                defaultName="Portfolio 1"
+                dbPath=""
+                available={[]}
+                names={{}}
+                ranges={{}}
+                pickable={[backtest.StrategyCard.createFrom({ File: strategy, Idea: "idea",
+                    Works: "w", Fails: "f", Sweep: "", Baseline: "b" })]}
+                showBaskets={false}
+                twin={twin}
+            />,
+        ).replace(/&amp;/g, "&");
+    const html = card("momentum_rotation.lua", LIBRARY_TWINS["momentum_rotation.lua"]);
+    if (!html.includes("As rules:") || !html.includes("Use as rules")) {
+        throw new Error("the momentum card does not offer its rules");
+    }
+    if (card("trend_following.lua").includes("As rules:")) {
+        throw new Error("a script with no exact twin claims one");
     }
 });
 

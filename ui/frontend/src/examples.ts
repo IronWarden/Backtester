@@ -13,6 +13,7 @@ import type { SimpleForm, HypothesisForm } from "./buildToml";
 import { REBALANCE_LUA } from "./buildToml";
 import type { Ranges } from "./portfolioCheck";
 import { coverageOf } from "./portfolioCheck";
+import { RULES_STRATEGY, type RulesForm } from "./rules";
 
 // Equal percentages that sum to exactly 100, matching what PortfolioCard fills
 // in when even split is switched on. The app's rule is that even split carries
@@ -41,9 +42,18 @@ export type Example = {
   // -- a starter example that opens with a red date error is worse than none.
   tickers: string[];
   minTickers: number;
-  // "" is buy-and-hold, matching SimpleForm's own convention. Anything else
-  // is a file name in the shipped library.
+  // "" is buy-and-hold, matching SimpleForm's own convention. RULES_STRATEGY
+  // runs `rules`. Anything else is a file name in the shipped library.
   strategy: string;
+  // A rule set, when the example is one (T136): a beginner's first contact
+  // should be a sentence they can read, not a script they cannot.
+  rules?: RulesForm;
+  // The library script these rules are the exact twin of. Its sentence (from
+  // App.LibraryRules) is shown on the button, and the smoke render checks
+  // `rules` against the engine's twin so the two cannot drift.
+  twin?: string;
+  // For an example that stays a script: why the rules menu cannot say it.
+  scriptReason?: string;
   // How long a window to ask for. The dates themselves come from what the
   // data actually covers, never from today's calendar.
   years: number;
@@ -80,7 +90,17 @@ export const EXAMPLES: Example[] = [
       "Does rotating into whatever has been rising beat holding all of them?",
     tickers: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"],
     minTickers: 3,
-    strategy: "momentum_rotation.lua",
+    strategy: RULES_STRATEGY,
+    rules: {
+      rebalance: "monthly",
+      rank: "return_126",
+      pick: 2,
+      keep: 0,
+      filter: "rising_126",
+      weight: "equal",
+      riskOff: "",
+    },
+    twin: "momentum_rotation.lua",
     years: 10,
     hypothesis: { metric: "sharpe", op: ">=", value: "1" },
   },
@@ -92,6 +112,8 @@ export const EXAMPLES: Example[] = [
     tickers: ["SPY"],
     minTickers: 1,
     strategy: "trend_following.lua",
+    scriptReason:
+      "A script: it buys and sells on the crossing itself, which the rules menu cannot state exactly.",
     years: 15,
     hypothesis: { metric: "max_drawdown", op: "<=", value: "30" },
   },
@@ -102,6 +124,7 @@ export const EXAMPLES: Example[] = [
     tickers: ["SPY"],
     minTickers: 1,
     strategy: "dca.lua",
+    scriptReason: "A script: it is driven by monthly deposits, which no rule describes.",
     years: 10,
     hypothesis: { metric: "annual_return", op: ">=", value: "5" },
   },
@@ -175,6 +198,7 @@ export function buildExample(
     endDate: end,
     benchmark,
     strategy: ex.strategy,
+    rules: ex.rules,
   };
 }
 

@@ -50,6 +50,10 @@ export function ListChatModels() {
   return window['go']['main']['App']['ListChatModels']();
 }
 
+export function LibraryRules() {
+  return window['go']['main']['App']['LibraryRules']();
+}
+
 export function ListStrategies() {
   return window['go']['main']['App']['ListStrategies']();
 }

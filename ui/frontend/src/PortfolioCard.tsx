@@ -8,7 +8,13 @@ import {
     usesRules,
 } from "./buildToml";
 import RulesCard from "./RulesCard";
-import { DEFAULT_RULES, RULES_STRATEGY, settleCounts, type MenuEntry } from "./rules";
+import {
+    DEFAULT_RULES,
+    RULES_STRATEGY,
+    fromRulesConfig,
+    settleCounts,
+    type MenuEntry,
+} from "./rules";
 import type { SimpleForm as Form } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
 import { BASKETS, INVESTORS, basketTickers, buildInvestor } from "./examples";
@@ -123,6 +129,9 @@ type Props = {
     // "Describe my own idea…": opens the assistant with this card's holdings
     // and window in its first message.
     onDescribeIdea?: () => void;
+    // The chosen library script restated as rules, when the menu can say it
+    // exactly (App.LibraryRules): shown on its card, one click to switch.
+    twin?: main.LibraryTwin;
 };
 
 export default function PortfolioCard({
@@ -141,6 +150,7 @@ export default function PortfolioCard({
     rulesMenu = [],
     rulesReading = null,
     onDescribeIdea,
+    twin,
 }: Props) {
     const [tickerInput, setTickerInput] = useState("");
     // Which suggestion the keyboard is on, or -1 for "none: Enter takes what
@@ -634,6 +644,34 @@ export default function PortfolioCard({
                         <p className="strategy-baseline">
                             Compare it against: {chosen.Baseline}
                         </p>
+                        {/* The same strategy as a sentence, held to the cent
+                            against the script by the engine's tests. */}
+                        {twin && (
+                            <div className="strategy-twin">
+                                <p>
+                                    <strong>As rules:</strong> {twin.sentence}
+                                </p>
+                                <button
+                                    type="button"
+                                    className="link-button"
+                                    onClick={() => {
+                                        const rules = fromRulesConfig(twin.rules);
+                                        // Fixed percentages on the card are
+                                        // what the script's weights would be.
+                                        if (form.strategy === "rebalance.lua" && !form.evenSplit) {
+                                            rules.weight = "allocations";
+                                        }
+                                        patch({
+                                            strategy: RULES_STRATEGY,
+                                            rules: settleCounts(rules, form.tickers.length),
+                                        });
+                                    }}
+                                    title="Switch this card to the same strategy written as rules you can read and edit"
+                                >
+                                    Use as rules →
+                                </button>
+                            </div>
+                        )}
                         {onViewScript && (
                             <button
                                 type="button"

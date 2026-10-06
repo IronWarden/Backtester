@@ -6,6 +6,7 @@ import {
     TickerNames,
     TickerDateRanges,
     CriterionMetrics,
+    LibraryRules,
     ReadRules,
     RulesMenu,
 } from "../wailsjs/go/main/App";
@@ -150,12 +151,15 @@ function FirstRun({
 // Shown only while no portfolio has holdings, so it is the empty form's
 // content rather than a permanent banner -- and it comes back if the user
 // clears everything, which is exactly when they want it again.
-function Examples({
+export function Examples({
     ranges,
     onPick,
+    twins = {},
 }: {
     ranges: Record<string, string[]>;
     onPick: (id: string) => void;
+    // Library twins' sentences (App.LibraryRules), for examples that are rules.
+    twins?: Record<string, main.LibraryTwin>;
 }) {
     // Built against the loaded database: an example whose symbols are missing,
     // or whose window cannot be made to work, is withdrawn rather than shown
@@ -184,6 +188,13 @@ function Examples({
                     >
                         <span className="example-label">{ex.label}</span>
                         <span className="example-question">{ex.question}</span>
+                        {/* A rules example says what it will do in the
+                            engine's own sentence; a script says why it is one. */}
+                        {ex.twin && twins[ex.twin] ? (
+                            <span className="example-rules">{twins[ex.twin].sentence}</span>
+                        ) : ex.scriptReason ? (
+                            <span className="example-note">{ex.scriptReason}</span>
+                        ) : null}
                     </button>
                 ))}
             </div>
@@ -285,6 +296,8 @@ export default function SimpleForm({
     // back to an earlier state is instant.
     const [rulesMenu, setRulesMenu] = useState<backtest.RuleEntry[]>([]);
     const [readings, setReadings] = useState<Record<string, main.RulesReading>>({});
+    // Library scripts the menu can say exactly, as rules + sentence.
+    const [twins, setTwins] = useState<Record<string, main.LibraryTwin>>({});
 
     useEffect(
         () => EventsOn("chat:db-changed", () => setDbVersion((v) => v + 1)),
@@ -302,6 +315,13 @@ export default function SimpleForm({
             })
             .catch(() => {
                 if (!cancelled) setGallery([]);
+            });
+        LibraryRules()
+            .then((t) => {
+                if (!cancelled) setTwins(t ?? {});
+            })
+            .catch(() => {
+                if (!cancelled) setTwins({});
             });
         RulesMenu()
             .then((m) => {
@@ -489,7 +509,7 @@ export default function SimpleForm({
             )}
 
             {!anyTickers && (
-                <Examples ranges={ranges} onPick={applyExample} />
+                <Examples ranges={ranges} onPick={applyExample} twins={twins} />
             )}
             {!anyTickers && (
                 <Investors ranges={ranges} onPick={applyInvestor} />
@@ -516,6 +536,7 @@ export default function SimpleForm({
                     onViewScript={onViewScript}
                     rulesMenu={rulesMenu}
                     rulesReading={cardReadings[i] ?? null}
+                    twin={twins[f.strategy]}
                     onDescribeIdea={onDescribeIdea ? () => onDescribeIdea(i) : undefined}
                 />
             ))}

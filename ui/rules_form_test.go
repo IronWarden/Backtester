@@ -99,7 +99,8 @@ func rulesFixtures() map[string]any {
 		return a.ReadRules(rc, tickers, "2015-01-02", "2024-12-31", bench)
 	}
 	return map[string]any{
-		"rules-menu": backtest.RulesVocabulary(),
+		"rules-menu":    backtest.RulesVocabulary(),
+		"library-rules": a.LibraryRules(),
 		"rules-readings": map[string]RulesReading{
 			// What "Describe my own idea…" starts from (DEFAULT_RULES).
 			"default": read(backtest.RulesConfig{Rebalance: "monthly", Weight: "equal"}, "$SP500"),
@@ -171,5 +172,23 @@ func TestRulesCardTomlIsAConfigTheEngineAccepts(t *testing.T) {
 	}
 	if w := cfg.Portfolios[1].Rules.Allocations; w["9988.HK"] != 20 || w["AAPL"] != 50 {
 		t.Errorf("allocations did not survive the round trip: %v", w)
+	}
+}
+
+func TestLibraryRulesReadAsSentences(t *testing.T) {
+	twins := (&App{}).LibraryRules()
+	if len(twins) == 0 {
+		t.Fatal("no library twins")
+	}
+	for file, tw := range twins {
+		if strings.HasPrefix(tw.Sentence, "These rules cannot run") || tw.Sentence == "" {
+			t.Errorf("%s: %q", file, tw.Sentence)
+		}
+		if strings.Contains(tw.Sentence, "T0") {
+			t.Errorf("%s: a placeholder ticker leaked into the sentence: %s", file, tw.Sentence)
+		}
+	}
+	if !strings.Contains(twins["momentum_rotation.lua"].Sentence, "rose most over the last 126") {
+		t.Errorf("momentum: %s", twins["momentum_rotation.lua"].Sentence)
 	}
 }

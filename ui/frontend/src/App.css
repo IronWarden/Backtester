@@ -995,6 +995,18 @@ button.primary:hover:not(:disabled),
   color: var(--text-2);
 }
 
+.simple-form .strategy-twin p {
+  margin: 0 0 0.3em;
+  color: var(--text-2);
+}
+
+.simple-form .example-rules,
+.simple-form .example-note {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
 /* The rules card (T135). The sentence is the thing being confirmed, so it is
    the largest text on the card; the controls beneath it are how it is edited. */
 .simple-form .rules-sentence {

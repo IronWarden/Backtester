@@ -106,3 +106,29 @@ func (a *App) RulesFromToml(text string) (backtest.RulesConfig, error) {
 	}
 	return rc, nil
 }
+
+// LibraryTwin is a shipped script restated as rules, with its sentence.
+type LibraryTwin struct {
+	Rules    backtest.RulesConfig `json:"rules"`
+	Sentence string               `json:"sentence"`
+}
+
+// LibraryRules returns the twin of every library script the menu can say
+// exactly (backtest.LibraryTwins), keyed by file name. The sentence is read
+// without a portfolio: it never names the tickers, so placeholders stand in
+// for as many as the twin picks, and none of the twins reads a benchmark.
+func (a *App) LibraryRules() map[string]LibraryTwin {
+	out := map[string]LibraryTwin{}
+	for file, rc := range backtest.LibraryTwins() {
+		n := rc.Pick
+		if n < 1 {
+			n = 1
+		}
+		placeholders := make([]string, n)
+		for i := range placeholders {
+			placeholders[i] = fmt.Sprintf("T%d", i)
+		}
+		out[file] = LibraryTwin{Rules: rc, Sentence: backtest.DescribeRules(rc, placeholders, "")}
+	}
+	return out
+}

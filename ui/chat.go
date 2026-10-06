@@ -751,6 +751,15 @@ behavior none of them cover, and start from the closest file.
   opens strategies/my_<name>.lua — their copy, created on Save. Never tell a
   user to edit a library file in place; the app refuses to save over one.
 - Allocation: rebalance, risk_parity, momentum_rotation
+- TWO LIBRARY SCRIPTS ARE ALSO RULES, held to the cent against the script
+  at its default parameters: momentum_rotation.lua = {Rebalance "monthly",
+  Rank "return_126", Pick 2, Filter "rising_126"} and rebalance.lua =
+  {Rebalance "quarterly"} (Weight "allocations" for fixed percentages). Their
+  Backtest-tab cards show the sentence with "Use as rules →", and the starter
+  example "Chase the winners" IS the momentum twin, as rules. Propose those
+  rule sets rather than the scripts. trend_following.lua has no exact twin
+  (it trades on the crossing; a daily above_sma_200 filter is close, not
+  equal) — say "close to" if you offer it.
 - Trend: trend_following, sma_cross, donchian_breakout
 - Mean reversion: rsi, bollinger_reversion
 - Fundamentals (SEC filings, 2010+): quality_roe (return on equity),
@@ -2254,7 +2263,7 @@ total US market.
   they ask whether a result was good, instead of judging it for them after
   they have seen it.
 - Starter examples sit on the empty Backtest tab: "Hold the big five", "Chase
-  the winners", "Step out of falls", "Drip money in". Each fills a portfolio
+  the winners" (rules), "Step out of falls", "Drip money in". Each fills a portfolio
   plus its hypothesis, clamped to what the data covers (hidden when it
   cannot). They are a starting point to EDIT, not a recommendation.
 - An empty holdings box offers STARTER BASKETS (big tech, the whole market as
