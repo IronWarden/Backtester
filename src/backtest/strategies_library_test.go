@@ -88,6 +88,13 @@ func runStrategyScript(
 	}
 	defer strat.Close()
 	p.Strategy = strat
+	// What ToPortfolio does for a config that declares no fundamentals: the
+	// script's own fundamentals table decides what is loaded.
+	var declErr error
+	p.FundamentalSource, p.Fundamentals, declErr = strat.DeclaredFundamentals()
+	if declErr != nil {
+		t.Fatalf("%s: %v", path, declErr)
+	}
 
 	var logBuf bytes.Buffer
 	prev := log.Writer()
@@ -112,20 +119,24 @@ func runStrategyScript(
 // history would never trigger in 400 days).
 func shippedStrategies() map[string]map[string]any {
 	return map[string]map[string]any{
-		"buy_and_hold.lua": nil,
-		// The Lua tab's starter file. Same code as buy_and_hold.lua, and it
-		// lives in the library so there is exactly one strategies directory.
-		"example.lua":               nil,
-		"buy_and_hold_weighted.lua": {"weights": map[string]any{"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}},
-		"rsi.lua":                   {"period": int64(14)},
-		"sma_cross.lua":             {"short": int64(20), "long": int64(50)},
-		"momentum_rotation.lua":     {"lookback": int64(60), "top_n": int64(2), "rebalance_days": int64(21)},
-		"trend_following.lua":       {"period": int64(100)},
-		"donchian_breakout.lua":     {"entry_period": int64(40), "exit_period": int64(20)},
-		"bollinger_reversion.lua":   {"period": int64(20), "k": 2.0},
-		"risk_parity.lua":           {"lookback": int64(60), "rebalance_days": int64(21)},
-		"rebalance.lua":             {"rebalance_days": int64(21)},
-		"dca.lua":                   {"amount": 5000.0, "every_days": int64(21)},
+		"buy_and_hold.lua":        {"weights": map[string]any{"AAA": 0.5, "BBB": 0.3, "CCC": 0.2}},
+		"rsi.lua":                 {"period": int64(14)},
+		"sma_cross.lua":           {"short": int64(20), "long": int64(50)},
+		"momentum_rotation.lua":   {"lookback": int64(60), "top_n": int64(2), "rebalance_days": int64(21)},
+		"trend_following.lua":     {"period": int64(100)},
+		"donchian_breakout.lua":   {"entry_period": int64(40), "exit_period": int64(20)},
+		"bollinger_reversion.lua": {"period": int64(20), "k": 2.0},
+		"risk_parity.lua":         {"lookback": int64(60), "rebalance_days": int64(21)},
+		"rebalance.lua":           {"rebalance_days": int64(21)},
+		"dca.lua":                 {"amount": 5000.0, "every_days": int64(21)},
+		// The fundamentals strategies run here with no figures at all, so
+		// they must stay flat and silent; fundamentals_strategies_test.go
+		// feeds them data and checks what they pick.
+		"quality_roe.lua":          {"top_n": int64(2), "min_names": int64(2)},
+		"gross_profitability.lua":  {"top_n": int64(2), "min_names": int64(2)},
+		"piotroski_fscore.lua":     {"min_score": int64(6)},
+		"low_asset_growth.lua":     {"top_n": int64(2), "min_names": int64(2)},
+		"strong_balance_sheet.lua": {"top_n": int64(2), "min_names": int64(2)},
 	}
 }
 
@@ -174,7 +185,7 @@ func TestShippedStrategiesAllCovered(t *testing.T) {
 	}
 	onDisk := map[string]bool{}
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".lua") {
+		if strings.HasSuffix(e.Name(), ".lua") && !userScript(e.Name()) {
 			onDisk[e.Name()] = true
 		}
 	}
@@ -236,7 +247,6 @@ func TestShippedStrategiesActuallyTrade(t *testing.T) {
 	params := shippedStrategies()
 	for _, name := range []string{
 		"buy_and_hold.lua",
-		"buy_and_hold_weighted.lua",
 		"momentum_rotation.lua",
 		"trend_following.lua",
 		"donchian_breakout.lua",

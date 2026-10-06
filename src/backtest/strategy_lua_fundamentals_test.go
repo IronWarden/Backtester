@@ -26,6 +26,16 @@ func runFundamentalScript(
 	t *testing.T, src string, metrics []string, points []data.FundamentalPoint,
 ) string {
 	t.Helper()
+	return runFundamentalScriptFrom(t, src, metrics, points, "")
+}
+
+// runFundamentalScriptFrom is runFundamentalScript for a given
+// FundamentalSource.
+func runFundamentalScriptFrom(
+	t *testing.T, src string, metrics []string, points []data.FundamentalPoint,
+	source string,
+) string {
+	t.Helper()
 	tickers := []string{"AAA", "BBB"}
 	hist := hostHist(tickers)
 
@@ -39,6 +49,7 @@ func runFundamentalScript(
 	}
 	p.Fundamentals = metrics
 	p.FundamentalData = points
+	p.FundamentalSource = source
 
 	strat := p.Strategy.(*LuaStrategy)
 	defer strat.Close()

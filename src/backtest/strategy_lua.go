@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/fs"
+	"math"
 	"my-backtester/src/apppath"
 	"my-backtester/src/data"
 	"my-backtester/strategies"
@@ -62,6 +63,12 @@ func NewLuaStrategy(
 	}, nil
 }
 
+// DeclaredFundamentals is what the script's top-level `fundamentals` table
+// declares: the source and the metrics. See ScriptFundamentals.
+func (s *LuaStrategy) DeclaredFundamentals() (string, []string, error) {
+	return ScriptFundamentals(s.Path, s.source)
+}
+
 // loadLuaScript returns the location to display for a script and its source.
 // The on-disk library wins wherever one exists -- the working directory
 // first, exactly as before, then the app's own directories -- and the copy
@@ -82,7 +89,20 @@ func loadLuaScript(path string) (string, []byte, error) {
 		// what the user would edit to change it.
 		return path, source, nil
 	}
+	if now, ok := retiredScripts[filepath.Base(path)]; ok {
+		return loadLuaScript(filepath.Join(filepath.Dir(path), now))
+	}
 	return "", nil, err
+}
+
+// retiredScripts maps a library script that was folded into another to the
+// one that replaced it, so a saved config naming the old file still runs.
+// Consulted only when nothing on disk or in the binary answers, so a user's
+// own file of that name still wins.
+var retiredScripts = map[string]string{
+	// Both were buy_and_hold.lua with a twist; it now takes weights itself.
+	"buy_and_hold_weighted.lua": "buy_and_hold.lua",
+	"example.lua":               "buy_and_hold.lua",
 }
 
 // resolveLuaPath locates a script ON DISK. The CLI runs from the repo root
@@ -166,7 +186,7 @@ func (s *LuaStrategy) init(
 	// is replaced, so every existing script behaves exactly as it did.
 	registerSignals(L, hist)
 	registerCrossSection(L, p)
-	registerFundamentals(L, p, hist)
+	registerFundamentals(L, p, hist, true)
 	registerBook(L, p, hist)
 
 	warnUnreadParams(p, s.Path, s.Params)
@@ -539,6 +559,16 @@ func registerTrading(
 		return 1
 	}))
 
+	// cashflow() — the signed amount a [portfolio.Cashflow] schedule moved at
+	// the top of today: positive on a deposit day, negative on a withdrawal
+	// day, 0 otherwise. A script that wants to put contributions to work reads
+	// this rather than cash(), which can be high for reasons that are not a
+	// deposit. See Portfolio.PendingCashflow.
+	L.SetGlobal("cashflow", L.NewFunction(func(L *lua.LState) int {
+		L.Push(lua.LNumber(p.PendingCashflow()))
+		return 1
+	}))
+
 	L.SetGlobal("position", L.NewFunction(func(L *lua.LState) int {
 		ticker := L.ToString(1)
 		pos, ok := p.FindPosition(ticker)
@@ -554,9 +584,16 @@ func registerTrading(
 		return 1
 	}))
 
-	// buy_max(ticker, price, [buyType="equalWeights"], [day=-1])
+	// buy_max(ticker, price, [buyType="equalWeights"], [day=-1], [budget=cash()])
 	// Sizes the order with generalBuy and submits it. Returns the share
 	// count it actually placed (caller can ignore).
+	//
+	// budget is what the sizing divides, so a script can invest just a
+	// deposit (cashflow()), or size equal-weight legs against a balance
+	// snapshotted before the first one filled. The order itself is still
+	// capped at what cash() buys: Buy rejects an overshoot outright, and a
+	// budget the book no longer has should shrink the order, not drop it.
+	// Without a budget the cap never binds, so old scripts are unchanged.
 	L.SetGlobal("buy_max", L.NewFunction(func(L *lua.LState) int {
 		ticker, ok := resolveTicker(L, "buy_max")
 		if !ok {
@@ -566,7 +603,10 @@ func registerTrading(
 		price := float64(L.ToNumber(2))
 		buyType := L.OptString(3, "equalWeights")
 		day := L.OptInt(4, -1)
-		amount := generalBuy(p.BuyingPower, price, buyType, p.Tickers, p.Costs)
+		budget := float64(L.OptNumber(5, lua.LNumber(p.BuyingPower)))
+		amount := math.Min(
+			generalBuy(budget, price, buyType, p.Tickers, p.Costs),
+			generalBuy(p.BuyingPower, price, "greedy", p.Tickers, p.Costs))
 		p.Buy(ticker, amount, price, dateOf(ticker, day))
 		L.Push(lua.LNumber(amount))
 		return 1

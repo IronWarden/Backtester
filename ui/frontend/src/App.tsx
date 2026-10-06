@@ -19,7 +19,7 @@ function defaultFontSize(): number {
     );
     return clampFont(Math.round(BASE_FONT_SIZE * Math.max(1, s)));
 }
-import Editor from "@monaco-editor/react";
+import Editor from "./LazyEditor";
 import {
     CheckLuaScript,
     DatabaseNotice,
@@ -29,6 +29,7 @@ import {
     DefaultDBPath,
     FileExists,
     FindLuaPathInConfig,
+    IsLibraryScript,
     PickConfigFile,
     PickDBFile,
     ReadFile,
@@ -38,15 +39,29 @@ import {
 } from "../wailsjs/go/main/App";
 import { backtest, main } from "../wailsjs/go/models";
 import SimpleForm from "./SimpleForm";
-import { buildToml } from "./buildToml";
+import { buildToml, strategySpec } from "./buildToml";
 import type {
     SimpleForm as SimpleFormData,
     HypothesisForm as HypothesisFormData,
 } from "./buildToml";
 import { baseName, chipLabel } from "./paths";
 import { perFrame, trackDrag } from "./frame";
-import ResultsBar, { parseResultsLayout, type ResultsLayout } from "./ResultsBar";
+import ResultsBar, { type ResultsLayout } from "./ResultsBar";
+import { ShortcutsHelp, displayKeys, keysFor, shortcutFor, typingInField, zoomFor } from "./shortcuts";
+import { CommandPalette } from "./commandPalette";
+import RunTimer from "./RunTimer";
+import type { Command } from "./commandPalette";
+import type { ShortcutAction } from "./shortcuts";
 import { registerLuaLanguageSupport } from "./luaEditor";
+import {
+    addBuffer,
+    copyPath,
+    copyText,
+    isDirty,
+    markSaved,
+    setBufferText,
+    type LuaBuffer,
+} from "./luaBuffers";
 import ResultsView from "./ResultsView";
 import Pane from "./Pane";
 import ErrorBoundary from "./ErrorBoundary";
@@ -67,9 +82,6 @@ const FONT_STORAGE_KEY = "backtester-font-size-v2";
 const CHAT_WIDTH_STORAGE_KEY = "backtester-chat-width";
 const DEFAULT_CHAT_WIDTH = 432;
 const RESULTS_HEIGHT_STORAGE_KEY = "backtester-results-height";
-// Minimised / normal, remembered across launches. Maximised is not (see
-// parseResultsLayout).
-const RESULTS_LAYOUT_STORAGE_KEY = "backtester-results-layout";
 // Tall enough to show the headline cards and the top of the equity curve
 // without scrolling; the old 240 showed a single card.
 const DEFAULT_RESULTS_HEIGHT = 380;
@@ -88,13 +100,26 @@ type Mode = "simple" | "advanced" | "data";
 // it is the path a checkout has always used.
 const DEFAULT_DB_PATH = "../stock_data.db";
 
-// Where a script started from a skeleton is saved. A name of its own so
-// picking a shape can never overwrite example.lua or a library script.
+// Where a script of your own is saved: the Lua tab's scratch file, and where
+// a script started from a skeleton goes. A name of its own so Save can never
+// overwrite a library script.
 const SKELETON_LUA_PATH = "strategies/my_strategy.lua";
 
 // Path used for the Lua tab when the TOML doesn't pin a specific lua: script.
 // Portfolios that omit Strategy fall back to this file at run time.
-const DEFAULT_LUA_PATH = "strategies/example.lua";
+const DEFAULT_LUA_PATH = SKELETON_LUA_PATH;
+
+// What the Lua tab holds when the scratch file has not been saved yet: the
+// smallest script that runs, so the tab never opens on a library strategy
+// whose Save would change the shipped copy.
+const BLANK_LUA = `-- my_strategy.lua -- your own strategy. Save writes it to the library.
+--
+-- step(day) runs once per trading day, day 0 first. "Start from a shape"
+-- gives you a working outline; strategies/README.md lists the API.
+
+function step(day)
+end
+`;
 
 // The Backtest tab as it opens when there is nothing to restore. A function,
 // not a constant, because the state initializer must not share one object
@@ -157,13 +182,26 @@ Tickers = ["AAPL", "MSFT"]
 # Benchmark       = ""     # ticker to compare against, e.g. "$SP500"; never traded
 # Fundamentals    = []     # reported figures a Lua strategy reads with
 #                          #   fundamental(), e.g. ["Net Income", "Total Revenue"]
+# FundamentalSource = ""   # "sec": SEC filings, 2010 on; empty: financials, 2020-07 on
 # AllowShort      = false  # true: a sell past zero opens a short
 # DelistingReturn = 0.0    # loss taken if a holding goes bankrupt, -1.0 to 0.0
 
 # [portfolio.Params]       # values a Lua strategy reads as params.<name>
 # lookback = 126
 
-# [portfolio.Costs]        # trading costs; all zero = no costs
+# [portfolio.Rules]        # a strategy picked from a menu, read back as a sentence;
+#                          #   use INSTEAD of Strategy (setting both is an error)
+# Rebalance = ""           # required: "daily", "weekly", "monthly", "quarterly", "annually"
+# Rank      = ""           # e.g. "return_126", "momentum_12_1", "low_vol_63"
+# Pick      = 0            # hold this many of the top-ranked
+# Keep      = 0            # keep a holding while it stays in the top Keep; 0 = Pick
+# Filter    = ""           # e.g. "above_sma_200", "rsi_below_30"
+# Weight    = ""           # "equal" (default), "inverse_vol_63", "allocations"
+# RiskOff   = ""           # all to cash while true, e.g. "benchmark_below_sma_200"
+# [portfolio.Rules.Allocations]  # relative weights for Weight = "allocations"
+# AAPL = 1.0
+
+# [portfolio.Costs]       # trading costs; all zero = no costs
 # commission_per_trade = 0.0  # flat dollars per order
 # commission_bps       = 0.0  # share of each order, in basis points (1 bp = 0.01%)
 # slippage_bps         = 0.0  # price lost to the spread on each fill, in bp
@@ -226,11 +264,21 @@ function App() {
     const [tab, setTab] = useState<Tab>("toml");
     const visited = useRef(new Set<Mode>());
     const [tomlText, setTomlText] = useState<string>(DEFAULT_TOML);
-    const [luaText, setLuaText] = useState<string>("");
+    // Every script open in the Lua tab, and which one is showing. luaPath is
+    // the open one; luaText and luaPristine are read from its buffer below.
+    const [luaBuffers, setLuaBuffers] = useState<LuaBuffer[]>([]);
     const [tomlPath, setTomlPath] = useState<string>("");
     const [luaPath, setLuaPath] = useState<string>(DEFAULT_LUA_PATH);
+    // The script the config names (or the scratch file when it names none):
+    // what a portfolio that omits Strategy runs. Not whichever tab is open --
+    // reading a library script must not change what a run does.
+    const [configLuaPath, setConfigLuaPath] = useState<string>(DEFAULT_LUA_PATH);
+    const lastConfigLua = useRef<string | null>(null);
     const [dbPath, setDbPath] = useState<string>(DEFAULT_DB_PATH);
     const [running, setRunning] = useState(false);
+    // When the current run started (Date.now()), for the status line's
+    // ticking timer; null when nothing is running.
+    const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
     const [chatOpen, setChatOpen] = useState(false);
     const [results, setResults] = useState<main.RunResult[]>([]);
     // Pre-registration. Kept as raw TOML so the app and the CLI validate one
@@ -270,9 +318,14 @@ function App() {
     );
     // Minimised to its bar, normal, or maximised over the tabs. Orthogonal to
     // resultsHeight, which is kept so restoring returns to the same size.
-    const [resultsLayout, setResultsLayout] = useState<ResultsLayout>(() =>
-        parseResultsLayout(readStored(RESULTS_LAYOUT_STORAGE_KEY)),
-    );
+    // Always minimised at launch: results are never restored, so an open
+    // panel would only be an empty box taking room from the form. The first
+    // run opens it (see runConfig).
+    const [resultsLayout, setResultsLayout] = useState<ResultsLayout>("min");
+    // The assistant maximised over the whole row, the tabs stepping aside.
+    const [chatMax, setChatMax] = useState(false);
+    const [helpOpen, setHelpOpen] = useState(false);
+    const [paletteOpen, setPaletteOpen] = useState(false);
     const resultsRef = useRef<HTMLDivElement>(null);
     // The window's height, tracked so the results panel's bound follows it.
     const [winHeight, setWinHeight] = useState(() => window.innerHeight);
@@ -361,6 +414,174 @@ function App() {
     // app uses em units that cascade from .app's inline font-size). Ctrl+0
     // resets. Listeners are attached in capture phase so they win against
     // Monaco's own Ctrl+ArrowUp scroll-by-line and the webview's zoom.
+    // Keyboard shortcuts (shortcuts.tsx). The listener is registered once and
+    // calls whatever handler the latest render left in this ref, so it always
+    // sees the current tab and layout without re-registering per keystroke.
+    //
+    // perform() is shared with the command palette, so a key and a palette
+    // pick cannot do two different things. It returns whether the action
+    // applied here: a key that applies is consumed, anything else falls
+    // through to whatever has focus.
+    // The first visible ticker search box, focused and scrolled into view.
+    const focusSearch = (): boolean => {
+        const box = [...document.querySelectorAll<HTMLInputElement>(
+            '[data-shortcut="search"]',
+        )].find((b) => b.offsetParent !== null && !b.disabled);
+        if (!box) return false;
+        box.focus();
+        box.scrollIntoView({ block: "center", behavior: "smooth" });
+        return true;
+    };
+    const perform = (action: ShortcutAction): boolean => {
+        switch (action) {
+            case "run": {
+                // The Data tab's query editor binds Ctrl+Enter itself.
+                if (mode === "data") return false;
+                // Click the visible Run button, so the shortcut obeys exactly
+                // what the button does -- disabled while a portfolio is not
+                // runnable or a run is going, the Config tab's own semantics.
+                const visible = [...document.querySelectorAll<HTMLButtonElement>(
+                    '[data-shortcut="run"]',
+                )].filter((b) => b.offsetParent !== null);
+                const btn = visible.find((b) => !b.disabled);
+                if (btn) {
+                    btn.click();
+                } else if (visible.length > 0) {
+                    // A key that does nothing reads as broken: say why, in
+                    // the status line, with the same reason the form shows.
+                    const why = visible[0].dataset.blocker || (running ? "a run is already going" : "");
+                    if (why) {
+                        setErrorMsg("");
+                        setStatusMsg(`Can't run yet: ${why}.`);
+                    }
+                }
+                return true;
+            }
+            case "tab-backtest":
+                setMode("simple");
+                return true;
+            case "tab-config":
+                setMode("advanced");
+                return true;
+            case "tab-data":
+                setMode("data");
+                return true;
+            case "toggle-assistant":
+                setChatOpen((o) => !o);
+                if (chatOpen) setChatMax(false);
+                return true;
+            case "max-assistant":
+                setChatOpen(true);
+                setChatMax((m) => (chatOpen ? !m : true));
+                return true;
+            case "toggle-results":
+                setResultsLayout((v) => (v === "min" ? "normal" : "min"));
+                return true;
+            case "max-results":
+                setResultsLayout((v) => (v === "max" ? "normal" : "max"));
+                return true;
+            case "save":
+                // Consumed everywhere: never the webview's own "save page".
+                if (mode === "advanced" && (tomlPath || luaPath)) void save();
+                return true;
+            case "help":
+                setPaletteOpen(false);
+                setHelpOpen((h) => !h);
+                return true;
+            case "palette":
+                setHelpOpen(false);
+                setPaletteOpen((p) => !p);
+                return true;
+            case "focus-search":
+                // A bare key: only when nothing is being typed into, and only
+                // where there is a search to jump to.
+                if (typingInField(document.activeElement) || paletteOpen || helpOpen) return false;
+                if (mode !== "simple") return false;
+                return focusSearch();
+            case "escape":
+                // Only when there is something to undo, so Esc still closes a
+                // picker or cancels an edit everywhere else.
+                if (paletteOpen) {
+                    setPaletteOpen(false);
+                } else if (helpOpen) {
+                    setHelpOpen(false);
+                } else if (resultsLayout === "max") {
+                    setResultsLayout("normal");
+                } else if (chatOpen && chatMax) {
+                    setChatMax(false);
+                } else {
+                    return false;
+                }
+                return true;
+        }
+    };
+    // Everything the palette offers: each shortcut action under a plain name,
+    // plus the actions that have no key. Built only while the palette is
+    // open, so it always reflects the current tab and layout.
+    const paletteCommands = (): Command[] => {
+        const act = (id: ShortcutAction, label: string, extra: Partial<Command> = {}): Command => ({
+            id,
+            label,
+            keys: keysFor(id),
+            run: () => void perform(id),
+            ...extra,
+        });
+        const onConfig = mode === "advanced";
+        return [
+            act("run", "Run backtest", {
+                disabled: mode === "data" || running,
+                hint: running ? "a run is going" : "not on the Data tab",
+            }),
+            // Not through perform(): the palette's own input still has focus
+            // when this runs, which the bare-key guard would read as typing.
+            // Deferred a tick so the palette has unmounted first.
+            act("focus-search", "Find a ticker", {
+                disabled: mode !== "simple",
+                hint: "Backtest tab only",
+                run: () => void setTimeout(focusSearch, 0),
+            }),
+            act("tab-backtest", "Go to Backtest tab"),
+            act("tab-config", "Go to Config tab"),
+            act("tab-data", "Go to Data tab"),
+            act("toggle-assistant", chatOpen ? "Hide assistant" : "Show assistant"),
+            act("max-assistant", chatOpen && chatMax ? "Restore assistant" : "Maximise assistant"),
+            act("toggle-results", resultsLayout === "min" ? "Open results" : "Minimise results"),
+            act("max-results", resultsLayout === "max" ? "Restore results" : "Maximise results"),
+            act("save", "Save config and scripts", {
+                disabled: !onConfig || !(tomlPath || luaPath),
+                hint: onConfig ? "nothing opened from disk yet" : "Config tab only",
+            }),
+            {
+                id: "check",
+                label: tab === "lua" ? "Check script" : "Check config",
+                disabled: !onConfig || running,
+                hint: "Config tab only",
+                run: () => void (tab === "lua" ? checkScript() : checkConfig()),
+            },
+            { id: "open-config", label: "Open config file…", run: () => void chooseConfig() },
+            { id: "choose-db", label: "Choose database…", run: () => void chooseDB() },
+            { id: "zoom-in", label: "Zoom in", keys: displayKeys("Ctrl+="), run: () => setFontSize((f) => clampFont(f + 1)) },
+            { id: "zoom-out", label: "Zoom out", keys: displayKeys("Ctrl+-"), run: () => setFontSize((f) => clampFont(f - 1)) },
+            { id: "zoom-reset", label: "Reset zoom", keys: displayKeys("Ctrl+0"), run: () => setFontSize(defaultFontSize()) },
+            act("help", "Keyboard shortcuts"),
+        ];
+    };
+    const onShortcut = useRef<(a: ShortcutAction, e: KeyboardEvent) => void>(() => {});
+    onShortcut.current = (action, e) => {
+        if (perform(action)) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    };
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            const action = shortcutFor(e);
+            if (action) onShortcut.current(action, e);
+        };
+        document.addEventListener("keydown", onKey, true);
+        return () => document.removeEventListener("keydown", onKey, true);
+    }, []);
+
     useEffect(() => {
         const onWheel = (e: WheelEvent) => {
             if (!e.ctrlKey) return;
@@ -368,17 +589,11 @@ function App() {
             setFontSize((s) => clampFont(s + (e.deltaY < 0 ? 1 : -1)));
         };
         const onKey = (e: KeyboardEvent) => {
-            if (!e.ctrlKey) return;
-            if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setFontSize((s) => clampFont(s + 1));
-            } else if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setFontSize((s) => clampFont(s - 1));
-            } else if (e.key === "0") {
-                e.preventDefault();
-                setFontSize(defaultFontSize());
-            }
+            const zoom = zoomFor(e);
+            if (!zoom) return;
+            e.preventDefault();
+            if (zoom === "reset") setFontSize(defaultFontSize());
+            else setFontSize((s) => clampFont(s + (zoom === "in" ? 1 : -1)));
         };
         document.addEventListener("wheel", onWheel, {
             passive: false,
@@ -407,9 +622,15 @@ function App() {
     // Starting shapes for a blank file. State rather than a ref: the buttons
     // that offer them are rendered, so their arrival has to re-render.
     const [skeletons, setSkeletons] = useState<backtest.LuaSkeleton[]>([]);
-    // The text as last loaded from or saved to disk. A buffer equal to it has
-    // no unsaved work in it, which is what makes replacing it safe.
-    const [luaPristine, setLuaPristine] = useState<string>("");
+    // The open buffer. luaPristine is its text as last loaded or saved; a
+    // buffer equal to it has no unsaved work, which is what makes replacing
+    // it safe. A library buffer is read-only and never saved.
+    const activeLua = luaBuffers.find((b) => b.path === luaPath);
+    const luaText = activeLua?.text ?? "";
+    const luaPristine = activeLua?.pristine ?? "";
+    const luaReadOnly = activeLua?.library ?? false;
+    const setLuaText = (text: string) =>
+        setLuaBuffers((bs) => setBufferText(bs, luaPath, text));
     // What this build calls itself, for the header. A beta bug report that
     // cannot name a build is very hard to act on, so it is on screen rather
     // than in an About box nobody opens.
@@ -499,50 +720,114 @@ function App() {
         writeStored(RESULTS_HEIGHT_STORAGE_KEY, String(Math.round(resultsHeight)));
     }, [resultsHeight]);
 
+    // Open a script in a buffer of its own -- or bring it forward if it is
+    // already open, so unsaved work in it is never replaced by a re-read.
+    // A shipped library script opens read-only.
+    async function openLuaBuffer(path: string, activate = true) {
+        if (!luaBuffers.some((b) => b.path === path)) {
+            let buf: LuaBuffer;
+            try {
+                const library = await IsLibraryScript(path);
+                if (await FileExists(path)) {
+                    const text = await ReadFile(path);
+                    buf = { path, text, pristine: text, library, isNew: false };
+                } else {
+                    // The scratch file starts as a blank script, unmodified,
+                    // so a skeleton can still replace it without a prompt.
+                    const text = path === DEFAULT_LUA_PATH ? BLANK_LUA : "";
+                    buf = { path, text, pristine: text, library, isNew: true };
+                    setStatusMsg(`${path} — new file, will be created on Save`);
+                }
+            } catch (e: any) {
+                setErrorMsg(`read ${path}: ${e?.message ?? e}`);
+                return;
+            }
+            setLuaBuffers((bs) => addBuffer(bs, buf));
+        }
+        if (activate) setLuaPath(path);
+    }
+
+    // The scratch file is always open, whatever else is.
     useEffect(() => {
-        writeStored(RESULTS_LAYOUT_STORAGE_KEY, resultsLayout);
-    }, [resultsLayout]);
+        openLuaBuffer(DEFAULT_LUA_PATH, false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Whenever the TOML changes (or its on-disk path), look for a lua:<path>
-    // strategy and reload the referenced script into the Lua tab. When no
-    // lua: strategy is present, fall back to DEFAULT_LUA_PATH so the tab is
-    // always populated — that script is the default for any portfolio whose
-    // Strategy field is omitted.
+    // strategy and open the referenced script in the Lua tab. When no lua:
+    // strategy is present, the scratch file stands in -- that script is the
+    // default for any portfolio whose Strategy field is omitted. Only a change
+    // of script does anything, so typing in the TOML does not keep pulling the
+    // Lua tab back to it.
     useEffect(() => {
         let cancelled = false;
         (async () => {
             const found = await FindLuaPathInConfig(tomlText, tomlPath);
             const resolved = found || DEFAULT_LUA_PATH;
-            if (cancelled) return;
-            if (resolved === luaPath && luaText !== "") return;
-            setLuaPath(resolved);
-            const exists = await FileExists(resolved);
-            if (!exists) {
-                if (!cancelled) {
-                    setLuaText("");
-                    setLuaPristine("");
-                    setStatusMsg(`${resolved} — new file, will be created on Save`);
-                }
-                return;
-            }
-            try {
-                const content = await ReadFile(resolved);
-                if (!cancelled) {
-                    setLuaText(content);
-                    setLuaPristine(content);
-                }
-            } catch (e: any) {
-                if (!cancelled) {
-                    setLuaText("");
-                    setErrorMsg(`read ${resolved}: ${e?.message ?? e}`);
-                }
-            }
+            if (cancelled || resolved === lastConfigLua.current) return;
+            lastConfigLua.current = resolved;
+            setConfigLuaPath(resolved);
+            await openLuaBuffer(resolved);
         })();
         return () => {
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tomlText, tomlPath]);
+
+    // Every library strategy picked on the Backtest tab opens in its own
+    // read-only buffer, so what a strategy actually does is one tab away.
+    const pickedScripts = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        for (const f of simpleForms) {
+            if (!f.strategy || pickedScripts.current.has(f.strategy)) continue;
+            pickedScripts.current.add(f.strategy);
+            openLuaBuffer(strategySpec(f.strategy));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [simpleForms]);
+
+    // "Read the script" on the Backtest tab: the script, in the Lua tab.
+    function viewScript(strategy: string) {
+        openLuaBuffer(strategySpec(strategy));
+        setTab("lua");
+        setMode("advanced");
+    }
+
+    // A library script cannot be edited; this opens the user's own copy of
+    // it instead -- the existing one when there is one, so a second click
+    // never overwrites work, and otherwise a new, unsaved buffer.
+    async function editCopy() {
+        if (!activeLua?.library) return;
+        const path = copyPath(activeLua.path);
+        if (luaBuffers.some((b) => b.path === path) || (await FileExists(path))) {
+            await openLuaBuffer(path);
+            setStatusMsg(`${path} — your existing copy`);
+            return;
+        }
+        const text = copyText(activeLua.path, activeLua.text);
+        setLuaBuffers((bs) =>
+            addBuffer(bs, { path, text, pristine: "", library: false, isNew: true }),
+        );
+        setLuaPath(path);
+        setStatusMsg(
+            `${path} — your copy; Save creates it. Point a portfolio at it with ` +
+                `▶ Run this script, or Strategy = "lua:${path}".`,
+        );
+    }
+
+    function closeLuaBuffer(path: string) {
+        setLuaBuffers((bs) => bs.filter((b) => b.path !== path));
+        if (path === luaPath) setLuaPath(DEFAULT_LUA_PATH);
+    }
+
+    // Writes every buffer with unsaved work. Library buffers never have any.
+    async function saveLuaBuffers() {
+        const dirty = luaBuffers.filter(isDirty);
+        for (const b of dirty) await WriteFile(b.path, b.text);
+        setLuaBuffers((bs) => markSaved(bs, dirty));
+        return dirty.map((b) => b.path);
+    }
 
     async function chooseConfig() {
         setErrorMsg("");
@@ -579,10 +864,7 @@ function App() {
                 await WriteFile(tomlPath, tomlText);
                 saved.push(tomlPath);
             }
-            if (luaPath) {
-                await WriteFile(luaPath, luaText);
-                saved.push(luaPath);
-            }
+            saved.push(...(await saveLuaBuffers()));
             setStatusMsg(
                 saved.length === 0 ? "Nothing to save" : `Saved: ${saved.join(", ")}`,
             );
@@ -619,7 +901,7 @@ function App() {
         if (persist) {
             try {
                 if (tomlPath) await WriteFile(tomlPath, tomlText);
-                if (luaPath) await WriteFile(luaPath, luaText);
+                await saveLuaBuffers();
             } catch (e: any) {
                 setResults([]);
                 setErrorMsg(`save failed: ${e?.message ?? e}`);
@@ -628,12 +910,13 @@ function App() {
         }
         setRunning(true);
         setStatusMsg("Running…");
+        setRunStartedAt(Date.now());
         const started = performance.now();
         try {
             const res = await RunBacktest(
                 cfgText,
                 dbPath,
-                luaPath,
+                configLuaPath,
                 hypothesisText ?? hypothesis,
             );
             setResults(res.results ?? []);
@@ -668,7 +951,7 @@ function App() {
         setDiagnostics([]);
         setStatusMsg("Checking…");
         try {
-            const res = await CheckConfig(tomlText, luaPath);
+            const res = await CheckConfig(tomlText, configLuaPath);
             const diags = res.diagnostics ?? [];
             setDiagnostics(diags);
             setErrorMsg(firstError(diags));
@@ -723,16 +1006,18 @@ function App() {
         }
     }
 
-    // Start from a shape rather than from a blank file (or from buy-and-hold,
-    // which is what example.lua is and which teaches exactly one shape).
+    // Start from a shape rather than from a blank file.
     //
     // Only offered while the buffer holds no unsaved work — an unmodified file
     // is still on disk, so replacing it loses nothing, and this way there is
     // no "are you sure" to get wrong. The path moves to a new file so Save
     // cannot overwrite the script that was open.
     function startFromSkeleton(sk: backtest.LuaSkeleton) {
-        setLuaText(sk.source);
-        setLuaPristine("");
+        setLuaBuffers((bs) =>
+            bs.map((b) =>
+                b.path === SKELETON_LUA_PATH ? { ...b, text: sk.source, pristine: "" } : b,
+            ),
+        );
         setLuaPath(SKELETON_LUA_PATH);
         setTab("lua");
         setStatusMsg(
@@ -812,10 +1097,13 @@ function App() {
         setStatusMsg("Claude's config loaded into the TOML editor.");
     }
     function applyClaudeLua(lua: string) {
-        setLuaText(lua);
+        // Never into a library script: the scratch file takes it instead.
+        const target = luaReadOnly ? SKELETON_LUA_PATH : luaPath;
+        setLuaBuffers((bs) => setBufferText(bs, target, lua));
+        setLuaPath(target);
         setTab("lua");
         setMode("advanced");
-        setStatusMsg(`Claude's strategy loaded — Save writes ${luaPath}.`);
+        setStatusMsg(`Claude's strategy loaded — Save writes ${target}.`);
     }
 
     // The tabs visited so far, which are the ones kept mounted. Added to
@@ -854,26 +1142,34 @@ function App() {
                     <button
                         className={mode === "simple" ? "active" : ""}
                         onClick={() => setMode("simple")}
-                        title="Build a portfolio from a form and run it"
+                        title={`Build a portfolio from a form and run it (${keysFor("tab-backtest")})`}
                     >
                         Backtest
                     </button>
                     <button
                         className={mode === "advanced" ? "active" : ""}
                         onClick={() => setMode("advanced")}
-                        title="Edit the TOML config and Lua strategy directly"
+                        title={`Edit the TOML config and Lua strategy directly (${keysFor("tab-config")})`}
                     >
                         Config
                     </button>
                     <button
                         className={mode === "data" ? "active" : ""}
                         onClick={() => setMode("data")}
-                        title="Query the database with SQL"
+                        title={`Query the database with SQL (${keysFor("tab-data")})`}
                     >
                         Data
                     </button>
                 </div>
                 <div className="topbar-spacer" />
+                <button
+                    className="help-chip"
+                    onClick={() => setHelpOpen(true)}
+                    title={`Keyboard shortcuts (${keysFor("help")}) · command palette (${keysFor("palette")})`}
+                    aria-label="Keyboard shortcuts"
+                >
+                    ⌨
+                </button>
                 <button
                     className="db-chip"
                     onClick={chooseDB}
@@ -887,13 +1183,14 @@ function App() {
                 <button
                     className={chatOpen ? "chat-toggle active" : "chat-toggle"}
                     onClick={() => setChatOpen((o) => !o)}
+                    title={`Show or hide the assistant (${keysFor("toggle-assistant")})`}
                 >
                     ✦ Assistant
                 </button>
             </header>
 
             <div className={resultsLayout === "max" ? "mid-row hidden" : "mid-row"}>
-            <div className="mid-main">
+            <div className={chatOpen && chatMax ? "mid-main hidden" : "mid-main"}>
             {/* Each tab mounts on its first visit and then stays mounted --
                 see Pane. First visits keep startup as cheap as before. */}
             {visited.current.has("simple") && (
@@ -907,6 +1204,7 @@ function App() {
                         onHypothesisChange={setSimpleHypothesis}
                         onRun={(cfg, hyp) => runConfig(cfg, false, hyp)}
                         onOpenAssistant={() => setChatOpen(true)}
+                        onViewScript={viewScript}
                         onEditAsToml={(cfg, hyp) => {
                             if (hyp) setHypothesis(hyp);
                             editAsToml(cfg);
@@ -938,6 +1236,7 @@ function App() {
                                 title={luaPath || "No Lua script"}
                             >
                                 lua · {chipLabel(luaPath, "none")}
+                                {luaReadOnly ? " (library, read-only)" : ""}
                             </span>
                         </div>
                         {/* One button, checking whichever thing is open. Two
@@ -974,6 +1273,8 @@ function App() {
                             onClick={() => runConfig(tomlText, true)}
                             disabled={running}
                             className="run"
+                            data-shortcut="run"
+                            title={`Run the backtest (${keysFor("run")})`}
                         >
                             {running ? "Running…" : "▶ Run backtest"}
                         </button>
@@ -1033,7 +1334,62 @@ function App() {
                         "are you sure". Same rule as the Backtest tab's starter
                         examples: the offer appears exactly where there is
                         nothing to lose by taking it. */}
+                    {/* One button per open script. A library script is
+                        marked and opens read-only; a dot is unsaved work. */}
+                    {tab === "lua" && luaBuffers.length > 1 && (
+                        <div className="lua-buffers" role="tablist">
+                            {luaBuffers.map((b) => (
+                                <span
+                                    key={b.path}
+                                    className={
+                                        b.path === luaPath
+                                            ? "lua-buffer active"
+                                            : "lua-buffer"
+                                    }
+                                >
+                                    <button
+                                        role="tab"
+                                        aria-selected={b.path === luaPath}
+                                        title={
+                                            b.library
+                                                ? `${b.path} — library strategy, read-only`
+                                                : b.path
+                                        }
+                                        onClick={() => setLuaPath(b.path)}
+                                    >
+                                        {chipLabel(b.path, "")}
+                                        {b.library ? " 🔒" : ""}
+                                        {isDirty(b) ? " •" : ""}
+                                    </button>
+                                    {/* The scratch file always stays; a
+                                        buffer with unsaved work is not
+                                        closed out from under it. */}
+                                    {b.path !== DEFAULT_LUA_PATH && !isDirty(b) && (
+                                        <button
+                                            className="lua-buffer-close"
+                                            title="Close"
+                                            onClick={() => closeLuaBuffer(b.path)}
+                                        >
+                                            ×
+                                        </button>
+                                    )}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    {tab === "lua" && luaReadOnly && (
+                        <div className="lua-readonly">
+                            <span>
+                                Library strategy — read-only, so it always does
+                                what its description says. Run it as it is, or
+                                edit your own copy.
+                            </span>
+                            <button onClick={editCopy}>Edit a copy</button>
+                        </div>
+                    )}
+
                     {tab === "lua" &&
+                        !luaReadOnly &&
                         skeletons.length > 0 &&
                         luaText === luaPristine && (
                             <div className="skeletons">
@@ -1062,7 +1418,11 @@ function App() {
                             // and it lost the cursor, scroll and undo history
                             // of the file being left. Keyed by path, each tab
                             // keeps its own and switching is a model swap.
-                            path={tab === "toml" ? "backtester/config.toml" : "backtester/strategy.lua"}
+                            path={
+                                tab === "toml"
+                                    ? "backtester/config.toml"
+                                    : `backtester/lua/${luaPath}`
+                            }
                             language={language}
                             theme="backtester-dark"
                             value={value}
@@ -1084,6 +1444,7 @@ function App() {
                                 minimap: { enabled: false },
                                 fontSize,
                                 scrollBeyondLastLine: false,
+                                readOnly: tab === "lua" && luaReadOnly,
                             }}
                         />
                     </div>
@@ -1092,12 +1453,14 @@ function App() {
             </div>
             {chatOpen && (
                 <>
-                    <div
-                        className="vresize-handle"
-                        onPointerDown={startChatResize}
-                        onDoubleClick={() => setChatWidth(DEFAULT_CHAT_WIDTH)}
-                        title="Drag to resize the assistant panel · double-click to reset"
-                    />
+                    {!chatMax && (
+                        <div
+                            className="vresize-handle"
+                            onPointerDown={startChatResize}
+                            onDoubleClick={() => setChatWidth(DEFAULT_CHAT_WIDTH)}
+                            title="Drag to resize the assistant panel · double-click to reset"
+                        />
+                    )}
                     <ChatPanel
                         width={chatWidth * scale}
                         dbPath={dbPath}
@@ -1105,7 +1468,12 @@ function App() {
                         luaText={luaText}
                         onApplyToml={applyClaudeToml}
                         onApplyLua={applyClaudeLua}
-                        onClose={() => setChatOpen(false)}
+                        onClose={() => {
+                            setChatOpen(false);
+                            setChatMax(false);
+                        }}
+                        maximized={chatMax}
+                        onToggleMax={() => setChatMax((m) => !m)}
                     />
                 </>
             )}
@@ -1115,10 +1483,6 @@ function App() {
                 view={resultsLayout}
                 onView={setResultsLayout}
                 onResizeStart={startResize}
-                onReset={() => {
-                    setResultsLayout("normal");
-                    setResultsHeight(DEFAULT_RESULTS_HEIGHT);
-                }}
                 count={results.length}
             />
 
@@ -1137,14 +1501,24 @@ function App() {
                 </ErrorBoundary>
             </div>
 
+            {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
+            {paletteOpen && (
+                <CommandPalette commands={paletteCommands()} onClose={() => setPaletteOpen(false)} />
+            )}
+
             <footer className="status">
                 {errorMsg ? (
                     <span className="err">⚠ {errorMsg}</span>
                 ) : (
-                    <span>{statusMsg}</span>
+                    <span>
+                        {statusMsg}
+                        {running && runStartedAt !== null && (
+                            <> <RunTimer since={runStartedAt} /></>
+                        )}
+                    </span>
                 )}
                 <span className="status-spacer" />
-                <span className="zoom-hint" title="Ctrl+scroll or Ctrl+↑/↓ to zoom, Ctrl+0 to reset">
+                <span className="zoom-hint" title={`Ctrl+scroll, ${displayKeys("Ctrl+=")} / ${displayKeys("Ctrl+-")} to zoom, ${displayKeys("Ctrl+0")} to reset`}>
                     {Math.round(scale * 100)}%
                 </span>
             </footer>

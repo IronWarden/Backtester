@@ -23,6 +23,8 @@ export function HasClaudeKey():Promise<boolean>;
 
 export function ImportHoldings(arg1:string):Promise<main.HoldingsImport>;
 
+export function IsLibraryScript(arg1:string):Promise<boolean>;
+
 export function ListChatModels():Promise<Array<main.ModelOption>>;
 
 export function ListStrategies():Promise<Array<backtest.StrategyCard>>;

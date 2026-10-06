@@ -4,9 +4,10 @@
 -- for "should I have invested it all at once?" comparisons against
 -- buyAndHold:equalWeights.
 --
--- NOTE: the engine models no external cash inflows, so contributions come
--- out of the starting balance — this spreads the initial capital into the
--- market over time rather than adding new money. To be roughly fully
+-- NOTE: this script adds no new money — contributions come out of the
+-- starting balance, so it spreads the initial capital into the market over
+-- time. For real deposits, set a [portfolio.Cashflow] schedule and use
+-- buy_and_hold.lua, which invests each deposit the day it arrives. To be roughly fully
 -- invested by the end, set `amount` to BuyingPower divided by the number
 -- of planned buys (≈ trading days in the window / every_days).
 --

@@ -56,6 +56,34 @@ func libraryName(path string) (string, bool) {
 	return p, true
 }
 
+// UserPrefix marks a script as the user's own rather than the library's:
+// the Lua tab's scratch file is my_strategy.lua, and "Edit a copy" of a library
+// script saves it as my_<name>.lua. A user script saved into strategies/ is
+// compiled into the next build like everything else there, so the prefix, not
+// the embedding, is what tells the two apart.
+const UserPrefix = "my_"
+
+// IsLibrary reports whether path names a shipped library script — one the app
+// shows read-only and never writes, so an edit cannot break what the gallery
+// and every config naming it run. path may be bare ("rsi.lua"), relative
+// ("../strategies/rsi.lua") or absolute; what counts is that it sits in a
+// strategies directory, is in the library, and is not a user's my_ script.
+func IsLibrary(path string) bool {
+	p := strings.ReplaceAll(path, "\\", "/")
+	dir, base := "", p
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		dir, base = p[:i], p[i+1:]
+	}
+	if strings.HasPrefix(base, UserPrefix) {
+		return false
+	}
+	if dir != "" && dir != Dir && !strings.HasSuffix(dir, "/"+Dir) {
+		return false
+	}
+	_, ok := Source(base)
+	return ok
+}
+
 // Names returns the embedded scripts' filenames, sorted, so a caller can list
 // the library without knowing it is embedded.
 func Names() []string {

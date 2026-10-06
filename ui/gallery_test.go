@@ -59,22 +59,24 @@ func TestShippedGalleryLoads(t *testing.T) {
 		t.Skip("no strategies/ directory next to the test")
 	}
 	for _, c := range cards {
+		if userScript(c.File) {
+			continue
+		}
 		if !c.Complete() {
 			t.Errorf("%s is missing %v", c.File, c.Missing())
 		}
 	}
 }
 
-// The frontend hardcodes two script paths — DEFAULT_LUA_PATH in App.tsx and
-// WEIGHTED_LUA_PATH in buildToml.ts — as "strategies/<name>", resolved by
-// the engine's parent-walk. They used to be satisfied by a second copy in
-// ui/strategies/, which SHADOWED the library: the copy of
-// buy_and_hold_weighted.lua there was an older one that floored to whole
-// shares. With that directory gone these must resolve to the library, and
+// The frontend hardcodes a library script path — BUY_AND_HOLD_LUA_PATH in
+// buildToml.ts — as "strategies/<name>", resolved by the engine's
+// parent-walk. Such paths used to be satisfied by a second copy in
+// ui/strategies/, which SHADOWED the library: the copy of the weighted
+// buy-and-hold script there was an older one that floored to whole shares. With that directory gone these must resolve to the library, and
 // this test is what says so — the go tests run with cwd=ui, exactly where
 // the desktop app runs.
 func TestUIDefaultScriptsResolveToTheLibrary(t *testing.T) {
-	for _, name := range []string{"example.lua", "buy_and_hold_weighted.lua"} {
+	for _, name := range []string{"buy_and_hold.lua"} {
 		path := filepath.Join(repoRoot(), "strategies", name)
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s is referenced by the frontend but not in the "+

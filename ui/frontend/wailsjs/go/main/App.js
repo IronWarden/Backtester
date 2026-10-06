@@ -42,6 +42,10 @@ export function ImportHoldings(arg1) {
   return window['go']['main']['App']['ImportHoldings'](arg1);
 }
 
+export function IsLibraryScript(arg1) {
+  return window['go']['main']['App']['IsLibraryScript'](arg1);
+}
+
 export function ListChatModels() {
   return window['go']['main']['App']['ListChatModels']();
 }

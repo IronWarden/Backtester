@@ -45,6 +45,7 @@ var clonePolicy = map[string]string{
 	"DelistingEvents":    "copy",
 	"Fundamentals":       "copy",
 	"FundamentalData":    "copy",
+	"FundamentalSource":  "copy",
 	"InSampleEnd":        "copy",
 	"Trials":             "copy",
 	"TrialGroup":         "copy",

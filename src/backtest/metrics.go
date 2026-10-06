@@ -456,9 +456,17 @@ func (p *Portfolio) applyBenchmarkMetrics(
 
 	// The same return series, kept rather than discarded, so the UI can draw
 	// the benchmark next to the portfolio and report what it did on its own.
-	p.BenchmarkCurve = rebasedCurve(benchmark, p.InitialBuyingPower)
+	//
+	// Two curves. The stats are time-weighted, like the portfolio's, so they
+	// read the benchmark's own growth from the starting capital. The CHART
+	// curve is drawn in dollars beside the equity curve, which contains every
+	// deposit, so it receives the same contributions on the same days -- or
+	// a portfolio fed money monthly "beats" the market by what was paid in.
+	// Without a schedule every flow is 0 and the two are identical.
+	growth := rebasedCurve(benchmark, p.InitialBuyingPower)
+	p.BenchmarkCurve = fundedCurve(benchmark, p.InitialBuyingPower, p.DailyReturns)
 	p.BenchmarkStats = benchmarkStatsFrom(
-		p.Benchmark, benchmark, benchmarkExcess, p.BenchmarkCurve, p.DailyReturns,
+		p.Benchmark, benchmark, benchmarkExcess, growth, p.DailyReturns,
 		p.inflationFactor,
 	)
 }
@@ -506,6 +514,26 @@ func rebasedCurve(returns []float64, initial float64) []float64 {
 	level := initial
 	for i, r := range returns {
 		level *= 1 + r
+		curve[i] = level
+	}
+	return curve
+}
+
+// fundedCurve is rebasedCurve with the portfolio's cashflows paid in: each
+// day's flow is added after that day's return, the way a contribution lands
+// in the book and is invested at the close. days is 1:1 with returns. A
+// withdrawal larger than the balance empties it rather than going negative.
+func fundedCurve(returns []float64, initial float64, days []DailyReturn) []float64 {
+	if len(returns) == 0 {
+		return nil
+	}
+	curve := make([]float64, len(returns))
+	level := initial
+	for i, r := range returns {
+		level *= 1 + r
+		if i < len(days) && days[i].Flow != 0 {
+			level = math.Max(level+days[i].Flow, 0)
+		}
 		curve[i] = level
 	}
 	return curve

@@ -112,6 +112,14 @@ func TestEmbeddedLibraryMatchesTheDirectory(t *testing.T) {
 	}
 }
 
+// userScript reports whether a file in strategies/ is the user's own — the
+// scratch file or a copy, named my_ — rather than part of the library. The
+// library's rules (gallery tags, a test entry, a declared fundamentals
+// table) are for what ships, not for what a user is writing.
+func userScript(file string) bool {
+	return strings.HasPrefix(file, strategies.UserPrefix)
+}
+
 // The gallery has to come from the same place a run does, or the app
 // describes scripts it cannot load.
 func TestLoadLibraryWorksWithNoLibraryOnDisk(t *testing.T) {
@@ -125,6 +133,9 @@ func TestLoadLibraryWorksWithNoLibraryOnDisk(t *testing.T) {
 			"empty or partial in a packaged app", len(cards), len(strategies.Names()))
 	}
 	for _, c := range cards {
+		if userScript(c.File) {
+			continue
+		}
 		if c.Works == "" || c.Fails == "" {
 			t.Errorf("%s: embedded card lost its tags (works=%q fails=%q)",
 				c.File, c.Works, c.Fails)

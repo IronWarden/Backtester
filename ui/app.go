@@ -706,6 +706,13 @@ func (a *App) WriteFile(path, content string) error {
 	if path == "" {
 		return fmt.Errorf("path is empty")
 	}
+	// The editor shows library scripts read-only; this is the backstop, so no
+	// path through the UI can overwrite what every config naming one runs.
+	if strategies.IsLibrary(path) {
+		return fmt.Errorf("%s is a library strategy and is never overwritten; "+
+			"use Edit a copy, which saves it as %s%s", path,
+			strategies.UserPrefix, filepath.Base(path))
+	}
 	// Resolved so a save lands on the file the engine reads. Without this the
 	// Lua tab wrote a second, shadowing copy under ui/ -- see resolveAppPath.
 	path = writablePath(path)
@@ -731,6 +738,12 @@ func (a *App) FileExists(path string) bool {
 	// serve it, which is what this question is asked to decide.
 	_, embedded := strategies.Source(path)
 	return embedded
+}
+
+// IsLibraryScript reports whether path is a shipped library strategy, which
+// the Lua tab opens read-only. See strategies.IsLibrary.
+func (a *App) IsLibraryScript(path string) bool {
+	return strategies.IsLibrary(path)
 }
 
 var luaStrategyRe = regexp.MustCompile(`Strategy\s*=\s*"lua:([^"]+)"`)

@@ -20,12 +20,15 @@ func TestEveryShippedStrategyDocumentsItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGallery: %v", err)
 	}
-	if len(cards) < 11 {
-		t.Fatalf("found %d strategies, want at least the 11 shipped ones",
+	if len(cards) < 10 {
+		t.Fatalf("found %d strategies, want at least the 10 shipped ones",
 			len(cards))
 	}
 
 	for _, c := range cards {
+		if userScript(c.File) {
+			continue
+		}
 		if !c.Complete() {
 			t.Errorf("%s is missing %v — a strategy without its failure mode "+
 				"is one a user discovers the expensive way", c.File, c.Missing())

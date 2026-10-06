@@ -1,18 +1,24 @@
 // buildToml turns the simple-mode form into a TOML config string the
 // existing runner already understands. With no strategy chosen it stays
-// buy-and-hold: equal weights use the built-in strategy, custom weights
-// reference the weighted Lua script. A library pick emits a lua: spec.
+// buy-and-hold: buy_and_hold.lua, with a weights table when the split is not
+// even. A library pick emits a lua: spec.
 
 // Script paths are written the way a config writes them. The engine
 // resolves them by walking up from the working directory, so the same
 // spec works from the repo root (CLI) and from ui/ (the desktop app).
 export const STRATEGY_DIR = "strategies";
-export const WEIGHTED_LUA_PATH = `${STRATEGY_DIR}/buy_and_hold_weighted.lua`;
+// The script a form's strategy names. A bare file name means the shipped
+// library ("rsi.lua"); a value carrying a separator is already a path.
+export function strategySpec(strategy: string): string {
+  return /[\\/]/.test(strategy) ? strategy : `${STRATEGY_DIR}/${strategy}`;
+}
 
-// The Lua tab's starter file. It is a copy of buy_and_hold.lua and lives in
-// the library so there is one strategies directory, but offering it in the
-// picker would list the same idea twice.
-export const STARTER_SCRIPT = "example.lua";
+export const BUY_AND_HOLD_LUA_PATH = `${STRATEGY_DIR}/buy_and_hold.lua`;
+
+// Where the Lua tab saves a script of your own. It lands in the library so
+// there is one strategies directory, but it is a scratch file, not a strategy
+// to offer in the picker.
+export const STARTER_SCRIPT = "my_strategy.lua";
 
 // The benchmark choices simple mode offers, in plain language. Both are
 // reconstructed total-return series that reach back to 1927, so neither
@@ -68,11 +74,26 @@ export type SimpleForm = {
   strategy: string;
 };
 
+// rebalance.lua's whole job is holding target weights, so it takes the
+// allocation percentages as its `weights` param, the same table buy-and-hold
+// reads. The famous-investor recipes depend on it: an All Weather that drifts
+// for twenty years ends up a stock portfolio.
+export const REBALANCE_LUA = "rebalance.lua";
+
 // Strategies that size their own positions read no weights, so the
-// allocation percentages do not reach them. Only the buy-and-hold path
-// (strategy === "") uses them.
+// allocation percentages do not reach them. Only buy-and-hold
+// (strategy === "") and rebalance.lua use them.
 export function usesAllocations(form: SimpleForm): boolean {
-  return form.strategy === "";
+  return form.strategy === "" || form.strategy === REBALANCE_LUA;
+}
+
+// The weights table for a non-even split, or nothing.
+function weightsParam(form: SimpleForm): string[] {
+  if (form.evenSplit) return [];
+  const entries = form.tickers
+    .map((t) => `${tomlKey(t)} = ${toFloat(form.allocations[t] ?? 0)}`)
+    .join(", ");
+  return [`Params = { weights = { ${entries} } }`];
 }
 
 // TOML floats must carry a decimal point, so 100000 -> "100000.0".
@@ -131,22 +152,13 @@ function portfolioBlock(form: SimpleForm): string[] {
   // "Run this script" point a portfolio at the file open in the Lua tab,
   // wherever it lives, without the picker's names changing at all.
   if (form.strategy) {
-    const spec = /[\\/]/.test(form.strategy)
-      ? form.strategy
-      : `${STRATEGY_DIR}/${form.strategy}`;
-    lines.push(`Strategy = "lua:${spec}"`);
+    lines.push(`Strategy = "lua:${strategySpec(form.strategy)}"`);
+    if (form.strategy === REBALANCE_LUA) lines.push(...weightsParam(form));
     return lines.concat(cashflow);
   }
 
-  if (form.evenSplit) {
-    lines.push('Strategy = "buyAndHold:equalWeights"');
-  } else {
-    const entries = form.tickers
-      .map((t) => `${tomlKey(t)} = ${toFloat(form.allocations[t] ?? 0)}`)
-      .join(", ");
-    lines.push(`Strategy = "lua:${WEIGHTED_LUA_PATH}"`);
-    lines.push(`Params = { weights = { ${entries} } }`);
-  }
+  lines.push(`Strategy = "lua:${BUY_AND_HOLD_LUA_PATH}"`);
+  lines.push(...weightsParam(form));
 
   return lines.concat(cashflow);
 }

@@ -321,3 +321,119 @@ func TestBuyAndHoldUnchangedWithoutASchedule(t *testing.T) {
 			"must still buy once and hold", n)
 	}
 }
+
+// buy_and_hold.lua must invest a contribution too. The Backtest form runs it
+// for every buy-and-hold portfolio, so a script that only bought on day 0 left
+// every deposit idle in exactly the configuration the form produces. The
+// retired names must still run it, or a saved config stops working.
+func TestLuaBuyAndHoldInvestsContributions(t *testing.T) {
+	closes := make([]float64, 200)
+	for i := range closes {
+		closes[i] = 100
+	}
+	weights := map[string]any{"weights": map[string]any{"AAA": 0.75, "BBB": 0.25}}
+	for _, c := range []struct {
+		name   string
+		script string
+		params map[string]any
+		ratio  float64 // AAA shares / BBB shares the weights imply
+	}{
+		{"equal", "buy_and_hold.lua", nil, 1},
+		{"weighted", "buy_and_hold.lua", weights, 3},
+		{"retired weighted name", "buy_and_hold_weighted.lua", weights, 3},
+		{"retired starter name", "example.lua", nil, 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			pc := PortfolioConfig{
+				Name: "contrib", BuyingPower: 10000,
+				StartTime: exactEpoch.Format("2006-01-02"),
+				EndTime:   exactEpoch.AddDate(0, 0, 200).Format("2006-01-02"),
+				Tickers:   []string{"AAA", "BBB"},
+				Strategy:  "lua:strategies/" + c.script,
+				Params:    c.params,
+				Costs:     CostConfig{SlippageBps: 5},
+				Cashflow:  CashflowConfig{Amount: 1000, Frequency: "monthly"},
+			}
+			p, err := pc.ToPortfolio()
+			if err != nil {
+				t.Fatal(err)
+			}
+			hist := histFrom(map[string][]float64{"AAA": closes, "BBB": closes})
+			runOne(p, hist, map[int64]float64{})
+
+			if p.Metrics.NetContributions <= 0 {
+				t.Fatal("no contributions were made")
+			}
+			total := p.BuyingPower
+			for _, ticker := range p.Tickers {
+				if pos, ok := p.Positions[ticker]; ok {
+					total += pos.Amount * 100
+				}
+			}
+			if p.BuyingPower/total > 0.01 {
+				t.Errorf("%.2f of %.2f left in cash — contributions are "+
+					"piling up instead of being invested", p.BuyingPower, total)
+			}
+			a, b := p.Positions["AAA"].Amount, p.Positions["BBB"].Amount
+			if math.Abs(a/b-c.ratio) > 0.01 {
+				t.Errorf("AAA/BBB = %.4f, want %.2f — new money is not "+
+					"following the configured weights", a/b, c.ratio)
+			}
+		})
+	}
+}
+
+// The benchmark line is drawn in dollars beside the equity curve, and the
+// equity curve contains every deposit. A benchmark compounded from the
+// starting capital alone leaves the deposits out, so a portfolio fed $1,000 a
+// month "beats" the market on the chart by roughly what was paid in. The
+// benchmark has to receive the same money on the same days -- the yardstick
+// rule the equal-weight baseline already follows.
+//
+// Flat prices on both, so any growth in either curve is contributions alone:
+// the two must end at the same value.
+func TestBenchmarkCurveReceivesTheSameContributions(t *testing.T) {
+	closes := make([]float64, 200)
+	for i := range closes {
+		closes[i] = 100
+	}
+	hist := histFrom(map[string][]float64{"AAA": closes, "BMK": closes})
+
+	pc := PortfolioConfig{
+		Name: "bench-flows", BuyingPower: 10000,
+		StartTime: exactEpoch.Format("2006-01-02"),
+		EndTime:   exactEpoch.AddDate(0, 0, 200).Format("2006-01-02"),
+		Tickers:   []string{"AAA"}, Strategy: "buyAndHold:equalWeights",
+		Benchmark: "BMK",
+		Cashflow:  CashflowConfig{Amount: 1000, Frequency: "monthly"},
+	}
+	p, err := pc.ToPortfolio()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runOne(p, hist, map[int64]float64{})
+
+	if p.Metrics.NetContributions <= 0 {
+		t.Fatal("no contributions were made")
+	}
+	if len(p.BenchmarkCurve) == 0 {
+		t.Fatal("no benchmark curve")
+	}
+	want := p.InitialBuyingPower + p.Metrics.NetContributions
+	got := p.BenchmarkCurve[len(p.BenchmarkCurve)-1]
+	if math.Abs(got-want) > 1e-6 {
+		t.Errorf("benchmark curve ends at %.2f, want %.2f (capital plus the "+
+			"%.2f contributed) -- the deposits never reached the benchmark",
+			got, want, p.Metrics.NetContributions)
+	}
+	// The benchmark's own figures stay time-weighted: on flat prices a
+	// deposit is not a return, exactly as it is not for the portfolio.
+	if math.Abs(p.BenchmarkStats.AnnualReturn) > 1e-9 {
+		t.Errorf("benchmark annual return %.6f on a flat series -- the "+
+			"deposits leaked into its stats", p.BenchmarkStats.AnnualReturn)
+	}
+	if math.Abs(p.BenchmarkStats.MaxDrawdown) > 1e-9 {
+		t.Errorf("benchmark max drawdown %.6f on a flat series",
+			p.BenchmarkStats.MaxDrawdown)
+	}
+}

@@ -8,7 +8,14 @@ import (
 
 	"my-backtester/src/apppath"
 	"my-backtester/src/data"
+	"my-backtester/strategies"
 )
+
+// userScript reports whether a script is the user's own (my_…) rather than
+// the library's; the library's description rules do not apply to it.
+func userScript(file string) bool {
+	return strings.HasPrefix(file, strategies.UserPrefix)
+}
 
 // tempConfigHome redirects the per-user config directory into the test's own
 // temporary directory, so nothing here writes into the developer's home.
@@ -36,6 +43,9 @@ func TestListStrategiesFromAnUnrelatedDirectory(t *testing.T) {
 		t.Fatal("no strategies listed with no library on disk")
 	}
 	for _, c := range cards {
+		if userScript(c.File) {
+			continue
+		}
 		if c.File == "" || !c.Complete() {
 			t.Errorf("card %+v came back without its description", c)
 		}
@@ -50,7 +60,7 @@ func TestLuaTabServesTheEmbeddedScript(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	a := &App{}
-	const spec = "strategies/example.lua"
+	const spec = "strategies/buy_and_hold.lua"
 	if !a.FileExists(spec) {
 		t.Fatal("FileExists says the shipped script is not there")
 	}
@@ -160,5 +170,25 @@ func TestDatabaseNoticeReportsAnUnopenableFile(t *testing.T) {
 	}
 	if _, err := (&App{}).DatabaseNotice(path); err == nil {
 		t.Fatal("a file that is not a database opened without complaint")
+	}
+}
+
+// The Lua tab shows library scripts read-only; WriteFile is the backstop that
+// keeps any other path from overwriting one.
+func TestWriteFileRefusesALibraryScript(t *testing.T) {
+	tempConfigHome(t)
+	t.Chdir(t.TempDir())
+
+	a := &App{}
+	err := a.WriteFile("strategies/rsi.lua", "-- gutted\n")
+	if err == nil || !strings.Contains(err.Error(), "my_rsi.lua") {
+		t.Fatalf("WriteFile over a library script: err = %v, want a refusal "+
+			"naming the copy", err)
+	}
+	if !a.IsLibraryScript("strategies/rsi.lua") || a.IsLibraryScript("strategies/my_rsi.lua") {
+		t.Error("IsLibraryScript disagrees with strategies.IsLibrary")
+	}
+	if err := a.WriteFile("strategies/my_rsi.lua", "function step(day) end\n"); err != nil {
+		t.Errorf("a user's copy must save: %v", err)
 	}
 }

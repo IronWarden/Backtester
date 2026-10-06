@@ -1,9 +1,11 @@
 // The strip between the tabs and the results: drag it to resize, double-click
-// to reset, and its two buttons minimise the results to this strip or maximise
+// to step minimised -> normal -> maximised -> normal (a window title bar's
+// gesture), and its two buttons minimise the results to this strip or maximise
 // them over the tabs. A small component of its own because App cannot be
 // smoke-rendered (Monaco), and this one can.
 
 import type React from "react";
+import { keysFor } from "./shortcuts";
 
 export type ResultsLayout = "normal" | "min" | "max";
 
@@ -11,6 +13,12 @@ export type ResultsLayout = "normal" | "min" | "max";
 // to normal, the other one switches straight across.
 export function nextResultsLayout(cur: ResultsLayout, pressed: "min" | "max"): ResultsLayout {
     return cur === pressed ? "normal" : pressed;
+}
+
+// What a double-click on the bar does: open a minimised panel, maximise a
+// normal one, and restore a maximised one.
+export function cycleResultsLayout(cur: ResultsLayout): ResultsLayout {
+    return cur === "normal" ? "max" : "normal";
 }
 
 // Stored state is input. Maximised is deliberately not restored: opening the
@@ -23,11 +31,10 @@ type Props = {
     view: ResultsLayout;
     onView: (v: ResultsLayout) => void;
     onResizeStart: (e: React.PointerEvent) => void;
-    onReset: () => void;
     count: number;
 };
 
-export default function ResultsBar({ view, onView, onResizeStart, onReset, count }: Props) {
+export default function ResultsBar({ view, onView, onResizeStart, count }: Props) {
     // The buttons sit on the drag handle, so a press on one must not also
     // start a resize, and a double-click on one must not also reset.
     const keep = (e: React.SyntheticEvent) => e.stopPropagation();
@@ -35,8 +42,14 @@ export default function ResultsBar({ view, onView, onResizeStart, onReset, count
         <div
             className={`resize-handle results-bar ${view}`}
             onPointerDown={onResizeStart}
-            onDoubleClick={onReset}
-            title="Drag to resize the results panel · double-click to reset"
+            onDoubleClick={() => onView(cycleResultsLayout(view))}
+            title={
+                view === "min"
+                    ? `Double-click to open the results (${keysFor("toggle-results")})`
+                    : view === "max"
+                      ? `Double-click to restore the results (${keysFor("max-results")})`
+                      : `Drag to resize · double-click to maximise (${keysFor("max-results")})`
+            }
         >
             <span className="results-bar-title">
                 {count > 0 ? `Results · ${count}` : "Results"}
@@ -48,7 +61,7 @@ export default function ResultsBar({ view, onView, onResizeStart, onReset, count
                 onPointerDown={keep}
                 onDoubleClick={keep}
                 onClick={() => onView(nextResultsLayout(view, "min"))}
-                title={view === "min" ? "Restore the results" : "Minimise the results"}
+                title={`${view === "min" ? "Restore" : "Minimise"} the results (${keysFor("toggle-results")})`}
                 aria-label={view === "min" ? "Restore results" : "Minimise results"}
             >
                 {view === "min" ? "▴" : "▁"}
@@ -59,7 +72,7 @@ export default function ResultsBar({ view, onView, onResizeStart, onReset, count
                 onPointerDown={keep}
                 onDoubleClick={keep}
                 onClick={() => onView(nextResultsLayout(view, "max"))}
-                title={view === "max" ? "Restore the results" : "Maximise the results"}
+                title={`${view === "max" ? "Restore" : "Maximise"} the results (${keysFor("max-results")})`}
                 aria-label={view === "max" ? "Restore results" : "Maximise results"}
             >
                 {view === "max" ? "❐" : "□"}

@@ -103,6 +103,13 @@ type FundamentalPoint struct {
 	RawFundamental
 	KnownFrom time.Time
 	LagSource LagSource
+	// Source is SourceSEC for a point read from `sec_financials` and empty for
+	// one from `financials`. A run reads one source, never a mix of both.
+	Source string
+	// Instant marks a balance-sheet figure — a level on a date, like equity —
+	// as opposed to a flow over a period, like net income. Only the SEC
+	// reader sets it; `financials` does not say which a metric is.
+	Instant bool
 }
 
 // ApplyPublicationLag dates each raw fundamental with the day it became

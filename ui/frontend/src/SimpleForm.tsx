@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { keysFor } from "./shortcuts";
 import {
     ListStrategies,
     ListTickers,
@@ -16,13 +17,16 @@ import {
     criterionLabel,
 } from "./buildToml";
 import type { SimpleForm as Form, HypothesisForm } from "./buildToml";
-import { duplicateNames, maskDecimal, portfolioRunnable } from "./portfolioCheck";
+import { duplicateNames, maskDecimal, runBlocker } from "./portfolioCheck";
 import {
     BLANK,
     CRITERION_PRESETS,
     EXAMPLES,
+    INVESTORS,
     buildExample,
+    buildInvestor,
     exampleHypothesis,
+    investorHypothesis,
 } from "./examples";
 import PortfolioCard from "./PortfolioCard";
 import { readStored, writeStored } from "./storage";
@@ -65,6 +69,9 @@ type Props = {
     // Hand the generated config off to the Config tab's TOML editor, with the
     // registered question, so switching modes does not quietly drop it.
     onEditAsToml: (toml: string, hypothesis: string) => void;
+    // Opens a picked strategy's script in the Lua tab. Optional so a host
+    // without an editor (the smoke harness) can leave it out.
+    onViewScript?: (strategy: string) => void;
 };
 
 
@@ -177,6 +184,50 @@ function Examples({
     );
 }
 
+// Famous investors' portfolios, on the same empty-form footing as the examples
+// above: one click fills a runnable portfolio. Each shows its caveat on the
+// button, not in a tooltip -- "what this is NOT" is the part of copying a
+// legend that a user most needs and is least likely to hover for.
+export function Investors({
+    ranges,
+    onPick,
+}: {
+    ranges: Record<string, string[]>;
+    onPick: (id: string) => void;
+}) {
+    const benchmark = ranges["$SP500"] ? "$SP500" : "";
+    const usable = INVESTORS.filter(
+        (inv) => buildInvestor(inv, ranges, benchmark, BLANK) !== null,
+    );
+    if (usable.length === 0) return null;
+
+    return (
+        <section className="form-card wide examples investors">
+            <h3 className="form-card-title">Or copy a famous investor</h3>
+            <p className="examples-lead">
+                Each is something you could actually have bought on the first
+                day of the window — a published recipe, or a public filing
+                bought the day after it came out — never the current holdings run
+                backwards.
+            </p>
+            <div className="example-list">
+                {usable.map((inv) => (
+                    <button
+                        key={inv.id}
+                        className="example"
+                        onClick={() => onPick(inv.id)}
+                    >
+                        <span className="example-investor">{inv.investor}</span>
+                        <span className="example-label">{inv.name}</span>
+                        <span className="example-question">{inv.note}</span>
+                        <span className="example-caveat">{inv.caveat}</span>
+                    </button>
+                ))}
+            </div>
+        </section>
+    );
+}
+
 // A new portfolio starts as a copy of the last one's window and capital -- two
 // portfolios over different date ranges are not a comparison -- but with no
 // holdings and a name that does not collide.
@@ -204,6 +255,7 @@ export default function SimpleForm({
     onHypothesisChange,
     onRun,
     onEditAsToml,
+    onViewScript,
 }: Props) {
     const [available, setAvailable] = useState<string[]>([]);
     // {"AAPL": "Apple Inc."} for every symbol we can name. Partial by nature
@@ -288,8 +340,7 @@ export default function SimpleForm({
         };
     }, [dbPath, dbVersion]);
 
-    // example.lua is the Lua tab's starter and a copy of buy_and_hold, so
-    // listing it would offer the same idea twice.
+    // my_strategy.lua is the Lua tab's scratch file, not a strategy to offer.
     const pickable = useMemo(
         () => gallery.filter((c) => c.File !== STARTER_SCRIPT),
         [gallery],
@@ -317,12 +368,10 @@ export default function SimpleForm({
 
     // Every portfolio has to be runnable: a run carries all of them, so one
     // broken card stops the run rather than quietly contributing a bad block.
-    const canRun =
-        !!dbPath &&
-        !running &&
-        forms.length > 0 &&
-        dupes.length === 0 &&
-        forms.every((f) => portfolioRunnable(f, ranges));
+    // runBlocker says WHY when it cannot, and the reason is shown beside the
+    // button: a disabled button with no explanation reads as broken.
+    const blocker = runBlocker(forms, ranges, dbPath, running);
+    const canRun = blocker === "";
 
     const anyTickers = forms.some((f) => f.tickers.length > 0);
 
@@ -348,6 +397,17 @@ export default function SimpleForm({
         onHypothesisChange(exampleHypothesis(ex));
     }
 
+    // Same footing as applyExample: only offered on an empty form.
+    function applyInvestor(id: string) {
+        const inv = INVESTORS.find((e) => e.id === id);
+        if (!inv) return;
+        const benchmark = ranges["$SP500"] ? "$SP500" : "";
+        const built = buildInvestor(inv, ranges, benchmark, forms[0] ?? BLANK);
+        if (!built) return;
+        onChange([built]);
+        onHypothesisChange(investorHypothesis(inv));
+    }
+
     function dismissFirstRun() {
         setOnboarded(true);
         // Storage refused: the card reappears next launch, which is a better
@@ -370,6 +430,9 @@ export default function SimpleForm({
             {!anyTickers && (
                 <Examples ranges={ranges} onPick={applyExample} />
             )}
+            {!anyTickers && (
+                <Investors ranges={ranges} onPick={applyInvestor} />
+            )}
 
             {forms.map((f, i) => (
                 <PortfolioCard
@@ -389,6 +452,7 @@ export default function SimpleForm({
                     // gets the starter examples above instead.
                     showBaskets={anyTickers}
                     pickable={pickable}
+                    onViewScript={onViewScript}
                 />
             ))}
 
@@ -507,8 +571,11 @@ export default function SimpleForm({
             <div className="field-row actions">
                 <button
                     className="run"
+                    data-shortcut="run"
                     disabled={!canRun}
+                    data-blocker={blocker || undefined}
                     onClick={() => onRun(buildToml(forms), hypothesisToml)}
+                    title={`Run the backtest (${keysFor("run")})`}
                 >
                     {running ? "Running…" : "Run backtest"}
                 </button>
@@ -518,6 +585,12 @@ export default function SimpleForm({
                 >
                     Edit as TOML →
                 </button>
+                {/* Not while running: the button already says so. And not on a
+                    wholly empty form, where the starter examples above are
+                    the answer and "add a holding" would only nag. */}
+                {!canRun && !running && anyTickers && (
+                    <span className="hint run-blocker">To run, {blocker}.</span>
+                )}
             </div>
         </div>
     );

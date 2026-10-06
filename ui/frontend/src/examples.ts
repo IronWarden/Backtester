@@ -10,6 +10,7 @@
 // database's own coverage table, so the smoke render can assert that every
 // example produces a runnable portfolio without mounting anything.
 import type { SimpleForm, HypothesisForm } from "./buildToml";
+import { REBALANCE_LUA } from "./buildToml";
 import type { Ranges } from "./portfolioCheck";
 import { coverageOf } from "./portfolioCheck";
 
@@ -154,21 +155,10 @@ export function buildExample(
   const tickers = availableTickers(ex, ranges);
   if (tickers.length < ex.minTickers) return null;
 
-  const probe: SimpleForm = { ...base, tickers, allocations: {} };
-  const coverage = coverageOf(probe, ranges);
-  if (!coverage || !coverage.start || !coverage.end) return null;
-
-  let start = coverage.start;
-  let end = coverage.end;
-  // The benchmark is scored over the same days, so it narrows the window
-  // rather than being narrowed by it.
-  const bench = benchmark ? ranges[benchmark] : undefined;
-  if (benchmark && !bench) return null;
-  if (bench) {
-    if (bench[0] > start) start = bench[0];
-    if (bench[1] < end) end = bench[1];
-  }
-  if (start > end) return null;
+  const window = exampleWindow(tickers, ranges, benchmark, base);
+  if (!window) return null;
+  let { start } = window;
+  const { end } = window;
 
   // Ask for the example's window, but never earlier than the data begins.
   const wanted = minusYears(end, ex.years);
@@ -188,6 +178,33 @@ export function buildExample(
   };
 }
 
+// What every kept holding AND the benchmark cover, or null when they share no
+// days. Shared by the examples and the investor portfolios, which differ only
+// in where inside it they start.
+function exampleWindow(
+  tickers: string[],
+  ranges: Ranges,
+  benchmark: string,
+  base: SimpleForm,
+): { start: string; end: string } | null {
+  const probe: SimpleForm = { ...base, tickers, allocations: {} };
+  const coverage = coverageOf(probe, ranges);
+  if (!coverage || !coverage.start || !coverage.end) return null;
+
+  let start = coverage.start;
+  let end = coverage.end;
+  // The benchmark is scored over the same days, so it narrows the window
+  // rather than being narrowed by it.
+  const bench = benchmark ? ranges[benchmark] : undefined;
+  if (benchmark && !bench) return null;
+  if (bench) {
+    if (bench[0] > start) start = bench[0];
+    if (bench[1] < end) end = bench[1];
+  }
+  if (start > end) return null;
+  return { start, end };
+}
+
 // The hypothesis that goes with an example. Separate from buildExample because
 // the form keeps one hypothesis per RUN, not per portfolio.
 export function exampleHypothesis(ex: Example): HypothesisForm {
@@ -196,6 +213,209 @@ export function exampleHypothesis(ex: Example): HypothesisForm {
     metric: ex.hypothesis.metric,
     op: ex.hypothesis.op,
     value: ex.hypothesis.value,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Famous investors
+//
+// "What would Buffett's portfolio have done?" is the question a lot of people
+// open a backtester to ask, and the naive answer is a trap: today's Berkshire
+// holdings run backwards over ten years is a list of what WORKED, chosen with
+// the ending already known. So every entry here is something a person could
+// actually have bought on the window's first day:
+//
+//   - a published RECIPE (Buffett's 90/10, All Weather, the Permanent
+//     Portfolio, Swensen) -- a fixed allocation, rebalanced, that does not
+//     depend on knowing the future; and
+//   - a 13F COPY, bought the day after the filing went public and held. The
+//     holdings are the filing's, verbatim, not today's.
+//
+// The `caveat` is shown with each one, because the honest limits (a recipe
+// tested before it was published, a holding the database cannot price) are
+// exactly what a user comparing against a legend needs to know.
+
+export type Investor = {
+  id: string;
+  // The person, and what the portfolio is called -- the latter becomes the
+  // card's name, so a comparison run labels its line legibly.
+  investor: string;
+  name: string;
+  // One line on what it is and where it comes from.
+  note: string;
+  caveat: string;
+  question: string;
+  // Relative weights, largest first. They are normalised over whatever this
+  // database can price, so they need not sum to 100.
+  holdings: Record<string, number>;
+  // Withdrawn below this many priced holdings. For a recipe that is every
+  // leg: a Permanent Portfolio without its gold is not one.
+  minTickers: number;
+  // "" is buy-and-hold at the weights; "rebalance.lua" holds them.
+  strategy: string;
+  // A 13F copy starts on a fixed day (the day after filing); a recipe asks
+  // for `years` back from the end of the data, like the examples.
+  startDate?: string;
+  years?: number;
+  hypothesis: { metric: string; op: string; value: string };
+};
+
+export const INVESTORS: Investor[] = [
+  {
+    id: "buffett-90-10",
+    investor: "Warren Buffett",
+    name: "Buffett 90/10",
+    note: "90% S&P 500, 10% T-bills — his instructions for his own estate (2013 letter)",
+    caveat:
+      "Rebalanced quarterly. Buffett named the mix, not a rebalancing rule.",
+    question:
+      "Does Buffett's advice for his own heirs hold up over thirty years?",
+    holdings: { $SP500: 90, $CASH: 10 },
+    minTickers: 2,
+    strategy: REBALANCE_LUA,
+    years: 30,
+    // The long-run market average; the 10% in bills should cost a little
+    // return and buy a little less drawdown.
+    hypothesis: { metric: "annual_return", op: ">=", value: "8" },
+  },
+  {
+    id: "berkshire-13f-2015",
+    investor: "Warren Buffett",
+    name: "Berkshire 13F, Q4 2015",
+    note: "Berkshire's largest stock holdings at 31 Dec 2015 (96% of the filing by value), bought the day after the filing (16 Feb 2016) and held",
+    caveat:
+      "Weights are the filing's dollar values. Precision Castparts (bought outright before the filing) and anything this database cannot price — USG, Visa on some databases — are left out and the rest scaled up. It holds the 2015 book; Berkshire kept trading.",
+    question:
+      "Would copying Berkshire's public filing have beaten simply holding the S&P 500?",
+    // SEC EDGAR, accession 0000950123-16-015025, value in $M at 2015-12-31.
+    holdings: {
+      WFC: 26077, KHC: 23693, KO: 17184, IBM: 11152, AXP: 10545,
+      PSX: 5030, PG: 4192, USB: 3630, WMT: 3444, DVA: 2688,
+      MCO: 2475, GS: 1975, CHTR: 1883, DE: 1745, GM: 1701,
+      T: 1603, VRSN: 1134, USG: 947, BK: 829, SU: 774,
+      V: 767, COST: 700, VZ: 693, MTB: 652, AXTA: 622,
+    },
+    minTickers: 15,
+    strategy: "",
+    startDate: "2016-02-17",
+    // The S&P 500 returned about 15.7%/yr over 2016-02-17..2026-06-26 on the
+    // bundled database, so this is "did it beat the index", pre-registered.
+    hypothesis: { metric: "annual_return", op: ">=", value: "15" },
+  },
+  {
+    id: "dalio-all-weather",
+    investor: "Ray Dalio",
+    name: "All Weather",
+    note: "30% stocks, 40% long Treasuries, 15% intermediate, 7.5% gold, 7.5% commodities",
+    caveat:
+      "The simplified retail version Dalio gave Tony Robbins (2014), not Bridgewater's leveraged fund. Rebalanced quarterly; years before 2014 test the recipe, not anyone following it.",
+    question: "Does balancing risk across economic seasons cut the drawdowns?",
+    holdings: { VTI: 30, TLT: 40, IEF: 15, GLD: 7.5, DBC: 7.5 },
+    minTickers: 5,
+    strategy: REBALANCE_LUA,
+    years: 20,
+    hypothesis: { metric: "max_drawdown", op: "<=", value: "25" },
+  },
+  {
+    id: "browne-permanent",
+    investor: "Harry Browne",
+    name: "Permanent Portfolio",
+    note: "25% each in stocks, long Treasuries, gold and cash",
+    caveat:
+      "Browne rebalanced when a leg left a 15–35% band; quarterly rebalancing approximates it. Cash is $CASH, the T-bill series.",
+    question: "Can four assets that never all fall together keep losses small?",
+    holdings: { VTI: 25, TLT: 25, GLD: 25, $CASH: 25 },
+    minTickers: 4,
+    strategy: REBALANCE_LUA,
+    years: 20,
+    hypothesis: { metric: "max_drawdown", op: "<=", value: "20" },
+  },
+  {
+    id: "swensen-yale",
+    investor: "David Swensen",
+    name: "Swensen portfolio",
+    note: "Yale's CIO's plan for individuals: US, foreign and emerging stocks, REITs, TIPS, Treasuries",
+    caveat:
+      "From Unconventional Success (2005). Rebalanced quarterly; the funds are today's ETFs for each asset class.",
+    question: "Does a spread across six asset classes earn its keep per unit of risk?",
+    holdings: { VTI: 30, VEA: 15, VWO: 5, VNQ: 20, TIP: 15, IEF: 15 },
+    minTickers: 6,
+    strategy: REBALANCE_LUA,
+    years: 15,
+    hypothesis: { metric: "sharpe", op: ">=", value: "0.5" },
+  },
+];
+
+// Relative weights as two-decimal percentages summing to exactly 100, by the
+// largest remainder, so the allocation boxes show what the run will use.
+export function percentAllocations(
+  weights: Record<string, number>,
+  syms: string[],
+): Record<string, number> {
+  const total = syms.reduce((s, t) => s + (weights[t] ?? 0), 0);
+  if (total <= 0) return evenAllocations(syms);
+  const exact = syms.map((t) => ((weights[t] ?? 0) / total) * 10000);
+  const cents = exact.map(Math.floor);
+  let left = 10000 - cents.reduce((s, c) => s + c, 0);
+  const order = exact
+    .map((x, i) => [x - Math.floor(x), i] as const)
+    .sort((a, b) => b[0] - a[0]);
+  for (let k = 0; left > 0; k++, left--) cents[order[k % order.length][1]] += 1;
+  const out: Record<string, number> = {};
+  syms.forEach((t, i) => (out[t] = cents[i] / 100));
+  return out;
+}
+
+// The holdings this database can price, largest weight first.
+export function investorTickers(inv: Investor, ranges: Ranges): string[] {
+  return Object.keys(inv.holdings).filter((t) => !!ranges[t]);
+}
+
+// Turn an investor portfolio into a runnable form, or null when this database
+// cannot support it. A 13F copy whose filing date is outside the data is
+// withdrawn rather than moved: starting it any other day is a different
+// question from the one it asks.
+export function buildInvestor(
+  inv: Investor,
+  ranges: Ranges,
+  benchmark: string,
+  base: SimpleForm,
+): SimpleForm | null {
+  const tickers = investorTickers(inv, ranges);
+  if (tickers.length < inv.minTickers) return null;
+
+  const window = exampleWindow(tickers, ranges, benchmark, base);
+  if (!window) return null;
+  let { start } = window;
+  const { end } = window;
+
+  if (inv.startDate) {
+    if (inv.startDate < start || inv.startDate > end) return null;
+    start = inv.startDate;
+  } else if (inv.years) {
+    const wanted = minusYears(end, inv.years);
+    if (wanted > start) start = wanted;
+  }
+
+  return {
+    ...base,
+    name: inv.name,
+    tickers,
+    evenSplit: false,
+    allocations: percentAllocations(inv.holdings, tickers),
+    startDate: start,
+    endDate: end,
+    benchmark,
+    strategy: inv.strategy,
+  };
+}
+
+export function investorHypothesis(inv: Investor): HypothesisForm {
+  return {
+    claim: inv.question,
+    metric: inv.hypothesis.metric,
+    op: inv.hypothesis.op,
+    value: inv.hypothesis.value,
   };
 }
 

@@ -101,6 +101,37 @@ function fmtDate(v: any): string {
   return d.toISOString().slice(0, 10);
 }
 
+// One chart line per distinct benchmark curve, appended after every
+// portfolio so the palette indices stay put. Portfolios sharing a benchmark
+// and a deposit schedule share a line -- identical lines would only stack.
+// But a benchmark curve carries its portfolio's contributions, so a lump-sum
+// card and a monthly-deposit card against $SP500 have DIFFERENT lines, and
+// each is named after its portfolio rather than one silently standing in for
+// both.
+export function benchmarkLines(
+  results: main.RunResult[],
+): { name: string; result: main.RunResult }[] {
+  const groups = new Map<string, main.RunResult[]>();
+  for (const r of results) {
+    const ticker = r.benchmarkStats?.ticker;
+    if (!ticker || !r.benchmarkCurve || r.benchmarkCurve.length < 2) continue;
+    const key = `${ticker}\u0000${r.benchmarkCurve.length}\u0000${r.benchmarkCurve[r.benchmarkCurve.length - 1]}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  const perTicker = new Map<string, number>();
+  for (const rs of groups.values()) {
+    const t = rs[0].benchmarkStats!.ticker;
+    perTicker.set(t, (perTicker.get(t) ?? 0) + 1);
+  }
+  return [...groups.values()].map((rs) => {
+    const t = rs[0].benchmarkStats!.ticker;
+    return {
+      name: perTicker.get(t)! > 1 ? `${t} · ${rs.map((r) => r.portfolioName).join(", ")}` : t,
+      result: rs[0],
+    };
+  });
+}
+
 // The benchmark columns are only meaningful when a benchmark was set, and
 // a wall of zeros is worse than no column at all.
 function hasBenchmark(results: main.RunResult[]): boolean {
@@ -466,17 +497,10 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
         .filter((p) => !Number.isNaN(p.t)),
     }));
 
-    // One line per distinct benchmark, appended after every portfolio so the
-    // palette indices above stay put. Portfolios sharing a benchmark would
-    // otherwise stack identical lines on top of each other.
-    const seenBenchmarks = new Set<string>();
-    for (const r of plottable) {
-      const ticker = r.benchmarkStats?.ticker;
-      if (!ticker || !r.benchmarkCurve || r.benchmarkCurve.length < 2) continue;
-      if (seenBenchmarks.has(ticker)) continue;
-      seenBenchmarks.add(ticker);
+    for (const b of benchmarkLines(plottable)) {
+      const r = b.result;
       series.push({
-        name: ticker,
+        name: b.name,
         benchmark: true,
         pts: r.benchmarkCurve
           .map((v, i) => ({ t: Date.parse(r.dates[i] ?? ""), v }))
@@ -508,33 +532,25 @@ function ResultsView({ results, fontSize, verdicts }: Props) {
     return { series, tMin, tMax, tSpan, yMin, yMax, ySpan };
   }, [plottable]);
 
-  // The benchmark's own figures, deduped by ticker exactly as the chart does,
-  // so N portfolios sharing $SP500 contribute one row rather than N identical
-  // ones. Rebased to the portfolio's starting capital, so its "final value"
-  // answers "what would that capital have become in the index".
-  const benchmarkRows = useMemo(() => {
-    const rows: {
-      ticker: string;
-      finalValue: number;
-      profit: number;
-      stats: main.RunResult["benchmarkStats"];
-    }[] = [];
-    const seen = new Set<string>();
-    for (const r of results) {
-      const ticker = r.benchmarkStats?.ticker;
-      const curve = r.benchmarkCurve;
-      if (!ticker || !curve || curve.length === 0 || seen.has(ticker)) continue;
-      seen.add(ticker);
-      const finalValue = curve[curve.length - 1];
-      rows.push({
-        ticker,
-        finalValue,
-        profit: finalValue - r.initialCapital,
-        stats: r.benchmarkStats,
-      });
-    }
-    return rows;
-  }, [results]);
+  // The benchmark's own figures, one row per chart line (benchmarkLines), so
+  // N portfolios sharing $SP500 and a deposit schedule contribute one row
+  // rather than N identical ones. The curve starts at the portfolio's capital
+  // and receives the same contributions, so its "final value" answers "what
+  // would that money have become in the index", and profit nets the
+  // contributions out exactly as the portfolio's own Profit does.
+  const benchmarkRows = useMemo(
+    () =>
+      benchmarkLines(results).map(({ name, result: r }) => {
+        const finalValue = r.benchmarkCurve[r.benchmarkCurve.length - 1];
+        return {
+          ticker: name,
+          finalValue,
+          profit: finalValue - r.initialCapital - (r.netContributions ?? 0),
+          stats: r.benchmarkStats,
+        };
+      }),
+    [results],
+  );
 
   // The chart is laid out in pixels, so its height, paddings, label size and
   // stroke are all multiplied by the zoom factor to grow in step with the rest

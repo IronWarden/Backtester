@@ -389,30 +389,7 @@ func registerBook(
 					float64(w), ticker)
 			})
 		}
-		for _, ticker := range p.Tickers {
-			px := priceOf(ticker, day)
-			if px <= 0 {
-				continue
-			}
-			if excess := held(ticker) - want(ticker, eq, px); excess > rebalanceEpsilon {
-				bar, _ := dateOf(ticker, day)
-				p.Sell(ticker, excess, px, bar.Date)
-			}
-		}
-		for _, ticker := range p.Tickers {
-			px := priceOf(ticker, day)
-			if px <= 0 {
-				continue
-			}
-			short := want(ticker, eq, px) - held(ticker)
-			if affordable := p.BuyingPower / px; short > affordable {
-				short = affordable
-			}
-			if short > rebalanceEpsilon {
-				bar, _ := dateOf(ticker, day)
-				p.Buy(ticker, short, px, bar.Date)
-			}
-		}
+		rebalanceShares(p, day, eq, priceOf, dateOf, want, held)
 		return 0
 	}))
 
@@ -431,4 +408,42 @@ func registerBook(
 		}
 		return pushNumOK(L, pos.Amount*priceOf(ticker, day)/eq, true)
 	}))
+}
+
+// rebalanceShares is the order half of target_weights: every position moved to
+// want(ticker, equity, price) shares, sells first so their proceeds fund the
+// buys, buys clamped to cash. Shared by the Lua host and the rules strategy
+// (rules.go) so the two cannot fill the same target differently — the
+// equivalence tests in rules_test.go depend on there being one copy.
+func rebalanceShares(
+	p *Portfolio, day int, eq float64,
+	priceOf func(string, int) float64,
+	dateOf func(string, int) (data.AssetData, bool),
+	want func(ticker string, eq, px float64) float64,
+	held func(ticker string) float64,
+) {
+	for _, ticker := range p.Tickers {
+		px := priceOf(ticker, day)
+		if px <= 0 {
+			continue
+		}
+		if excess := held(ticker) - want(ticker, eq, px); excess > rebalanceEpsilon {
+			bar, _ := dateOf(ticker, day)
+			p.Sell(ticker, excess, px, bar.Date)
+		}
+	}
+	for _, ticker := range p.Tickers {
+		px := priceOf(ticker, day)
+		if px <= 0 {
+			continue
+		}
+		short := want(ticker, eq, px) - held(ticker)
+		if affordable := p.BuyingPower / px; short > affordable {
+			short = affordable
+		}
+		if short > rebalanceEpsilon {
+			bar, _ := dateOf(ticker, day)
+			p.Buy(ticker, short, px, bar.Date)
+		}
+	}
 }

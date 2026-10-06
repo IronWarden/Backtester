@@ -275,6 +275,26 @@ func TestLeanReferenceDocumentsEngine(t *testing.T) {
 	}
 }
 
+// A rule entry the prompt does not name is one the assistant will never
+// write, and one it names that the engine dropped is one it will write and
+// see refused. Both prompts list the menu as RulesVocabulary serves it.
+func TestPromptsListEveryRuleEntry(t *testing.T) {
+	for _, e := range backtest.RulesVocabulary() {
+		for name, ref := range map[string]string{
+			"appReference": appReference, "leanReference": leanReference,
+		} {
+			if !strings.Contains(ref, e.Form) {
+				t.Errorf("%s never lists the %s rule %q", name, e.Kind, e.Form)
+			}
+		}
+	}
+	for _, key := range []string{"Rebalance", "Rank", "Pick", "Keep", "Filter", "Weight", "RiskOff"} {
+		if !strings.Contains(appReference, key) {
+			t.Errorf("appReference never mentions the Rules key %q", key)
+		}
+	}
+}
+
 // The whole point of the lean reference is fitting ollamaNumCtx with room
 // left for the live context, the tool schemas and an actual conversation.
 // Budget it at a third of the window (~4 chars per token) so that headroom

@@ -2,9 +2,9 @@ package backtest
 
 // Somewhere to start.
 //
-// The Lua tab opens on example.lua, which is buy-and-hold: correct, complete,
-// and no help at all to someone who wants to write their own idea, because it
-// shows one shape and never says there are others. The library has twelve
+// The Lua tab opens on a blank scratch file, which is no help at all to
+// someone who wants to write their own idea, because it shows no shape and
+// never says there are several. The library has twelve
 // scripts to crib from, but reading a finished strategy to learn its skeleton
 // means separating the shape from the idea, which is exactly the thing a
 // beginner cannot do yet.

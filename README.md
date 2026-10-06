@@ -118,11 +118,12 @@ which searches in this order and takes the first hit:
 The **strategy library is embedded in the binary** (`strategies/embed.go`, the
 way `ui` embeds `frontend/dist`), so `Strategy = "lua:strategies/rsi.lua"`
 resolves even when no `strategies/` directory exists anywhere. The embedded
-copy is always the last answer: a script on disk with the same name wins, which
-is what keeps editing one in the Lua tab working. Saving a script from the Lua
-tab writes to the on-disk library when there is one and to
-`~/.config/backtester/strategies/` when there is not — where the engine then
-finds it ahead of the built-in copy of the same name.
+copy is always the last answer: a script on disk with the same name wins.
+Saving a script from the Lua tab writes to the on-disk library when there is
+one and to `~/.config/backtester/strategies/` when there is not — where the
+engine then finds it. **The shipped scripts themselves are never written**:
+the Lua tab opens them read-only, and `WriteFile` refuses one outright
+(`strategies.IsLibrary`). Your own scripts are the ones named `my_…`.
 
 The database is the one thing that can genuinely be missing. The UI asks Go
 where it is (`DefaultDBPath`) instead of assuming `../stock_data.db`; when
@@ -336,11 +337,25 @@ python3 add_sec_financials.py                                # 2009 -> now
 
 It lands in its own `sec_financials` table rather than into `financials`, so the
 existing numbers cannot move and the overlapping window becomes a free
-correctness check on both sources. Metrics use the same vocabulary (`Total
-Revenue`, `Net Income`, `Stockholders Equity`, `Total Assets`, `Total Liabilities
-Net Minority Interest`, `Cash And Cash Equivalents`, `Operating Income`,
-`Ordinary Shares Number`, `Diluted Average Shares`). Read it with
-`src/data.LoadSECFundamentals`, and reduce it with `FirstKnown` / `KnownOn`.
+correctness check on both sources. Metrics use the same vocabulary — 30 of
+them, listed in `src/data.SECMetrics`: the income statement (`Total Revenue`,
+`Cost Of Revenue`, `Gross Profit`, `Operating Income`, `Net Income`, EPS, …), the
+cash flow statement (`Operating Cash Flow`, `Capital Expenditure`, dividends,
+buybacks) and the balance sheet (`Total Assets`, `Current Assets`, `Current
+Liabilities`, `Stockholders Equity`, `Long Term Debt`, `Goodwill`, …). A strategy
+reads it by setting `FundamentalSource = "sec"` — see [Fundamentals in a
+strategy](#fundamentals-in-a-strategy). From Go, read it with
+`src/data.LoadSECFundamentals` and reduce it with `FirstKnown` / `KnownOn`, or
+take point-in-time figures straight from `SECPointInTimeFundamentals`.
+
+Where filers disagree on which XBRL tag carries a figure, several tags map to one
+metric and each row records its `tag_rank` (0 = preferred). Two fallbacks matter
+more than the rest: companies with noncontrolling interests — PG, CAT, VZ, JNJ
+among them — tag balance-sheet equity only as total equity *including* those
+interests, so that stands in for `Stockholders Equity` when nothing better was
+filed (it reads somewhat high where minority interests are large); and IBM and
+CAT tag net income as `ProfitLoss` or `NetIncomeLossAvailableToCommonStockholdersBasic`
+for years at a time, which stand in for `Net Income` the same way.
 
 **The measurement that matters**, from the 2026Q1 quarter (96,713 rows, 5,109
 companies, 509 of them with no current ticker — the delisted ones):
@@ -362,11 +377,13 @@ date is honest evidence that the figure was public by then. `FirstKnown` takes t
 restatement at the original filing's date would be look-ahead bias in disguise.
 
 Costs and limits, measured: ~124 MB per quarterly ZIP, ~7 s to fetch and ~8 s to
-parse, ~102,000 rows kept. A full run is ~69 quarters, ~7 GB of transfer, ~20
-minutes, ~7 M rows; quarters are streamed and inserted one at a time so the disk
-cost is the table, not the archive. Only 10-K and 10-Q are read (amendments are
-skipped); segment and subsidiary rows are skipped to avoid double-counting the
-parent; year-to-date partials are skipped rather than mislabelled. SEC publishes
+parse. A full run (measured 2026-10-03) is 69 quarters, ~7 GB of transfer,
+~15–20 minutes and ~20 M rows, which adds ~0.55 GB to the database; quarters are
+streamed and inserted one at a time so the disk cost is the table, not the
+archive. Only 10-K and 10-Q are read (amendments are skipped); segment and
+subsidiary rows are skipped to avoid double-counting the parent; year-to-date
+partials are kept under their own `year_to_date` frequency, never labelled as a
+quarter. SEC publishes
 each quarter a few months in arrears — 2026Q1 was the newest available on
 2026-08-17 — and a missing quarter is reported and skipped.
 
@@ -376,9 +393,11 @@ Two further caveats before building anything on this:
   for January is published in mid-February and revised for years. Lag it
   before using it in a decision. Regime signals computed from prices
   (drawdown depth, realised volatility) need no lag.
-- **Fundamentals begin 2020-07** — five and a half years containing one
+- **`financials` begins 2020-07** — five and a half years containing one
   inflation shock and one hiking cycle, which is a single macro regime. Treat
   factor results over that window as hypothesis-generating, not evidence.
+  `FundamentalSource = "sec"` is the way past it: 2010 onward for most
+  companies, since XBRL filing phased in through 2009–2011.
 
 ### Sector data, from SEC EDGAR
 
@@ -1101,11 +1120,12 @@ Field reference:
 | `Name` | string | Identifier shown in metric output and results files. |
 | `BuyingPower` | float | Starting cash. Must not be negative; `0` is allowed, since `Deposit` can fund a portfolio after it starts. |
 | `StartDate` / `EndDate` | string | `YYYY-MM-DD`. `EndDate` must not precede `StartDate` — a reversed window is rejected by name rather than crashing the run. Both must be fully covered by every ticker's data or the run is rejected with an error naming the offending ticker and its real range. |
-| `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. No duplicates — a repeated symbol is rejected by name. To hold more of something, use `[portfolio.Params.weights]` with `buy_and_hold_weighted.lua`, not a second entry. |
+| `Tickers` | []string | Must exist in `stock_data_optimized` for the date range. No duplicates — a repeated symbol is rejected by name. To hold more of something, use `[portfolio.Params.weights]` with `buy_and_hold.lua`, not a second entry. |
 | `Strategy` | string | One strategy spec (below). Required by the CLI; the UI falls back to the Lua script open in its editor. |
 | `Params` | table | Optional, strategy-specific. Passed to a Lua strategy as the global `params`. **Built-in strategies ignore it entirely** — only `lua:` specs receive it, and a warning diagnostic says so if you set it on a built-in. `smaCross` takes its periods from the spec string (`smaCross:<short>:<long>:<buyType>`), so it cannot be swept through `Params` at all; use one `[[portfolio]]` block per setting. |
 | `Costs` | table | Optional trading-cost model (below). Absent means frictionless, which is how the engine behaved before costs existed. |
 | `Benchmark` | string | Optional ticker to score against, e.g. `"$SP500"`. Never traded — see below. |
+| `Rules` | table | Optional. A strategy written as choices from a fixed menu, used **instead of** `Strategy` (setting both is an error). See [`[portfolio.Rules]`](#portfoliorules) below. |
 
 Strategy specs:
 
@@ -1138,6 +1158,90 @@ end of a run that is now wasted.
 
 Errors exit `1`; warnings alone exit `0`, because a config with warnings still
 runs — it just may not do what was meant.
+
+### `[portfolio.Rules]`
+
+A strategy does not have to be a script. A rule set is a handful of choices
+from a fixed menu; the engine implements each entry once, in Go, and the app
+reads the whole set back as **one sentence**, so you check what the strategy
+does by reading English rather than code.
+
+```toml
+[[portfolio]]
+Name      = "Top 3 by momentum"
+BuyingPower = 100000.0
+StartDate = "2012-01-03"
+EndDate   = "2024-12-31"
+Tickers   = ["AAPL", "MSFT", "JNJ", "XOM", "JPM", "PG"]
+Benchmark = "$SP500"
+
+  [portfolio.Rules]
+  Rebalance = "monthly"
+  Rank      = "return_126"
+  Pick      = 3
+  Keep      = 5
+  Filter    = "above_sma_200"
+  RiskOff   = "benchmark_below_sma_200"
+```
+
+reads as:
+
+> Every 21 trading days (about monthly), hold the 3 stocks that rose most over
+> the last 126 trading days, counting only those trading above their 200-day
+> average, equally weighted; keep a holding while it stays in the top 5. Move
+> everything to cash whenever the S&P 500 is below its 200-day average. If none
+> qualify, the money waits in cash. The first decision waits for 200 trading
+> days of history; until then it holds cash.
+
+`DescribeRules` in `src/backtest/rules.go` is the only thing that writes that
+sentence, so the app, the assistant and the results cannot describe one rule set
+three different ways.
+
+| Key | Takes | Notes |
+| --- | --- | --- |
+| `Rebalance` | `daily` `weekly` `monthly` `quarterly` `annually` | **Required.** Counted in trading days: 1, 5, 21, 63, 252. |
+| `Rank` | a rank signal | Optional. Orders the candidates, strongest first. Without it, every ticker that passes `Filter` is held. |
+| `Pick` | int | Required with `Rank`: how many of the top-ranked to hold. At most the number of `Tickers`. |
+| `Keep` | int | Optional; `0` means `Pick`. A holding stays while it is still in the top `Keep`, so a name slipping from 3rd to 4th is not sold and bought back. Never below `Pick`. |
+| `Filter` | a filter | Optional. A ticker must pass it to be held at all. |
+| `Weight` | `equal` `inverse_vol_N` `allocations` | Optional; `equal` by default. `allocations` reads `[portfolio.Rules.Allocations]` (relative weights, each a listed ticker), rescaled over whatever is held. |
+| `RiskOff` | a risk-off test | Optional. The whole book goes to cash while it is true. It reads the portfolio's `Benchmark`, so it needs one. |
+
+The menu (`N`, `S`, `L` are trading days):
+
+| Kind | Entry | Meaning |
+| --- | --- | --- |
+| Rank | `return_N` | Price change over the last N days; highest first. |
+| Rank | `momentum_12_1` | Return from 273 to 21 trading days ago (12-1 momentum). |
+| Rank | `low_vol_N` | Standard deviation of daily returns over N days; **lowest** first. |
+| Rank | `drawdown_N` | How far the close sits below its N-day highest close; closest first. |
+| Filter | `above_sma_N` / `below_sma_N` | Close above / below the average of the **previous** N closes. |
+| Filter | `sma_cross_S_L` | The S-day average is above the L-day one (S < L). |
+| Filter | `rising_N` | Higher than N trading days ago. |
+| Filter | `rsi_below_X` / `rsi_above_X` | 14-day RSI below / above X. |
+| RiskOff | `benchmark_below_sma_N` | The benchmark's close is below the average of its previous N closes. |
+| RiskOff | `benchmark_drawdown_over_X` | The benchmark is more than X% below its 252-day highest close. |
+| Weight | `inverse_vol_N` | Weight each holding by 1 / its N-day volatility. |
+
+Nothing in the menu reads past the decision day, so a rule set **cannot have a
+look-ahead bug** — nobody writing one writes code. `rules_test.go` pins that
+directly (altering every bar after day *t* must not change the decision on *t*),
+pins each signal against the Lua primitive it mirrors (`roc`, `sma`, `rsi`,
+`stdev`) on every day and ticker, and pins whole rule sets to the cent against
+`momentum_rotation.lua` and `rebalance.lua`, and against hand-written Lua twins
+for the ideas no library script trades by target weight (`trend_following`'s
+"hold what is above its average", inverse-volatility, low-volatility, RSI). Orders go
+through the same code as Lua's `target_weights`, so costs, cash, the blotter and
+delisting behave identically.
+
+Until the longest lookback has history, the book holds cash and an `info`
+diagnostic says so once. Refused up front, by `-check` and the app's ✓ Check, in
+plain words: an unknown entry (with a "did you mean"), `Pick` above the ticker
+count, `Keep` below `Pick`, `RiskOff` without a `Benchmark`, `Allocations` naming
+a ticker not in `Tickers`, `Rules` together with `Strategy`, and — not supported
+yet — a `[portfolio.Sweep]` or `[portfolio.WalkForward]` on a rules portfolio.
+The universe is the portfolio's own `Tickers`, and the menu is price-only:
+fundamental signals still need a Lua strategy.
 
 ### `[portfolio.Costs]`
 
@@ -1206,6 +1310,12 @@ February.
 
 Flows are applied at the top of each day, **before the strategy acts**, so a
 strategy can invest a contribution the day it arrives rather than a day late.
+The built-in `buyAndHold` and the library's `buy_and_hold.lua` both do: each
+deposit is bought at that day's close, split at the weights the opening
+purchase used. Only the
+deposit is spent, never other idle cash. A Lua script reads the day's flow with
+`cashflow()` (positive on a deposit day, negative on a withdrawal day, 0
+otherwise) and can size an order against it with `buy_max`'s `budget` argument.
 
 #### A contribution is not a return
 
@@ -1293,15 +1403,26 @@ returns.
 The benchmark is also reported **on its own terms**, so "did I beat it" does
 not have to be inferred from alpha. Each result carries a `BenchmarkCurve` —
 the benchmark's value over the same trading days, compounded from the
-portfolio's own starting capital so the two share one axis and one origin —
-and `BenchmarkStats`, its own `AnnualReturn`, `RealAnnualReturn`,
+portfolio's own starting capital so the two share one axis and one origin,
+and **paid the same `[portfolio.Cashflow]` deposits and withdrawals on the same
+days** as the portfolio (each lands after that day's return, as a contribution
+is invested at the close). Without that, a portfolio fed $1,000 a month
+appears to beat the index on the chart by roughly what was paid in. The
+equal-weight baseline has always received the contributions; the benchmark
+line now does too. Then
+`BenchmarkStats`, its own `AnnualReturn`, `RealAnnualReturn`,
 `SharpeRatio`, `MaxDrawdown` and `StandardDev`, computed with the same
 functions the portfolio uses. The benchmark's real return is deflated over the
 same window by the same CPI ratio, so the two `Real %` figures answer the same
 question — a real portfolio return beside a nominal benchmark one would be
 worse than showing neither. The
 desktop UI draws the curve as a muted dashed line on the equity chart and adds
-one row per distinct benchmark to the metrics table.
+one row per distinct benchmark line to the metrics table. `BenchmarkStats`
+stay time-weighted (computed on the curve WITHOUT the flows), exactly as the
+portfolio's own metrics are, so a deposit never reads as index performance;
+the row's Profit nets the contributions out, as the portfolio's does. Two
+portfolios against the same benchmark with different deposit schedules get
+two lines, each named after its portfolio (`$SP500 · Monthly`).
 
 These are nested values rather than scalars, so — like `Drawdowns` and the
 calendar returns — they are not available as `[Output] fields`, which is a
@@ -1519,7 +1640,7 @@ cd src && go run main.go -research
 ```
 
 ```
-== My Portfolio (lua:strategies/buy_and_hold_weighted.lua)
+== My Portfolio (lua:strategies/buy_and_hold.lua)
   5 fills, none closed — nothing was sold, so there is no win rate to report
   MATCHED equal-weight buy-and-hold exactly (50.41%/yr) — it is doing the same thing
   Sharpe 1.26, p = 0.000 against random timing with the same exposure
@@ -1712,9 +1833,90 @@ before.
 Two Lua globals, and deliberately no more:
 
 ```lua
-fundamental(ticker, metric, day)  --> number, or nil if not yet published
-market_cap(ticker, day)           --> shares x close, or nil
+fundamental(ticker, metric, day)                  --> number, or nil if not yet published
+fundamental(ticker, metric, day, "annual")        --> the newest full fiscal year only
+fundamental(ticker, metric, day, "quarterly")     --> the newest single quarter only
+fundamental(ticker, metric, day, "annual", 1)     --> the fiscal year before that
+market_cap(ticker, day)                           --> shares x close, or nil
 ```
+
+**Name a frequency for any flow** (net income, revenue, cash flow). The bare
+three-argument form returns the newest figure published, whichever frequency
+it was, so over `financials` it can hand back a quarter one day and a year the
+next — every ratio built on it steps by about 4x at each company's own fiscal
+year end (T108). The bare form is kept exactly as it was so existing configs do
+not move; the fourth argument is the fix. An unknown frequency is an error, not
+a silent "any". The fifth, `periods_back`, steps back through earlier periods of
+that frequency *as each was known on `day`* — `fundamental(t, "Total Assets",
+day, "annual", 1)` is last year's year-end balance sheet, so year-over-year
+change needs no extra window of price history.
+
+#### `FundamentalSource = "sec"`: 2010 onward
+
+```toml
+[[portfolio]]
+FundamentalSource = "sec"
+Fundamentals = ["Net Income", "Stockholders Equity"]
+```
+
+reads values from `sec_financials` instead of `financials` — the T138 loader's
+30 metrics, back to 2009 (2010 in practice), each figure **as first filed**
+and usable from the day after its filing. A later restatement is never
+substituted back. Three things differ from the default source:
+
+- **Frequencies are SEC's own.** `"annual"` is a full fiscal year and
+  `"quarterly"` a single quarter, from the filing's period length rather than a
+  label, so the T108 mislabelling cannot happen. A balance-sheet figure answers
+  to both: `"quarterly"` is the newest balance sheet of any kind, `"annual"`
+  the fiscal-year-end one from the 10-K, which lines up with an annual flow.
+  The bare form never mixes: it means `"annual"` for a flow and the newest
+  balance sheet for a level.
+- **Values are as reported.** SEC does not restate share counts for a later
+  split, so `Ordinary Shares Number`, the EPS metrics and `Diluted Average
+  Shares` jump at every split, and **`market_cap()` always returns `nil`** —
+  an as-reported share count times a split-adjusted close would be off by every
+  split since. Ratios of two dollar figures (ROE, margins, debt / assets) are
+  unaffected, and they are what the shipped fundamentals strategies use.
+- **Only listed companies are reachable.** Delisted filers are in the table
+  with no ticker, and joining them to a price series is T51. A hand-typed
+  `Tickers` list is survivors by construction anyway; read results with that
+  in mind.
+
+**A script can declare what it reads**, so picking it by name is enough. A
+top-level table in the script itself
+
+```lua
+fundamentals = {
+    source  = "sec",
+    metrics = { "Net Income", "Stockholders Equity" },
+}
+```
+
+is applied to any portfolio running the script whose config declares no
+`Fundamentals` of its own (a config `FundamentalSource` still wins over the
+table's `source`). It is code rather than a comment on purpose — it used to be
+a `-- @fundamentals:` header line, and deleting a comment while tidying a copy
+switched the strategy off without a word. The engine **reads** the table from
+the script's syntax tree before the run; it does not run the script to get it,
+because the figures are fetched before any Lua executes. So it must be a plain
+table of quoted names: a computed name, an unknown field or a second
+assignment is refused with the line it is on. A config that names metrics means exactly those. And a script
+that asks for a metric nobody loaded gets a warning in the run's diagnostics,
+once per metric, instead of a silent `nil` on every day — which is how a
+fundamentals strategy chosen from the gallery used to hold cash for a whole run
+without a word.
+
+The config is checked when it loads: a metric `sec_financials` does not carry
+(`EBITDA`, say) is refused with the list of the ones it does, rather than
+returning `nil` forever; so is `"sec"` with no `Fundamentals`, and any other
+value. Without the key, or with `"financials"`, nothing changes.
+
+Five strategies in `strategies/` use it — `quality_roe.lua`,
+`gross_profitability.lua`, `piotroski_fscore.lua`, `low_asset_growth.lua` and
+`strong_balance_sheet.lua`, each declaring its figures in a `fundamentals`
+table, so naming one as the `Strategy` is all a portfolio needs. Each has a block in
+`strategy_library.toml`.
+See [strategies/README.md](strategies/README.md#fundamentals-strategies).
 
 **They return `nil`, not 0, which breaks the convention `price()` follows.** A
 price of zero is impossible, so 0 safely means "absent". A company can genuinely
@@ -1730,8 +1932,8 @@ lookup only ever returns what was public that morning. `market_cap` also fetches
 than a plausible-looking number when the share count is missing or the close is
 ≤ 0.
 
-**Coverage is measured rather than enforced.** Reported data begins in 2020, so
-a strategy run from 2010 sees `nil` for the first decade, trades only in the
+**Coverage is measured rather than enforced.** `financials` begins in 2020, so
+a strategy run on it from 2010 sees `nil` for the first decade, trades only in the
 back half, and looks like it found an edge. Refusing that window would be too
 blunt — a strategy may legitimately act only when fundamentals exist — so the
 `FundamentalCoverage` metric reports the share of (day × ticker × declared
@@ -2399,11 +2601,32 @@ global added to the engine cannot ship without its documentation, and the
 editor can never offer one that does not exist — which would be worse than
 offering nothing, since you would only find out on day 0 of a run.
 
+### Reading a library strategy, and editing your own copy
+
+Every strategy picked on the Backtest tab opens in the Lua tab in a buffer of
+its own, and its card there has a **Read the script →** link that goes
+straight to it — so what a strategy actually does is one click from where it
+was chosen. Each open script is a chip above the editor; 🔒 marks a library
+script and • unsaved work.
+
+A library script is **read-only**. It is what the gallery describes and what
+every config naming it runs, so an edit would quietly change other runs. To
+change one, **Edit a copy**: it opens `strategies/my_<name>.lua` — your copy,
+first line relabelled, created on Save — or your existing copy if there
+already is one, so a second click never overwrites work. Run it with **▶ Run
+this script**, or name it in a config as `Strategy =
+"lua:strategies/my_<name>.lua"`. The Assistant's "Insert into Lua editor"
+lands in the scratch file when a library script is showing.
+
+A portfolio that omits `Strategy` runs the script the config names (or the
+scratch file), not whichever chip is open — reading a library script never
+changes what a run does.
+
 ### Starting a script, and running it
 
-The Lua tab opens on `example.lua`, which is buy-and-hold — correct, and no
-help at all if you want to write your own idea, because it shows one shape and
-never says there are others. Above the editor, while the buffer holds no
+The Lua tab opens on `strategies/my_strategy.lua`, your scratch file — a blank
+`step(day)` until you first save it, so Save never changes a library strategy.
+A blank file says nothing about how a strategy is shaped, though. Above the editor, while the buffer holds no
 unsaved work, are three **starting shapes**:
 
 | shape | for |
@@ -2577,6 +2800,47 @@ resolves to two names. They appear only once something else in the form has
 holdings: on a wholly empty form the starter examples above are the better
 answer, and offering both would be two answers to one question.
 
+### Copying a famous investor
+
+Every portfolio card has a **Copy a famous investor** dropdown in its
+*Holdings & allocation* box, so one can run next to your own; an empty form
+also lists them as cards under the starter examples. Picking one **replaces**
+the card's holdings, weights, dates and strategy (capital and any cashflow
+schedule are kept), and the card then shows that portfolio's caveat. One your
+database cannot build stays in the list, disabled and marked *not in this
+database*. The portfolios:
+
+| portfolio | holdings | held how |
+|---|---|---|
+| Buffett 90/10 | `$SP500` 90, `$CASH` 10 — his instructions for his own estate (2013 letter) | `rebalance.lua`, 30 years |
+| Berkshire 13F, Q4 2015 | the filing's 25 largest holdings at its dollar weights (WFC, KHC, KO, IBM, AXP, …), less any your database cannot price | bought 2016-02-17 and held |
+| Dalio All Weather | VTI 30, TLT 40, IEF 15, GLD 7.5, DBC 7.5 | `rebalance.lua`, 20 years |
+| Browne Permanent Portfolio | VTI, TLT, GLD, `$CASH` at 25 each | `rebalance.lua`, 20 years |
+| Swensen portfolio | VTI 30, VEA 15, VWO 5, VNQ 20, TIP 15, IEF 15 | `rebalance.lua`, 15 years |
+
+**There is deliberately no "Buffett's current holdings".** Today's portfolio
+run back over ten years is a list of what worked, chosen with the ending
+already known — it says nothing about what copying him would have earned. So
+every entry is something a person could have bought on the window's first day:
+a published recipe, or a **13F bought the day after it was filed** (Berkshire's
+Q4 2015 report went public on 16 Feb 2016, SEC accession
+0000950123-16-015025). A database whose data does not cover that day withdraws
+it rather than starting it elsewhere.
+
+Each shows its caveat: the recipes rebalance quarterly where their
+authors gave a band or nothing; years before a recipe was published (All
+Weather, 2014) test the recipe, not anyone following it; and the 13F leaves out
+Precision Castparts (bought outright before the filing) and anything your
+database cannot price, scaling the rest to 100%. Weights are filled as exact
+percentages, and picking one also registers a hypothesis, as the examples do.
+On the bundled database the 13F copy made 11.2%/yr against the S&P 500's 15.7%
+over the same days.
+
+`rebalance.lua` now takes a custom split from the form as its `weights`
+Param, the same table buy-and-hold reads; every other library strategy still
+sizes its own positions. A `[[Portfolio]]` block for each lives under
+*Famous investors* in `strategy_library.toml`.
+
 ### Importing the portfolio you already hold
 
 **Import…**, beside *Add* in the holdings box, fills the card from a file of
@@ -2630,7 +2894,10 @@ hand-write TOML, which is a strange thing to ask of the tab the app opens on.
 A new portfolio inherits the previous one's window and starting capital (two
 portfolios over different date ranges are not a comparison) with no holdings
 and a fresh name. Each card carries its own tickers, dates, strategy, benchmark
-and coverage verdict. **Run is enabled only when every portfolio is runnable** —
+and coverage verdict. **Run is enabled only when every portfolio is runnable** — and when it is
+not, a line beside it says what to fix first (*To run, B: add at least one
+holding.*), from the same check that disables the button (`runBlocker` in
+`portfolioCheck.ts`), so the two cannot disagree —
 a run carries all of them, so one broken card stops the run rather than quietly
 contributing a bad block — and **two portfolios may not share a name**, because
 the name is how every result, trade and verdict is labelled.
@@ -2692,12 +2959,14 @@ run rather than after a bad result:
 > **Fails when** range-bound markets: every breakout fails back into the
 > range, and the win rate is low by design even when it works.
 
-The default is buy-and-hold, which is the mode's original behaviour: equal
-weights use the built-in `buyAndHold:equalWeights`, and custom percentages use
-`strategies/buy_and_hold_weighted.lua`. Picking a library strategy emits
+The default is buy-and-hold, which is the mode's original behaviour: it runs
+`strategies/buy_and_hold.lua`, splitting equally, or passing your custom
+percentages as `[portfolio.Params] weights`. Deposits from a cashflow schedule
+are invested the day they arrive, split the same way. Picking a library strategy emits
 `Strategy = "lua:strategies/<file>"` and runs it on its own defaults —
 the strategy sizes its own positions, so the allocation percentages are not
-consulted and the form says so. To tune its parameters, switch to Advanced and
+consulted and the form says so — except `rebalance.lua`, which holds them as
+its target weights. To tune its parameters, switch to Advanced and
 add a `[portfolio.Params]` block.
 
 **Compare it against** sets `Benchmark`, defaulting to `$SP500`. This is the
@@ -2741,9 +3010,10 @@ re-running the same question keeps it. Leaving the claim empty runs the
 backtest unjudged — different from judging it against a default nobody chose.
 **Edit as TOML →** carries the question across to the Config tab's raw box.
 
-`example.lua` is deliberately absent from the picker: it is the Lua tab's
-editable starter and a copy of `buy_and_hold.lua`, so listing it would offer
-the same idea twice.
+`my_strategy.lua` is deliberately absent from the picker: it is the Lua tab's
+scratch file, not a strategy. `buy_and_hold_weighted.lua` and `example.lua`
+were folded into `buy_and_hold.lua`; a saved config that still names either
+runs `buy_and_hold.lua`.
 
 ### Reading the results
 
@@ -2768,14 +3038,60 @@ window* — with **Show** and **Dock** buttons, and which panels are out, and
 where, is remembered across runs and launches. A window is always pulled back
 on screen, whatever the display did since.
 
-The bar between the tab and the results drags to resize (double-click it
-to reset) and remembers its height; so does the assistant panel's left edge.
-Its **▁** button minimises the results down to the bar, giving the tab the
-whole window, and **□** maximises them over the tab; pressing the same button
-again (**▴** / **❐**) restores, and dragging the bar restores from either. A
-minimised panel reopens by itself when a run produces results, and stays
-minimised across launches; maximised does not survive a restart, so the app
-never opens with its tabs hidden.
+The bar between the tab and the results drags to resize and remembers its
+height; so does the assistant panel's left edge (double-click that edge to
+reset its width). Its **▁** button minimises the results down to the bar,
+giving the tab the whole window, and **□** maximises them over the tab;
+pressing the same button again (**▴** / **❐**) restores, and dragging the bar
+restores from either. **Double-clicking the bar** steps through the same
+states like a window's title bar: minimised → normal → maximised → normal.
+
+**The results start minimised** at every launch — results are never restored,
+so an open panel would only be an empty box — and open by themselves the
+first time a run produces results. Maximised never survives a restart, so
+the app never opens with its tabs hidden.
+
+The **assistant** maximises the same way: double-click its header bar (not
+its model picker or buttons), or its **□** button, and it takes the whole
+row while the tabs step aside; again (or **❐**, or Esc) restores.
+
+### Keyboard shortcuts
+
+**F1** (or the **⌨** chip in the top bar) lists them. **On a Mac every one is
+pressed with Cmd instead of Ctrl** — Cmd+Shift+P, Cmd+Enter, Cmd+1 — and the
+list, the palette and the button tooltips print Cmd there. Zoom follows the
+browser convention, Ctrl/Cmd with **=**, **-** and **0**; Ctrl+↑/↓ and
+Ctrl+scroll still work too, but not with Cmd, since Cmd+arrow moves the caret
+on a Mac.
+
+| keys | does |
+|---|---|
+| Ctrl+Shift+P | **Command palette** (Ctrl+K also opens it): every action by name — type any words of it, ↑/↓, Enter. Includes the actions with no key (Check config/script, Open config file…, Choose database…, zoom), and shows each one's shortcut, so it also teaches them. An action that does not apply here (Save on the Backtest tab) is listed greyed out with the reason. |
+| / | Jump to the ticker search on the Backtest tab (only when you are not typing in a field — there it types a `/`) |
+| Ctrl+Enter | Run the backtest — the visible Run button, so it is refused exactly when the button is disabled, and then the status line says why (*Can't run yet: add at least one holding.*). On the Data tab it runs the query, as before. |
+| Ctrl+1 / 2 / 3 | Backtest / Config / Data tab |
+| Ctrl+J | Show or hide the assistant |
+| Ctrl+Shift+J | Maximise or restore the assistant |
+| Ctrl+M | Minimise or restore the results |
+| Ctrl+Shift+M | Maximise or restore the results |
+| Ctrl+S | Save the config and scripts (Config tab); never the webview's "save page" |
+| Esc | Close the palette or the shortcut list, else restore a maximised pane; otherwise it reaches whatever has focus |
+| Ctrl+= / Ctrl+- / Ctrl+0 | Zoom in / out / reset (also Ctrl+↑ / ↓ and Ctrl+scroll) |
+
+**While a run is going** the status line counts up beside *Running…*
+(`7s`, `1m 05s`), so a long run reads as working rather than frozen. The
+timer is its own tiny component: its once-a-second tick redraws that span
+and nothing else.
+
+**Startup.** The code editor (Monaco) is most of the app's JavaScript and the
+Backtest tab never shows it, so it is not in the startup bundle: it loads in
+the background just after the first screen draws (`monacoSetup.ts`,
+`LazyEditor.tsx`), and is ready long before the Config or Data tab is opened.
+The startup bundle went from 4.0 MB to 263 KB.
+
+The table lives in `ui/frontend/src/shortcuts.tsx`; the overlay, the palette
+(`commandPalette.tsx`) and the button tooltips read it, and a key and a palette
+pick run the same code, so they cannot drift from what the keys do.
 
 ## AI assistant (UI) — Claude or local Ollama models
 
@@ -2889,7 +3205,7 @@ Each result additionally carries time-sliced views of the same run, available to
 
 Lua is the intended route — no rebuild, and the engine handles the day loop.
 
-1. Copy a file from `strategies/` and edit it. A strategy is one global `step(day)` function, called once per trading day with `day` counting from 0; the engine provides `price()`, `sma()`, `rsi()`, `cash()`, `position()`, `buy()`, `buy_max()`, `sell()`, `sell_all()`, and the `tickers` / `params` globals. Orders may only name a ticker from the `tickers` global — a typo is refused and reported as a run error rather than silently burning the cash. Full API, patterns, and gotchas: [`strategies/README.md`](strategies/README.md).
+1. Copy a file from `strategies/` and edit it. A strategy is one global `step(day)` function, called once per trading day with `day` counting from 0; the engine provides `price()`, `sma()`, `rsi()`, `cash()`, `cashflow()`, `position()`, `buy()`, `buy_max()`, `sell()`, `sell_all()`, and the `tickers` / `params` globals. Orders may only name a ticker from the `tickers` global — a typo is refused and reported as a run error rather than silently burning the cash. Full API, patterns, and gotchas: [`strategies/README.md`](strategies/README.md).
 2. Point a portfolio at it with `Strategy = "lua:strategies/your_file.lua"` and pass any settings in a `[portfolio.Params]` block.
 3. Add it to `shippedStrategies()` in `src/backtest/strategies_library_test.go`, which runs every shipped strategy against synthetic data and fails if it errors, overspends, or never trades.
 

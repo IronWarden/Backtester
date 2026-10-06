@@ -69,7 +69,7 @@ func TestDefaultTOMLRunsWhatItAlwaysRan(t *testing.T) {
 	}
 	// The Lua tab picks its script by matching `Strategy = "lua:..."` in the
 	// raw text, comments included; a commented example in that form would
-	// silently swap example.lua for another script.
+	// silently swap the scratch script for another one.
 	if p := (&App{}).FindLuaPathInConfig(defaultTOML(t), ""); p != "" {
 		t.Errorf("the default makes the Lua tab open %q; it must open the default script", p)
 	}
@@ -112,6 +112,7 @@ func TestDefaultTOMLListsEveryOption(t *testing.T) {
 		}
 	}
 	check("portfolio.", reflect.TypeOf(backtest.PortfolioConfig{}))
+	check("portfolio.Rules.", reflect.TypeOf(backtest.RulesConfig{}))
 	check("portfolio.Costs.", reflect.TypeOf(backtest.CostConfig{}))
 	check("portfolio.Margin.", reflect.TypeOf(backtest.MarginConfig{}))
 	check("portfolio.Cashflow.", reflect.TypeOf(backtest.CashflowConfig{}))

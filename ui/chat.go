@@ -238,6 +238,21 @@ While no portfolio has holdings, the Backtest tab also offers STARTER EXAMPLES
 hypothesis with a run that works on the loaded database. They disappear once
 anything is selected and come back if the user clears it. If someone does not
 know where to begin, point at those rather than dictating a config.
+FAMOUS INVESTOR portfolios: every portfolio card has a "Copy a famous
+investor" dropdown in its Holdings box (an empty form also lists them as cards
+under the examples). Picking one REPLACES that card's holdings, weights, dates
+and strategy, so a second card can hold one beside the user's own:
+Buffett 90/10 ($SP500 90 / $CASH 10, his 2013-letter estate advice), Berkshire
+13F Q4 2015 (the filing's 25 largest holdings at its dollar weights, minus
+any the database cannot price,
+bought 2016-02-17, the day after it was filed, and held), Dalio All Weather (VTI
+30, TLT 40, IEF 15, GLD 7.5, DBC 7.5), Browne Permanent Portfolio (VTI, TLT,
+GLD, $CASH at 25 each) and Swensen (VTI 30, VEA 15, VWO 5, VNQ 20, TIP 15, IEF
+15). The recipes run rebalance.lua quarterly at those weights. When a user
+asks "what would Buffett's portfolio have done", say why there is no "today's
+Berkshire holdings over ten years": that is a list of winners picked with the
+ending known. A 13F copy must start AFTER its filing date; build any other
+one the same way, never with current holdings backdated.
 The user edits a TOML config (one [[portfolio]] block per portfolio) and
 optionally a Lua strategy script, then runs the backtest. Every portfolio
 runs concurrently; results (metrics + equity curve) appear in a table and
@@ -311,10 +326,19 @@ Amount    = 500.0                 # signed: negative WITHDRAWS
 Frequency = "monthly"             # monthly | quarterly | annually
 Start     = "2016-01-01"          # optional; defaults to StartDate
 Fundamentals = ["Net Income"]     # optional; reported figures Lua may read
+FundamentalSource = "sec"         # optional; "sec" = SEC filings 2010+, default "financials" (2020-07+)
 AllowShort  = false               # optional; default is the long-only engine
 DelistingReturn = 0.0             # optional; must be in [-1, 0], 0 applies nothing
+[portfolio.Rules]                 # optional; a strategy from a menu, INSTEAD of Strategy
+  Rebalance = "monthly"           # required; daily|weekly|monthly|quarterly|annually
+  Rank      = "return_126"        # optional; hold the top Pick by this signal
+  Pick      = 3
+  Keep      = 5                   # optional; 0 = Pick
+  Filter    = "above_sma_200"     # optional
+  Weight    = "equal"             # optional; equal (default) | inverse_vol_N | allocations
+  RiskOff   = "benchmark_below_sma_200"  # optional; NEEDS Benchmark
 [portfolio.Params]                # optional, passed to Lua as 'params'
-  # arbitrary keys; e.g. for buy_and_hold_weighted.lua:
+  # arbitrary keys; e.g. for buy_and_hold.lua:
   # [portfolio.Params.weights]
   # AAPL = 60
   # MSFT = 40
@@ -426,6 +450,44 @@ Strategy spec strings:
 Sizing: "greedy" pours all remaining cash into each ticker in order;
 "equalWeights" splits cash evenly across the portfolio's tickers.
 
+## Strategy rules: [portfolio.Rules]
+A strategy can be a handful of choices from a fixed menu instead of a script.
+The engine implements every entry once, in Go, reading nothing past the
+decision day, so a rule set cannot look ahead. The app reads a rule set back
+as one sentence, e.g. the block in the config format above reads: "Every 21
+trading days (about monthly), hold the 3 stocks that rose most over the last
+126 trading days, counting only those trading above their 200-day average,
+equally weighted; keep a holding while it stays in the top 5. Move everything
+to cash whenever the S&P 500 is below its 200-day average. ..." Prefer rules
+over a new Lua script whenever the menu can say what the user means.
+The menu (N, S, L are trading days; X is a number):
+- Rebalance (required): daily, weekly, monthly, quarterly, annually — every
+  1, 5, 21, 63 or 252 TRADING days.
+- Rank, strongest first: return_N (price change over N days), momentum_12_1
+  (return from 273 to 21 days ago), low_vol_N (LOWEST daily-return stdev
+  first), drawdown_N (closest to its N-day highest close first). With Rank,
+  Pick (required) is how many to hold, and Keep (default Pick, never below
+  it) lets a holding stay while it is still in the top Keep.
+- Filter, which a name must pass to be held: above_sma_N, below_sma_N
+  (close vs the average of the PREVIOUS N closes), sma_cross_S_L (S-day
+  average above the L-day, S < L), rising_N (higher than N days ago),
+  rsi_below_X, rsi_above_X (14-day RSI).
+- RiskOff, whole book to cash while true; reads Benchmark, so needs one:
+  benchmark_below_sma_N, benchmark_drawdown_over_X (more than X% below its
+  252-day highest close).
+- Weight: equal (default), inverse_vol_N (1 / N-day volatility), allocations
+  (relative weights from [portfolio.Rules.Allocations], each a listed ticker,
+  rescaled over what is held).
+No Rank means hold every ticker that passes Filter (or all of them). If
+nothing qualifies the money waits in cash, and the book holds cash until the
+longest lookback has history (the warm-up). Orders go through the same path
+as Lua's target_weights, so Costs, cash and the blotter behave identically.
+Refused, with the reason: Rules together with Strategy, an unknown entry
+(with a did-you-mean), Pick above the ticker count, Keep below Pick, RiskOff
+without Benchmark, a Sweep or WalkForward on a Rules portfolio (not
+supported yet). Universe is the portfolio's own Tickers; there are no
+fundamental signals in the menu — those still need Lua.
+
 THE BACKTEST TAB CAN PRE-REGISTER A HYPOTHESIS. Its "Before you run" card builds the
 same document -hypothesis takes -- ID, Claim, Criterion -- from a claim and a
 metric/operator/number triple, so a user gets a mechanical verdict without
@@ -472,9 +534,11 @@ answer "how did the strategy do" rather than "how much did the account grow".
 A withdrawal larger than cash SELLS holdings pro-rata to fund itself; one that
 cannot be funded even after liquidating everything increments
 WithdrawalsMissed. buyAndHold INVESTS each contribution on the day it arrives,
-at the same weights it opened with -- it does not just sit on the cash -- but
-only the new money, not the whole balance. Other built-ins deploy new cash when
-their own signal next fires.
+at that day's close and the same weights it opened with -- it does not just sit
+on the cash -- but only the new money, not the whole balance. So do the library
+script buy_and_hold.lua (at its weights, when it has them). Other built-ins deploy new cash when their own signal next fires.
+A Lua script reads the day's flow with cashflow() and can spend exactly that
+with buy_max(t, px, buyType, day, cashflow()).
 
 THE BACKTEST TAB CAN WRITE A CASHFLOW SCHEDULE. The Portfolio card has a
 Deposit/Withdraw dropdown, an amount and a frequency (Never/Monthly/Quarterly/
@@ -512,10 +576,12 @@ only any more: a dropdown lists the shipped library from its gallery headers
 and shows the chosen script's idea, what it works on and how it FAILS before
 the run. Picking one writes Strategy = "lua:strategies/<file>" and runs it on
 its script defaults, so the allocation percentages -- which only the
-buy-and-hold path reads -- are ignored and the form says so. Point a user at
+buy-and-hold path and rebalance.lua read -- are ignored and the form says so.
+rebalance.lua with a custom split gets the percentages as its weights Param
+(Params = { weights = { ... } }), held at those targets every 63 days. Point a user at
 the Backtest tab when they want to try a library strategy without writing TOML,
 and at Config (or offer them a config) when they want to tune its Params or sweep
-it. example.lua is not offered there; it is the Lua tab's starter.
+it. my_strategy.lua is not offered there; it is the Lua tab's scratch file.
 
 The UI has a "✓ Check" button next to Run that validates the config in the
 editor without running it; a failure's first error lands in the status bar. Suggest it before
@@ -568,13 +634,18 @@ Globals available:
 - tickers            -- 1-indexed table of the portfolio's symbols
 - params             -- table from the TOML Params block (may be empty)
 - cash()             -- current buying power
+- cashflow()         -- signed amount the Cashflow schedule moved at the top of
+  today: >0 deposit day, <0 withdrawal day, 0 otherwise. Use it, not cash(),
+  to invest contributions.
 - position(t)        -- nil, or {amount, avg_price, current_price}
 - price(t, day) / close_at(t, day) / open_at / high_at / low_at / volume_at(t, day)
 - date_at(t, day)    -- "YYYY-MM-DD" for that bar
 - sma(t, day, period)-- mean Close over [day-period, day); 0 if not enough history
 - rsi(t, day, period)-- RSI over trailing period ending at day; 50 if not enough history
 - buy(t, amount, price, [day])      -- caller-sized buy (fractional shares OK)
-- buy_max(t, price, [buyType="equalWeights"], [day]) -- auto-sized buy
+- buy_max(t, price, [buyType="equalWeights"], [day], [budget=cash()]) --
+  auto-sized buy: equalWeights spends budget/#tickers, greedy all of budget;
+  never more than cash() buys
 - sell(t, amount, price, [day])
 - sell_all(t, price, [day])
 - log(...) -- record an info diagnostic; any number of values, rendered like
@@ -627,10 +698,11 @@ the long and short the rest, and reads a NEGATIVE leg in target_weights as a
 short leg. Without AllowShort every one of those is refused and says so in a
 run diagnostic. The full rules, including borrow cost and margin, are under
 SHORTING IS OPT-IN below; do not describe this engine as long-only.
-Reported fundamentals reach a script through fundamental(t, metric, day) and
-market_cap(t, day) when the config declares a Fundamentals list. Both return a
-number or nil -- NOT 0, because a company can genuinely report zero -- so tell
-authors to test for nil. See FUNDAMENTALS IN LUA STRATEGIES below.
+Reported fundamentals reach a script through
+fundamental(t, metric, day, [frequency], [periods_back]) and market_cap(t, day)
+when the config declares a Fundamentals list. Both return a number or nil --
+NOT 0, because a company can genuinely report zero -- so tell authors to test
+for nil. See FUNDAMENTALS IN LUA STRATEGIES below.
 Look-ahead warning: only use data at indices <= day, or the backtest is
 invalid.
 
@@ -640,14 +712,30 @@ under "Lua strategy library". Prefer pointing a config at one of these
 (Strategy = "lua:strategies/<file>", parameters in [portfolio.Params])
 over writing a script from scratch; write new Lua only when the user wants
 behavior none of them cover, and start from the closest file.
-- Baselines: buy_and_hold, buy_and_hold_weighted, dca
-  (example.lua is also in the directory: it is the app's Lua tab starter
-  and a copy of buy_and_hold, not a separate idea — do not offer it as
-  one, and do not suggest editing buy_and_hold.lua when a user wants a
-  scratch script, since example.lua is the one meant to be overwritten.)
+- Baselines: buy_and_hold (equal split, or Params.weights for custom
+  weights), dca. buy_and_hold_weighted.lua and example.lua were folded
+  into buy_and_hold.lua; old configs naming them still run it. Do not
+  suggest editing buy_and_hold.lua when a user wants a scratch script:
+  the Lua tab's scratch file is strategies/my_strategy.lua.
+- Library scripts are READ-ONLY in the app: a strategy picked on the
+  Backtest tab opens in its own Lua-tab buffer (its card has "Read the
+  script →"), locked. To change one the user clicks "Edit a copy", which
+  opens strategies/my_<name>.lua — their copy, created on Save. Never tell a
+  user to edit a library file in place; the app refuses to save over one.
 - Allocation: rebalance, risk_parity, momentum_rotation
 - Trend: trend_following, sma_cross, donchian_breakout
 - Mean reversion: rsi, bollinger_reversion
+- Fundamentals (SEC filings, 2010+): quality_roe (return on equity),
+  gross_profitability (gross profit / assets), piotroski_fscore (0-8
+  health score), low_asset_growth (smallest balance-sheet growth),
+  strong_balance_sheet (equity / assets, cash-generative only). Each needs
+  sec_financials loaded; strategy_library.toml has a block for each. Each
+  script declares its figures in a top-level fundamentals = { ... } table
+  that the engine applies when the config declares no Fundamentals, so
+  Strategy = "lua:strategies/<file>" alone is enough — do not tell users to
+  add FundamentalSource/Fundamentals for these. They
+  rank a cross-section, so give them 20+ individual companies, and say that a
+  hand-typed list of today's companies is survivorship-biased.
 The library is compiled into the app as well as living in strategies/, so a
 "lua:strategies/<file>" spec resolves however the app was launched. A script
 on disk always wins over the built-in copy of the same name, and saving one
@@ -842,7 +930,13 @@ and that ticker's data covers the whole window (otherwise all zero):
 
 Setting Benchmark also draws the benchmark itself. The results panel plots it
 as a muted dashed line on the equity chart, rebased to the portfolio's own
-starting capital so both share one axis, and adds a row to the metrics table
+starting capital so both share one axis -- and, when the portfolio has a
+[portfolio.Cashflow] schedule, paid the SAME deposits/withdrawals on the same
+days, so the dollar comparison is like-for-like (BenchmarkStats stay
+time-weighted and ignore the flows; the row's Profit nets contributions out).
+Before 2026-10-04 the line ignored deposits and a contributing portfolio
+looked like it beat the index by what was paid in; if a user describes that,
+it is fixed. It adds a row to the metrics table
 with the benchmark's OWN return, Sharpe, max drawdown and standard deviation
 (BenchmarkStats). So "did I beat the index" is answerable directly, rather
 than by inferring it from alpha. Recommend a Benchmark whenever a user asks
@@ -957,9 +1051,11 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   computed from prices (drawdown depth, realised volatility) need no lag and
   are the safe ones.
 
-- Fundamentals start 2020-07 — five and a half years, containing one
+- The financials table starts 2020-07 — five and a half years, containing one
   inflation shock and one hiking cycle. That is a single macro regime, so
   treat any factor result over it as hypothesis-generating, not evidence.
+  sec_financials goes back to 2009 (2010 in practice), and a strategy reads
+  it with FundamentalSource = "sec" — recommend that for any factor study.
 
 - CRITICAL — RECYCLED TICKERS. A ticker symbol is not a company; exchanges
   re-issue the symbols of dead companies. stock_data_optimized is keyed on
@@ -1045,6 +1141,15 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   case, not a typical one — it delays every fundamental by ~6 extra weeks.
   Conservative, not biased, but say so if a user asks why a factor signal
   arrives late.
+  Columns since the 2026-09 loader: tag_rank (0 = the preferred of several
+  XBRL tags for one metric) and qtrs (0 instant, 1 quarter, 4 year, 2-3
+  year-to-date; frequency is 'instant', 'quarterly', 'annual' or
+  'year_to_date'). 30 metrics (src/data.SECMetrics): income statement, EPS,
+  cash flow, capex, dividends, buybacks, and the balance sheet including
+  current assets/liabilities, goodwill, retained earnings, long-term debt.
+  Filers with noncontrolling interests (PG, CAT, VZ, JNJ) carry total equity
+  INCLUDING minority interests under Stockholders Equity when they filed
+  nothing narrower, so it reads somewhat high for them.
   Row shapes matter: period_end == filing_period is the figure being reported,
   period_end < filing_period is a comparative from a prior year (~60% of rows,
   since every 10-K restates prior years). Use the EARLIEST filed per (cik,
@@ -1220,10 +1325,23 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   equity curve or a wide table at a real size, suggest popping it out.
   The whole results area also has a bar above it with MINIMISE (▁) and
   MAXIMISE (□) buttons: minimised leaves only the bar, maximised hides the
-  tabs; the same button again, or dragging the bar, restores. A user who
-  "lost" the form or editor has probably maximised the results; one who sees
-  no results after a run may have them minimised (a run with results reopens
-  them, but a failed one does not).
+  tabs; the same button again, or dragging the bar, restores. Double-clicking
+  the bar steps minimised -> normal -> maximised -> normal. The results START
+  minimised at every launch and open on the first run with results. A user
+  who "lost" the form or editor has probably maximised the results (Esc or
+  Ctrl+Shift+M restores) or maximised the assistant (double-click its header,
+  Esc or Ctrl+Shift+J); one who sees no results after a run may have them
+  minimised (a run with results reopens them, but a failed one does not).
+  KEYBOARD SHORTCUTS (F1 or the ⌨ chip lists them; on a Mac every one is
+  pressed with Cmd instead of Ctrl, e.g. Cmd+Shift+P, Cmd+= to zoom):
+  Ctrl+Shift+P (also Ctrl+K) opens a COMMAND PALETTE listing every action by name (including
+  Check config/script, Open config file, Choose database, zoom) -- point a
+  user who cannot find something there. "/" jumps to the ticker search (Backtest tab, not while typing in a field),
+  Ctrl+Enter run (Data tab: run the query; when Run is disabled the status
+  line says why, and the form shows the same reason beside the button), Ctrl+1/2/3 Backtest/Config/Data,
+  Ctrl+J assistant, Ctrl+Shift+J maximise assistant, Ctrl+M minimise/restore
+  results, Ctrl+Shift+M maximise results, Ctrl+S save (Config), Esc restore,
+  Ctrl+= / Ctrl+- / Ctrl+0 zoom (also Ctrl+Up/Down, Ctrl+scroll).
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -1315,8 +1433,57 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   They are fetched ONCE per run, before the worker pool starts, and reach a
   script through exactly two globals:
 
-      fundamental(ticker, metric, day)  --> number, or nil if not yet published
-      market_cap(ticker, day)           --> shares x close, or nil
+      fundamental(ticker, metric, day)               --> number, or nil if not yet published
+      fundamental(ticker, metric, day, "annual")     --> newest full fiscal year only
+      fundamental(ticker, metric, day, "quarterly")  --> newest single quarter only
+      fundamental(ticker, metric, day, "annual", 1)  --> the fiscal year before that
+      market_cap(ticker, day)                        --> shares x close, or nil
+
+  ALWAYS NAME A FREQUENCY FOR A FLOW (net income, revenue, cash flow). The
+  bare form returns the newest publication of either frequency, so over the
+  financials table it can return a quarter one day and a year the next and a
+  ratio jumps ~4x at each fiscal year end (T108). The bare form is unchanged
+  so old configs keep their numbers. Any frequency other than "annual" or
+  "quarterly" is an error. periods_back (5th argument, a whole number >= 0,
+  needs a frequency) steps back through earlier periods as each was known on
+  that day: Total Assets "annual", 1 is last year's year-end balance sheet, so
+  a year-over-year change needs no extra price history. Balance-sheet levels
+  (equity, assets, debt) are fine with the bare form.
+
+  FundamentalSource picks the table. Empty or "financials" (the default) is
+  the financials table, 2020-07+, exactly as before. "sec" reads
+  sec_financials: 2009+ (2010 in practice), each figure as FIRST filed and
+  usable from the day after its filing, never a later restatement. Under "sec":
+  "annual"/"quarterly" come from SEC's own period length (no mislabelling); a
+  balance-sheet figure answers to both ("quarterly" = newest balance sheet,
+  "annual" = fiscal-year-end one from the 10-K); the bare form means "annual"
+  for a flow and the newest balance sheet for a level, never a mix; share
+  counts and EPS are AS REPORTED (not split-adjusted), so market_cap() ALWAYS
+  returns nil — build ratios of two dollar figures instead (ROE, margins,
+  debt/assets); and only companies with a current ticker are reachable. The
+  config is refused when it loads if "sec" is set with no Fundamentals, with a
+  metric SEC does not carry (e.g. EBITDA — the error lists the valid ones), or
+  with any other value.
+
+  A SCRIPT DECLARES ITS OWN FIGURES in code, as a top-level table:
+      fundamentals = {
+          source  = "sec",        -- omit for the financials table
+          metrics = { "Net Income", "Stockholders Equity" },
+      }
+  The engine READS it from the script's syntax tree before the run (it does
+  not run the script), so it must be a plain table of quoted names — a
+  computed name, unknown field or second assignment is refused with its line.
+  It applies whenever the config declares no Fundamentals (a config
+  FundamentalSource still wins over source); a config that names metrics
+  means exactly those. When you write a fundamentals script, include this
+  table so the user can pick it by name. It replaced a "-- @fundamentals:"
+  comment line, which is no longer read — convert any you see. The
+  @works/@fails/@sweep/@baseline header tags are gallery documentation only;
+  a user's own script runs the same without them. Calling
+  fundamental() for a metric that was not loaded logs a warning once per
+  metric in the run diagnostics ("... is not loaded, so it returns nil on
+  every day") — if a user reports a fundamentals strategy that never trades,
+  look for that warning first.
 
   THESE RETURN nil, NOT 0, and that deliberately breaks the convention price()
   follows. A price of zero is impossible so 0 safely means absent; a company
@@ -1334,13 +1501,13 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   returns figures known on or before the simulated day. A script cannot reach a
   value it could not have had.
 
-  market_cap needs the share count, so the loader fetches "Ordinary Shares
-  Number" whether or not the config named it. market_cap returns nil when the
+  market_cap needs the share count, so the default source fetches "Ordinary
+  Shares Number" whether or not the config named it. market_cap returns nil when the
   share count is missing or the close is <= 0 (negative closes are real in this
   database).
 
-  COVERAGE IS MEASURED, NOT ENFORCED. Reported data begins in 2020, so a
-  fundamental strategy run from 2010 sees nil for the first decade, trades only
+  COVERAGE IS MEASURED, NOT ENFORCED. The financials table begins in 2020, so
+  a fundamental strategy run on it from 2010 sees nil for the first decade, trades only
   in the back half, and can look like it found an edge. The engine does NOT
   refuse such a window -- a strategy may legitimately act only when fundamentals
   exist -- so the metric FundamentalCoverage reports the share of
@@ -1807,8 +1974,14 @@ Tickers     = ["AAPL", "MSFT"]    # no duplicates; all must cover the window
 Strategy    = "buyAndHold:equalWeights"   # optional; specs below
 Benchmark   = "$SP500"            # optional; scored against, NOT traded
 Fundamentals = ["Net Income"]     # optional; reported figures Lua may read
+FundamentalSource = "sec"         # optional; SEC filings 2010+ (default: financials, 2020-07+)
 AllowShort  = false               # optional; default long-only
 DelistingReturn = 0.0             # optional; must be in [-1, 0]
+[portfolio.Rules]                 # optional; menu strategy, INSTEAD of Strategy
+  Rebalance = "monthly"           # required
+  Rank      = "return_126"        # optional; hold the top Pick
+  Pick      = 3
+  Filter    = "above_sma_200"     # also Keep, Weight, RiskOff
 [portfolio.Params]                # optional, passed to Lua as 'params'
 [portfolio.Costs]                 # optional; every field defaults to 0
   commission_per_trade = 1.0      # flat fee per filled order
@@ -1842,11 +2015,10 @@ window is how backtests get overfitted, and propose [portfolio.Validation]
 WITH it rather than waiting to be asked. When reading results back, the
 OUT-OF-SAMPLE half is the honest one.
 
-[portfolio.WalkForward] rolls the split across the whole history: on each
-window the sweep's candidates train, the best by objective is selected, and
-that winner is scored on the days that follow. It REQUIRES a Sweep with at
-least two combinations. Capital carries between windows, positions do not.
-Point users at the gap between training score and test return.
+[portfolio.WalkForward] rolls the split across history: each window picks
+the sweep's best by objective, then scores it on the days after. NEEDS a
+Sweep of 2+ combinations. Point users at the gap between training score
+and test return.
 
 Every result also carries Trials (parameter sets tried), ExpectedMaxSharpe
 (the Sharpe the best of them would show with no edge at all) and
@@ -1856,12 +2028,17 @@ Trials with any swept headline number.
 
 Strategy specs:
 - "greedy" / "equalWeights"           -> buy-and-hold with that sizing
-- "buyAndHold:<greedy|equalWeights>"  -> same, explicit
 - "smaCross:<short>:<long>:<buyType>" -> e.g. "smaCross:50:200:equalWeights"
 - "lua:<path>"                        -> e.g. "lua:strategies/rsi.lua"
 - Omitted: uses the Lua script open in the app's Lua tab.
 Params and Sweep apply to lua: strategies ONLY; built-ins ignore them, and
 smaCross periods live in the spec string, so it cannot be swept.
+Rules menu (N days) - prefer it to new Lua; it cannot look ahead; no
+Sweep: Rebalance daily|weekly|monthly|quarterly|annually;
+Rank return_N|momentum_12_1|low_vol_N|drawdown_N; Filter above_sma_N|
+below_sma_N|sma_cross_S_L|rising_N|rsi_below_X|rsi_above_X; RiskOff (needs
+Benchmark) benchmark_below_sma_N|benchmark_drawdown_over_X; Weight equal|
+inverse_vol_N|allocations.
 
 An optional [Output] block writes results to a file: path, format
 ("txt"|"csv"|"json"), fields, filter (e.g. "SharpeRatio > 0.5"), sort_by,
@@ -1884,11 +2061,12 @@ BeatBaseline or Excess. A good default: "BaselineComputed && BeatBaseline
 ## Lua strategy API
 Define a global step(day). day is a 0-based index into the window (trading
 days only, all tickers aligned to common dates). Globals:
-- tickers, params, cash(), num_days()  -- LAST day is num_days() - 1
+- tickers, params, cash(), cashflow(), num_days()  -- LAST day is num_days() - 1
+  (cashflow() = today's signed deposit/withdrawal, 0 on other days)
 - position(t) -> nil or {amount, avg_price, current_price}
 - price/close_at/open_at/high_at/low_at/volume_at(t, day), date_at(t, day)
 - sma(t, day, period), rsi(t, day, period)
-- buy(t, amount, price, [day]), buy_max(t, price, [buyType], [day])
+- buy(t, amount, price, [day]), buy_max(t, price, [buyType], [day], [budget])
 - sell(t, amount, price, [day]), sell_all(t, price, [day])
 - log(...) -- TELL USERS TO DEBUG WITH log(), NOT print(): print writes to
   stdout, invisible in a desktop app, so they see nothing at all.
@@ -1906,24 +2084,32 @@ Shorting, when AllowShort = true: short(t, n, price, [day]) is a TARGET not
 a delta (after it the position is exactly -n; short(t, 0) goes flat),
 cover(t, price, [day]) buys the whole short back, sell() past the holding
 closes the long then shorts the rest, and a NEGATIVE leg in target_weights
-is market-neutral with no new API. Without AllowShort every short is
-refused and says so in a diagnostic. Borrow accrues daily on the marked
+is market-neutral with no new API. Without AllowShort shorts are
+refused. Borrow accrues daily on the marked
 short (BorrowPaid); a margin breach force-covers the minimum that restores
 it (MarginCalls).
-Fundamentals, when the config declares them: fundamental(t, metric, day)
-and market_cap(t, day) return a number or nil. THEY RETURN nil, NOT 0 —
+Fundamentals, when the config declares them:
+fundamental(t, metric, day, [frequency], [periods_back]) and
+market_cap(t, day) return a number or nil. THEY RETURN nil, NOT 0 —
 a company can genuinely report zero, so test for nil, never for > 0.
+frequency is "annual" or "quarterly" — always pass one for a flow (net
+income, revenue), or a quarter and a year get mixed; periods_back = 1 is
+the period before the newest. FundamentalSource = "sec" reads SEC filings
+from 2010 instead of the default 2020-07+ financials table; under it
+market_cap() is always nil (SEC share counts are not split-adjusted).
 Look-ahead is enforced in Go: a lookup only returns figures already public
 on the simulated day.
 Look-ahead warning for everything else: only use indices <= day.
 
 Shipped library (prefer these over new scripts; Strategy =
 "lua:strategies/<file>.lua", parameters in [portfolio.Params]):
-buy_and_hold, buy_and_hold_weighted, dca, rebalance, risk_parity,
-momentum_rotation, trend_following, sma_cross, donchian_breakout, rsi,
-bollinger_reversion. example.lua is in the same directory but is the Lua
-tab's starter copy of buy_and_hold, not a separate idea — do not offer it as
-one. Per-ticker signal strategies want a basket of
+buy_and_hold (Params.weights for custom weights), dca, rebalance,
+risk_parity, momentum_rotation, trend_following, sma_cross, donchian_breakout,
+rsi, bollinger_reversion, and the SEC-fundamentals screens quality_roe,
+gross_profitability, piotroski_fscore, low_asset_growth,
+strong_balance_sheet (naming the Strategy is enough; give them 20+
+companies). A top-level table fundamentals = { source = "sec",
+metrics = {...} } loads a script's figures; unloaded metrics warn. Per-ticker signal strategies want a basket of
 individual stocks; allocation strategies are most meaningful across asset
 classes (e.g. ["$SP500", "$CASH"]).
 
@@ -1932,16 +2118,12 @@ classes (e.g. ["$SP500", "$CASH"]).
 - SortinoRatio: same numerator, downside deviation denominator.
 - MaxDrawdown: worst peak-to-trough decline, in %.
 - AnnualReturn: CAGR of the compounded daily returns, in %.
-- NetContributions / WithdrawalsMissed: from an optional [portfolio.Cashflow]
-  schedule (Amount signed, Frequency monthly|quarterly|annually). Contributions
-  are NOT profit and are netted out of it, and are NOT return -- the daily
-  baseline is raised by the flow. A non-zero WithdrawalsMissed means the
-  portfolio ran out of money, which is the headline result.
+- NetContributions / WithdrawalsMissed: from [portfolio.Cashflow].
+  Contributions are netted out of profit and are NOT return. A non-zero
+  WithdrawalsMissed means the money ran out: that is the headline result.
 - RealAnnualReturn: the same CAGR with inflation divided out (CPIAUCSL,
-  compounded not subtracted). 0 means NOT AVAILABLE -- CPI must cover both ends
-  of the window and is published a month in arrears -- shown as an em dash, not
-  as zero growth. Only the return is deflated; drawdown and everything built on
-  it stay nominal.
+  compounded not subtracted). 0 means NOT AVAILABLE (CPI must cover both
+  ends of the window), not zero growth. Drawdown etc. stay nominal.
 - StandardDev: annualized stdev of daily returns.
 - CalmarRatio: AnnualReturn / MaxDrawdown. A portfolio that never declined
   reports 0, NOT infinity — check MaxDrawdown to tell which case it is.
@@ -1954,10 +2136,9 @@ classes (e.g. ["$SP500", "$CASH"]).
 - TimeInMarket: percent of days holding anything. Read it WITH AvgExposure:
   50/100 is "half invested every day", 50/50 is "fully invested half the
   days". Both 0 for a portfolio that never traded.
-- FundamentalCoverage: share of (day x ticker x declared metric) cells that
-  had a published figure. 0 when no Fundamentals are declared. Reported
-  data starts 2020, so a fundamental strategy run from 2010 trades only in
-  the back half — low coverage beside a good Sharpe is the single most
+- FundamentalCoverage: share of (day x ticker x declared metric) cells with
+  a published figure; 0 with no Fundamentals. Low coverage beside a good
+  Sharpe (e.g. the 2020+ default source on a 2010 window) is the single most
   important thing to point out.
 - BorrowPaid: total short borrow cost charged to cash.
 - MarginCalls: forced covers triggered by a maintenance breach.

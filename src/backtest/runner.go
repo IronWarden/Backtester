@@ -342,6 +342,12 @@ func runOne(
 		return
 	}
 	logCoverageShortfall(p.Pname, hist, p.Tickers, p.StartTime, p.EndTime, dataLen)
+	// A rules strategy may read the market through the benchmark. It gets the
+	// benchmark laid over the portfolio's own days, never added to windowed:
+	// the benchmark is scored against, not traded.
+	if bc, ok := p.Strategy.(benchmarkConsumer); ok && p.Benchmark != "" {
+		bc.setBenchmark(alignBenchmark(hist[p.Benchmark], windowed[p.Tickers[0]]))
+	}
 
 	p.Strategy.Step(p, windowed, 0)
 	prev := p.GetPortfolioValue(p.Tickers, windowed, 0)
@@ -461,16 +467,31 @@ func validateCoverage(portfolios []*Portfolio) error {
 // so it adds nothing to the concurrency surface of the pool below.
 //
 // A portfolio declaring no Fundamentals is skipped entirely, so a config that
-// does not use them performs exactly as it did.
+// does not use them performs exactly as it did. One fetch per source: a
+// portfolio reading `financials` and one reading `sec_financials` never share
+// a slice, because the two disagree on what a frequency means.
 func prefetchFundamentals(
 	portfolios []*Portfolio, startTime, endTime time.Time,
+) {
+	for _, source := range []string{"", data.SourceSEC} {
+		var group []*Portfolio
+		for _, p := range portfolios {
+			if len(p.Fundamentals) > 0 && p.FundamentalSource == source {
+				group = append(group, p)
+			}
+		}
+		prefetchFundamentalsFrom(source, group, startTime, endTime)
+	}
+}
+
+// prefetchFundamentalsFrom is prefetchFundamentals for portfolios that all read
+// the same source.
+func prefetchFundamentalsFrom(
+	source string, portfolios []*Portfolio, startTime, endTime time.Time,
 ) {
 	tickerSet := make(map[string]bool)
 	metricSet := make(map[string]bool)
 	for _, p := range portfolios {
-		if len(p.Fundamentals) == 0 {
-			continue
-		}
 		for _, t := range p.Tickers {
 			tickerSet[t] = true
 		}
@@ -479,8 +500,11 @@ func prefetchFundamentals(
 		}
 		// market_cap() needs the share count whether or not the config named
 		// it, since it is the one metric a user can need without knowing to
-		// ask for it.
-		metricSet[sharesMetric] = true
+		// ask for it. Not for SEC, where market_cap() is always nil: an
+		// as-reported share count times a split-adjusted close is not one.
+		if source == "" {
+			metricSet[sharesMetric] = true
+		}
 	}
 	if len(tickerSet) == 0 || len(metricSet) == 0 {
 		return
@@ -495,7 +519,12 @@ func prefetchFundamentals(
 		metrics = append(metrics, m)
 	}
 
-	points := data.PointInTimeFundamentals(tickers, metrics, startTime, endTime)
+	var points []data.FundamentalPoint
+	if source == data.SourceSEC {
+		points = data.SECPointInTimeFundamentals(tickers, metrics, startTime, endTime)
+	} else {
+		points = data.PointInTimeFundamentals(tickers, metrics, startTime, endTime)
+	}
 	if len(points) == 0 {
 		// Absent table, or nothing reported in the window. Every lookup then
 		// returns nil and FundamentalCoverage reports 0, which is the honest
@@ -507,9 +536,7 @@ func prefetchFundamentals(
 		return
 	}
 	for _, p := range portfolios {
-		if len(p.Fundamentals) > 0 {
-			p.FundamentalData = points
-		}
+		p.FundamentalData = points
 	}
 }
 

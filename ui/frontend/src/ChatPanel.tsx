@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import { keysFor } from "./shortcuts";
 import {
     Chat,
     HasClaudeKey,
@@ -45,6 +46,10 @@ type Props = {
     onApplyToml: (toml: string) => void;
     onApplyLua: (lua: string) => void;
     onClose: () => void;
+    // Maximised, the panel takes the whole row and the tabs step aside.
+    // Optional so a caller that never maximises need not say so.
+    maximized?: boolean;
+    onToggleMax?: () => void;
 };
 
 const STARTERS = [
@@ -268,6 +273,8 @@ export default function ChatPanel({
     onApplyToml,
     onApplyLua,
     onClose,
+    maximized = false,
+    onToggleMax,
 }: Props) {
     const [msgs, setMsgs] = useState<Msg[]>([]);
     const [input, setInput] = useState("");
@@ -403,8 +410,26 @@ export default function ChatPanel({
     const needsKeySetup = hasKey === false && !isLocalModel(model);
 
     return (
-        <div className="chat-panel" style={{ width }}>
-            <div className="chat-head">
+        <div
+            className={maximized ? "chat-panel maximized" : "chat-panel"}
+            style={maximized ? undefined : { width }}
+        >
+            <div
+                className="chat-head"
+                // Double-click the bar, not its controls: a double-click on
+                // the model picker or Clear means that control.
+                onDoubleClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button, select, input")) return;
+                    onToggleMax?.();
+                }}
+                title={
+                    onToggleMax
+                        ? maximized
+                            ? `Double-click to restore (${keysFor("max-assistant")})`
+                            : `Double-click to maximise (${keysFor("max-assistant")})`
+                        : undefined
+                }
+            >
                 <span className="chat-title">✦ Assistant</span>
                 <select
                     value={model}
@@ -426,7 +451,17 @@ export default function ChatPanel({
                 >
                     Clear
                 </button>
-                <button onClick={onClose} title="Close panel">
+                {onToggleMax && (
+                    <button
+                        className="panel-icon"
+                        onClick={onToggleMax}
+                        title={`${maximized ? "Restore" : "Maximise"} (${keysFor("max-assistant")})`}
+                        aria-label={maximized ? "Restore assistant" : "Maximise assistant"}
+                    >
+                        {maximized ? "❐" : "□"}
+                    </button>
+                )}
+                <button onClick={onClose} title={`Close panel (${keysFor("toggle-assistant")})`}>
                     ×
                 </button>
             </div>

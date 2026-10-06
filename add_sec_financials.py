@@ -127,6 +127,12 @@ TAGS: list[tuple[str, str]] = [
      "MinorityInterestAndIncomeLossFromEquityMethodInvestments", "Pretax Income"),
     ("IncomeTaxExpenseBenefit", "Tax Provision"),
     ("NetIncomeLoss", "Net Income"),
+    # Fallbacks, used only when a filing has no NetIncomeLoss. IBM and CAT
+    # tag net income these ways for years at a time. The first is what is
+    # left for common holders after preferred dividends; ProfitLoss still
+    # includes the noncontrolling interests' share, small for most filers.
+    ("NetIncomeLossAvailableToCommonStockholdersBasic", "Net Income"),
+    ("ProfitLoss", "Net Income"),
     ("EarningsPerShareDiluted", "Diluted EPS"),
     ("EarningsPerShareBasic", "Basic EPS"),
     ("WeightedAverageNumberOfDilutedSharesOutstanding", "Diluted Average Shares"),
@@ -147,6 +153,13 @@ TAGS: list[tuple[str, str]] = [
     ("Liabilities", "Total Liabilities Net Minority Interest"),
     ("LiabilitiesCurrent", "Current Liabilities"),
     ("StockholdersEquity", "Stockholders Equity"),
+    # Fallback for filers with noncontrolling interests -- PG, CAT, VZ and JNJ
+    # among them -- whose balance sheet carries only total equity; their
+    # parent-only figure exists solely under an equity-component dimension,
+    # which segment filtering drops. Includes the minority interests, so it
+    # reads somewhat high where those are large.
+    ("StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+     "Stockholders Equity"),
     ("CashAndCashEquivalentsAtCarryingValue", "Cash And Cash Equivalents"),
     ("AccountsReceivableNetCurrent", "Accounts Receivable"),
     ("InventoryNet", "Inventory"),

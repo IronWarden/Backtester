@@ -173,14 +173,14 @@ var luaAPI = []LuaGlobal{
 
 	// Fundamentals ----------------------------------------------------------
 	{
-		Name: "fundamental", Signature: `fundamental(ticker, metric, day)`, Kind: "function",
+		Name: "fundamental", Signature: `fundamental(ticker, metric, day, [frequency], [periods_back])`, Kind: "function",
 		Group: LuaGroupFundamentals, Returns: "number or nil",
-		Summary: `The newest figure PUBLISHED on or before that day, or nil. Returns nil rather than 0 on purpose: a company can genuinely report zero, so a 0 would be indistinguishable from "not published yet". Declare the metric in Fundamentals = [...] first or nothing is fetched.`,
+		Summary: `The newest figure PUBLISHED on or before that day, or nil. Returns nil rather than 0 on purpose: a company can genuinely report zero, so a 0 would be indistinguishable from "not published yet". Declare the metric in Fundamentals = [...] first or nothing is fetched. frequency ("annual" or "quarterly") keeps a flow from mixing a quarter with a year; periods_back = 1 is the period before the newest. FundamentalSource = "sec" reads SEC filings from 2009 instead of the 2020+ default.`,
 	},
 	{
 		Name: "market_cap", Signature: "market_cap(ticker, day)", Kind: "function",
 		Group: LuaGroupFundamentals, Returns: "number or nil",
-		Summary: "Shares outstanding × close, or nil when the share count is missing or the close is not positive.",
+		Summary: "Shares outstanding × close, or nil when the share count is missing or the close is not positive. Always nil under FundamentalSource = \"sec\": SEC share counts are not split-adjusted, so the product would be wrong. The close is dividend-adjusted, so past caps of dividend payers read low.",
 	},
 
 	// Account and orders ----------------------------------------------------
@@ -188,6 +188,11 @@ var luaAPI = []LuaGlobal{
 		Name: "cash", Signature: "cash()", Kind: "function",
 		Group: LuaGroupAccount, Returns: "number",
 		Summary: "Uninvested buying power.",
+	},
+	{
+		Name: "cashflow", Signature: "cashflow()", Kind: "function",
+		Group: LuaGroupAccount, Returns: "number",
+		Summary: "The signed amount the [portfolio.Cashflow] schedule moved at the top of today: positive on a deposit day, negative on a withdrawal day, 0 otherwise. Read this, not cash(), to invest contributions.",
 	},
 	{
 		Name: "equity", Signature: "equity(day)", Kind: "function",
@@ -210,9 +215,9 @@ var luaAPI = []LuaGlobal{
 		Summary: "Buy an exact share count. Fractional shares are allowed.",
 	},
 	{
-		Name: "buy_max", Signature: `buy_max(ticker, price, buyType, day)`, Kind: "function",
+		Name: "buy_max", Signature: `buy_max(ticker, price, buyType, day, budget)`, Kind: "function",
 		Group:   LuaGroupAccount,
-		Summary: `Size the order automatically. buyType is "equalWeights" (split cash across the portfolio's tickers) or "greedy" (pour all remaining cash in).`,
+		Summary: `Size the order automatically. buyType is "equalWeights" (split budget across the portfolio's tickers) or "greedy" (pour all of budget in). budget defaults to cash(); pass cashflow() to invest just a deposit. Never buys more than cash() covers.`,
 	},
 	{
 		Name: "sell", Signature: "sell(ticker, shares, price, day)", Kind: "function",

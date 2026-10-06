@@ -16,6 +16,10 @@ var TransactionLogger = log.New(io.Discard, "", 0)
 type DailyReturn struct {
 	Date   time.Time
 	Return float64
+	// Flow is the signed amount a cashflow schedule moved at the top of this
+	// day, 0 when none did. Return already excludes it; it is kept so the
+	// benchmark's dollar curve can be fed the same contributions.
+	Flow float64
 }
 
 type Portfolio struct {
@@ -140,6 +144,9 @@ type Portfolio struct {
 	// Nil when the config declares nothing, which is every pre-T33 config.
 	Fundamentals    []string
 	FundamentalData []data.FundamentalPoint
+	// FundamentalSource is "" for the `financials` table and data.SourceSEC
+	// for `sec_financials`. Configuration, so Clone carries it.
+	FundamentalSource string
 	// InSampleEnd is the last day of the in-sample segment when the config
 	// asks for a split, and the zero time when it does not. Like Costs and
 	// Benchmark it is configuration, so Clone must carry it across; Splits is
@@ -189,7 +196,7 @@ func InitializePortfolio(
 	// position twice, inflating the equity curve.
 	//
 	// Rejected rather than deduplicated: weighting a holding up is what
-	// [portfolio.Params.weights] and buy_and_hold_weighted.lua are for, and
+	// [portfolio.Params.weights] and buy_and_hold.lua are for, and
 	// silently dropping a line from a config is its own kind of surprise.
 	seen := make(map[string]bool, len(tickers))
 	for _, t := range tickers {
@@ -248,6 +255,7 @@ func (p *Portfolio) Clone() (*Portfolio, error) {
 		Benchmark:            p.Benchmark,
 		Fundamentals:         p.Fundamentals,
 		FundamentalData:      p.FundamentalData,
+		FundamentalSource:    p.FundamentalSource,
 		AllowShort:           p.AllowShort,
 		Margin:               p.Margin,
 		DelistingReturn:      p.DelistingReturn,
@@ -800,7 +808,7 @@ func (p *Portfolio) AdjustPortfolioParameters(
 	TransactionLogger.Printf("dailyChange: %.4f\n", dailyChange*100)
 	date := currentDayData[tickers[0]][day].Date
 	p.DailyReturns = append(p.DailyReturns,
-		DailyReturn{Date: date, Return: dailyChange})
+		DailyReturn{Date: date, Return: dailyChange, Flow: cashflow})
 	p.PortfolioCloseValues = append(p.PortfolioCloseValues, endingValue)
 	// The invested fraction of the book on this day, which is what a random
 	// timing null has to hold fixed while destroying WHEN the exposure

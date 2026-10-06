@@ -116,11 +116,47 @@ export function allocationTotal(form: SimpleForm): number {
 // across every portfolio: a run carries all of them, so one broken card has to
 // stop the whole run rather than quietly contributing a bad block.
 export function portfolioRunnable(form: SimpleForm, ranges: Ranges): boolean {
-  if (form.tickers.length === 0) return false;
+  return portfolioBlocker(form, ranges) === "";
+}
+
+// Why this portfolio cannot run, as the end of a sentence, or "" when it can.
+// portfolioRunnable is defined from this, so the reason shown beside a
+// disabled Run button can never disagree with the button.
+export function portfolioBlocker(form: SimpleForm, ranges: Ranges): string {
+  if (form.tickers.length === 0) return "add at least one holding";
   // A library strategy sizes its own positions, so an all-zero allocation
   // table is not a reason to refuse the run.
-  if (usesAllocations(form) && allocationTotal(form) <= 0) return false;
-  return dateErrorOf(form, coverageOf(form, ranges)) === "";
+  if (usesAllocations(form) && allocationTotal(form) <= 0) {
+    return "give at least one holding a percentage above 0";
+  }
+  // dateErrorOf speaks in sentences; this continues one ("To run, ..."), so
+  // drop the full stop and lower-case a leading WORD -- never a ticker, which
+  // is how "AAPL (data from ...)" begins.
+  const dateErr = dateErrorOf(form, coverageOf(form, ranges)).replace(/\.$/, "");
+  return /^[A-Z][a-z]/.test(dateErr) ? dateErr[0].toLowerCase() + dateErr.slice(1) : dateErr;
+}
+
+// Why the whole run cannot start, or "" when it can. The first reason only:
+// fixing it may well fix the rest, and a list reads as a scolding. A reason
+// names its portfolio when there is more than one card to look at.
+export function runBlocker(
+  forms: SimpleForm[],
+  ranges: Ranges,
+  dbPath: string,
+  running: boolean,
+): string {
+  if (running) return "a run is already going";
+  if (!dbPath) return "choose a database first (the database chip in the top bar)";
+  if (forms.length === 0) return "add a portfolio";
+  const dupes = duplicateNames(forms);
+  if (dupes.length > 0) return `two portfolios are both called "${dupes[0]}" — rename one`;
+  for (const [i, f] of forms.entries()) {
+    const why = portfolioBlocker(f, ranges);
+    if (!why) continue;
+    if (forms.length === 1) return why;
+    return `${f.name.trim() || `Portfolio ${i + 1}`}: ${why}`;
+  }
+  return "";
 }
 
 // Portfolio names reach the results table, the blotter and every verdict, so

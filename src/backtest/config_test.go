@@ -713,3 +713,52 @@ Strategy    = "buyAndHold:equalWeights"
 			cfg.Portfolios[0].Sweep)
 	}
 }
+
+// FundamentalSource: empty and "financials" are the old behaviour; "sec" needs
+// declared metrics the SEC loader actually writes; anything else is refused.
+func TestFundamentalSourceValidation(t *testing.T) {
+	base := func(source string, metrics ...string) *PortfolioConfig {
+		return &PortfolioConfig{
+			Name: "f", BuyingPower: 1000, StartTime: "2015-01-02",
+			EndTime: "2016-01-04", Tickers: []string{"AAA"}, Strategy: "greedy",
+			Fundamentals: metrics, FundamentalSource: source,
+		}
+	}
+	for _, tc := range []struct {
+		name, source string
+		metrics      []string
+		want         string // "" or "sec" on success
+		errHas       string
+	}{
+		{"default", "", []string{"Net Income"}, "", ""},
+		{"explicit financials", "financials", []string{"EBITDA"}, "", ""},
+		{"sec", "sec", []string{"Net Income", "Stockholders Equity"}, "sec", ""},
+		{"typo", "SEC", []string{"Net Income"}, "", `"SEC" is not one of`},
+		{"sec without metrics", "sec", nil, "", "Fundamentals is empty"},
+		{"sec with a financials-only metric", "sec", []string{"EBITDA"}, "",
+			`"EBITDA" is not a metric sec_financials carries`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := base(tc.source, tc.metrics...).ToPortfolio()
+			if tc.errHas != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.errHas) {
+					t.Fatalf("err = %v, want one containing %q", err, tc.errHas)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ToPortfolio: %v", err)
+			}
+			if p.FundamentalSource != tc.want {
+				t.Errorf("FundamentalSource = %q, want %q", p.FundamentalSource, tc.want)
+			}
+			c, err := p.Clone()
+			if err != nil {
+				t.Fatalf("Clone: %v", err)
+			}
+			if c.FundamentalSource != tc.want {
+				t.Errorf("Clone dropped FundamentalSource: %q", c.FundamentalSource)
+			}
+		})
+	}
+}

@@ -918,6 +918,22 @@ button.primary:hover:not(:disabled),
   color: var(--text-3);
 }
 
+/* Famous-investor cards: who, above the portfolio's name, and the caveat
+   under the description in the quietest type on the card. */
+.simple-form .example-investor {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+
+.simple-form .example-caveat {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  font-style: italic;
+  color: var(--text-3);
+}
+
 /* First-run card. Sits above the form, blocks nothing, and never returns
    once dismissed — an onboarding step you have to dismiss before every run
    is a tax, not an explanation. */
@@ -1440,6 +1456,77 @@ button.primary:hover:not(:disabled),
 /* Starting shapes for a blank Lua file, above the editor. Reuses the chip
    styling the date and criterion presets use — it is the same kind of offer:
    one click that fills something in, made where there is nothing to lose. */
+/* The Lua tab's open scripts, one chip each. Quieter than the TOML/Lua tabs
+   above them, which they sit under. */
+.lua-buffers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  padding: 0.35em 0.9em;
+  border-bottom: 1px solid var(--border);
+}
+
+.lua-buffer {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.lua-buffer button {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: 0.85em;
+  padding: 0.2em 0.6em;
+}
+
+.lua-buffer .lua-buffer-close {
+  padding: 0.2em 0.5em 0.2em 0;
+}
+
+.lua-buffer:hover {
+  background: var(--bg-hover);
+}
+
+.lua-buffer.active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.lua-buffer.active button {
+  color: var(--accent-strong);
+}
+
+/* Over a library script: why it cannot be typed into, and the way out. */
+.lua-readonly {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  padding: 0.45em 0.9em;
+  font-size: var(--fs-s);
+  color: var(--text-2);
+  background: var(--warn-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.lua-readonly button {
+  flex: none;
+}
+
+.app .link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 0.4em;
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.app .link-button:hover {
+  text-decoration: underline;
+}
+
 .skeletons {
   display: flex;
   flex-wrap: wrap;
@@ -2572,4 +2659,197 @@ td.num.dim {
 
 .mid-row.hidden {
   display: none;
+}
+
+/* The tabs step aside while the assistant is maximised; it takes the row. */
+.mid-main.hidden {
+  display: none;
+}
+
+.chat-panel.maximized {
+  flex: 1;
+  max-width: none;
+}
+
+/* Keyboard shortcuts: a topbar chip that opens the list, and the list as a
+   modal card. Kept small -- it is a reference, not a page. */
+.topbar .help-chip {
+  padding-inline: 0.6em;
+  color: var(--text-3);
+}
+
+.shortcuts-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.shortcuts-card {
+  width: min(34em, calc(100vw - 2em));
+  max-height: calc(100vh - 4em);
+  overflow: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  padding: 0.8em 1em 1em;
+}
+
+.shortcuts-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.6em;
+}
+
+.shortcuts-title {
+  font-size: var(--fs-l);
+  color: var(--text-1);
+}
+
+.shortcuts-list {
+  margin: 0;
+  display: grid;
+  gap: 0.35em;
+}
+
+.shortcuts-row {
+  display: grid;
+  grid-template-columns: 13em 1fr;
+  gap: 1em;
+  align-items: baseline;
+  font-size: var(--fs-m);
+}
+
+.shortcuts-row dt {
+  color: var(--text-2);
+}
+
+.shortcuts-row dd {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.shortcuts-row kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-1);
+}
+
+/* Command palette (Ctrl+K). Hangs from the top like an editor's, so the list
+   grows downward under the box being typed in rather than recentring. */
+.palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.palette {
+  width: min(36em, calc(100vw - 2em));
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75em 1em;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-size: var(--fs-l);
+  outline: none;
+  box-shadow: none;
+}
+
+.palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3em;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.palette-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  padding: 0.45em 0.7em;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  color: var(--text-2);
+}
+
+.palette-list li.on {
+  background: var(--accent-soft);
+  color: var(--text-1);
+}
+
+.palette-list li.disabled {
+  cursor: default;
+  color: var(--text-3);
+}
+
+.palette-label {
+  flex: 1;
+}
+
+.palette-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.palette-keys {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-2);
+}
+
+.palette-list .palette-empty {
+  cursor: default;
+  color: var(--text-3);
+}
+
+/* The editor's placeholder while its chunk loads (LazyEditor). Usually never
+   seen: main.tsx preloads Monaco right after the first paint. */
+.editor-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 6em;
+  color: var(--text-3);
+  font-size: var(--fs-s);
+  background: #181820;
+}
+
+/* Why Run is disabled, beside it. Quiet: an explanation, not an error. */
+.simple-form .run-blocker {
+  align-self: center;
+  color: var(--text-3);
+  font-size: var(--fs-s);
+}
+
+/* The status line's run timer: digits that do not jitter as they tick. */
+.status .run-timer {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }

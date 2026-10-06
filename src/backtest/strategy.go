@@ -125,6 +125,8 @@ func NewStrategy(spec string, params map[string]any) (Strategy, error) {
 			return nil, fmt.Errorf("smaCross long period: %w", err)
 		}
 		return &SMACross{Short: short, Long: long, BuyType: sub[2]}, nil
+	case RulesSpec:
+		return newRulesStrategy(params), nil
 	case "lua":
 		if len(parts) < 2 || parts[1] == "" {
 			return nil, fmt.Errorf("lua spec needs a script path: %q", spec)

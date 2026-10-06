@@ -18,8 +18,18 @@ import { renderToString } from "react-dom/server";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import ResultsView, { differingWindows } from "./ResultsView";
-import SimpleFormView from "./SimpleForm";
+import ResultsView, { benchmarkLines, differingWindows } from "./ResultsView";
+import SimpleFormView, { Investors } from "./SimpleForm";
+import PortfolioCard from "./PortfolioCard";
+import {
+    addBuffer,
+    copyPath,
+    copyText,
+    isDirty,
+    markSaved,
+    setBufferText,
+} from "./luaBuffers";
+import type { LuaBuffer } from "./luaBuffers";
 import ChatPanel, { ChatMessage } from "./ChatPanel";
 import { CRITERION_OPS, buildToml, buildHypothesis } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
@@ -32,7 +42,9 @@ import {
     maskDecimal,
     normalizeDates,
     portfolioRunnable,
+    portfolioBlocker,
     resolveTicker,
+    runBlocker,
     tickerFilter,
     uniqueName,
 } from "./portfolioCheck";
@@ -41,14 +53,22 @@ import {
     BLANK,
     CRITERION_PRESETS,
     EXAMPLES,
+    INVESTORS,
     basketTickers,
     buildExample,
+    buildInvestor,
     exampleHypothesis,
+    investorHypothesis,
+    percentAllocations,
 } from "./examples";
 import { chipLabel } from "./paths";
 import { perFrame, trackDrag } from "./frame";
 import Pane, { skipRender } from "./Pane";
-import ResultsBar, { nextResultsLayout, parseResultsLayout } from "./ResultsBar";
+import ResultsBar, { cycleResultsLayout, nextResultsLayout, parseResultsLayout } from "./ResultsBar";
+import { SHORTCUTS, ShortcutsHelp, displayKeys, keysFor, shortcutFor, typingInField, zoomFor } from "./shortcuts";
+import { CommandPalette, filterCommands } from "./commandPalette";
+import RunTimer, { formatElapsed } from "./RunTimer";
+import type { Command } from "./commandPalette";
 import { ResultPanel, DockProvider, clampGeo, defaultGeo, readFloats } from "./ResultPanel";
 import type { Geo } from "./ResultPanel";
 import {
@@ -688,6 +708,101 @@ for (const [label, fs] of [
     });
 }
 
+// A library pick says what it does, and — with an editor to open it in —
+// offers the script itself, so a user can read what they are about to run.
+const qualityCard = backtest.StrategyCard.createFrom({
+    File: "quality_roe.lua",
+    Idea: "Hold the most profitable companies.",
+    Works: "quality persists",
+    Fails: "junk rallies",
+    Sweep: "top_n = [5, 10]",
+    Baseline: "buy_and_hold.lua",
+});
+for (const [label, withViewer] of [
+    ["with an editor", true],
+    ["without one", false],
+] as [string, boolean][]) {
+    check(`PortfolioCard / a library pick, ${label}`, () => {
+        const html = renderToString(
+            <PortfolioCard
+                form={{ ...form, strategy: "quality_roe.lua" }}
+                onChange={noop}
+                onRemove={null}
+                otherNames={[]}
+                defaultName="Portfolio 1"
+                dbPath=""
+                available={[]}
+                names={{}}
+                ranges={{}}
+                pickable={[qualityCard]}
+                showBaskets={false}
+                onViewScript={withViewer ? noop : undefined}
+            />,
+        );
+        if (!html.includes("Hold the most profitable companies.")) {
+            throw new Error("the chosen strategy's card did not render");
+        }
+        if (html.includes("Read the script") !== withViewer) {
+            throw new Error(`"Read the script" shown=${!withViewer}, want ${withViewer}`);
+        }
+    });
+}
+
+check("SimpleForm / with a script viewer", () => {
+    renderToString(
+        <SimpleFormView
+            dbPath=""
+            running={false}
+            onOpenAssistant={noop}
+            forms={[{ ...form, strategy: "quality_roe.lua" }]}
+            onChange={noop}
+            hypothesis={emptyHypothesis}
+            onHypothesisChange={noop}
+            onRun={noop}
+            onEditAsToml={noop}
+            onViewScript={noop}
+        />,
+    );
+});
+
+// The Lua tab's buffers: a library script is never changed or saved, and a
+// copy of one is the user's, under its own name.
+check("a library buffer is read-only and a copy is the user's", () => {
+    const lib: LuaBuffer = {
+        path: "strategies/quality_roe.lua",
+        text: "-- quality_roe.lua\nfunction step(day) end\n",
+        pristine: "-- quality_roe.lua\nfunction step(day) end\n",
+        library: true,
+        isNew: false,
+    };
+    eq("copy path", copyPath(lib.path), "strategies/my_quality_roe.lua");
+    eq("copy of a bare name", copyPath("rsi.lua"), "my_rsi.lua");
+    const copied = copyText(lib.path, lib.text);
+    if (!copied.startsWith("-- my_quality_roe.lua — your copy of quality_roe.lua")) {
+        throw new Error(`copy label: ${copied.split("\n")[0]}`);
+    }
+    if (!copied.endsWith("function step(day) end\n")) {
+        throw new Error("the copy lost the script");
+    }
+
+    let bufs = addBuffer([], lib);
+    bufs = addBuffer(bufs, { ...lib, text: "a second load" });
+    eq("opening twice keeps one buffer", bufs.length, 1);
+    bufs = setBufferText(bufs, lib.path, "-- gutted");
+    eq("a library buffer ignores edits", bufs[0].text, lib.text);
+    eq("a library buffer is never dirty", isDirty({ ...lib, text: "x" }), false);
+
+    const copy: LuaBuffer = {
+        path: copyPath(lib.path), text: copied, pristine: "", library: false, isNew: true,
+    };
+    bufs = addBuffer(bufs, copy);
+    eq("a new copy is unsaved", isDirty(bufs[1]), true);
+    bufs = setBufferText(bufs, copy.path, "-- mine");
+    eq("a copy takes edits", bufs[1].text, "-- mine");
+    bufs = markSaved(bufs, [bufs[1]]);
+    eq("saved means clean", isDirty(bufs[1]), false);
+});
+
 // An imported holdings file, shaped as App.ImportHoldings returns it: decimal
 // percentages, a Cash line mapped to $CASH, and two symbols left out.
 const imported: HoldingsImport = {
@@ -893,6 +1008,24 @@ check("buildToml emits one block per portfolio", () => {
     }
     const blocks = (got.match(/\[\[Portfolio\]\]/g) ?? []).length;
     if (blocks !== 2) throw new Error(`expected 2 [[Portfolio]] blocks, got ${blocks}`);
+});
+
+// There is one buy-and-hold script. An even split runs it with no weights --
+// the script's own equal split -- and a custom split hands it the weights;
+// neither may name a script the library no longer ships.
+check("buy-and-hold always runs buy_and_hold.lua", () => {
+    const even = buildToml([{ ...form, evenSplit: true, strategy: "" }]);
+    if (!even.includes('Strategy = "lua:strategies/buy_and_hold.lua"')) {
+        throw new Error("even split does not run buy_and_hold.lua:\n" + even);
+    }
+    if (even.includes("Params")) {
+        throw new Error("even split emitted weights:\n" + even);
+    }
+    const custom = buildToml([{ ...form, evenSplit: false, strategy: "" }]);
+    if (!custom.includes('Strategy = "lua:strategies/buy_and_hold.lua"') ||
+        !custom.includes("Params = { weights = {")) {
+        throw new Error("custom split does not pass weights to buy_and_hold.lua:\n" + custom);
+    }
 });
 
 // A schedule adds a sub-table, which is the one shape in this document whose
@@ -1298,6 +1431,191 @@ check("every starter example registers a criterion the engine accepts", () => {
     }
 });
 
+// Every famous-investor holding, at its real first bar, ending where the
+// bundled database does -- BK's feed stops early on it, which is the case that
+// has to clamp the window rather than break it.
+const INVESTOR_RANGES: Record<string, string[]> = {
+    $SP500: ["1927-12-30", "2026-09-25"],
+    $CASH: ["1927-12-30", "2026-09-24"],
+    VTI: ["2001-06-15", "2026-09-25"],
+    TLT: ["2002-07-30", "2026-09-25"],
+    IEF: ["2002-07-30", "2026-09-23"],
+    GLD: ["2004-11-18", "2026-09-25"],
+    DBC: ["2006-02-06", "2026-09-25"],
+    VEA: ["2007-07-26", "2026-09-25"],
+    VWO: ["2005-03-10", "2026-09-25"],
+    VNQ: ["2004-09-29", "2026-09-25"],
+    TIP: ["2003-12-05", "2026-09-25"],
+    BK: ["1972-06-15", "2026-06-26"],
+    KHC: ["2015-07-06", "2026-09-25"],
+    PSX: ["2012-04-12", "2026-09-25"],
+    AXTA: ["2014-11-12", "2026-09-25"],
+};
+for (const t of [
+    "WFC", "KO", "IBM", "AXP", "PG", "USB", "WMT", "DVA", "MCO", "GS", "CHTR",
+    "DE", "GM", "T", "VRSN", "SU", "COST", "VZ", "MTB",
+]) {
+    INVESTOR_RANGES[t] = ["2012-01-03", "2026-09-25"];
+}
+
+check("every famous-investor portfolio produces a runnable portfolio", () => {
+    for (const inv of INVESTORS) {
+        const built = buildInvestor(inv, INVESTOR_RANGES, "$SP500", BLANK);
+        if (!built) throw new Error(`${inv.id} could not be built at all`);
+        if (!portfolioRunnable(built, INVESTOR_RANGES)) {
+            throw new Error(`${inv.id} builds a portfolio the engine would refuse`);
+        }
+        if (built.evenSplit) throw new Error(`${inv.id} lost its weights`);
+        const total = built.tickers.reduce((s, t) => s + built.allocations[t], 0);
+        eq(`${inv.id} allocations`, Math.round(total * 100), 10000);
+        // Nothing the database cannot price, and the largest holding first.
+        for (const t of built.tickers) {
+            if (!(t in INVESTOR_RANGES)) throw new Error(`${inv.id} kept ${t}`);
+        }
+        eq(`${inv.id} name`, built.name, inv.name);
+        // The TOML carries the weights whichever strategy holds them, or the
+        // run is an equal-weight portfolio wearing the investor's name.
+        const toml = buildToml([built]);
+        if (!toml.includes("Params = { weights = {")) {
+            throw new Error(`${inv.id} emitted no weights:\n${toml}`);
+        }
+    }
+});
+
+check("a 13F copy starts the day after its filing, never earlier", () => {
+    const inv = INVESTORS.find((i) => i.id === "berkshire-13f-2015")!;
+    const built = buildInvestor(inv, INVESTOR_RANGES, "$SP500", BLANK)!;
+    eq("start", built.startDate, "2016-02-17");
+    // BK's short feed clamps the end; it does not move the start.
+    eq("end", built.endDate, "2026-06-26");
+    // USG and V are not in the table: dropped and the rest scaled up.
+    if (built.tickers.includes("USG") || built.tickers.includes("V")) {
+        throw new Error("kept a holding the database cannot price");
+    }
+    eq("largest first", built.tickers[0], "WFC");
+    // A database whose data starts after the filing cannot honestly run it.
+    const late = { ...INVESTOR_RANGES, WFC: ["2017-01-03", "2026-09-25"] };
+    eq("withdrawn when the filing day is not covered",
+        buildInvestor(inv, late, "$SP500", BLANK), null);
+});
+
+check("a recipe is withdrawn when one of its legs is missing", () => {
+    const { GLD: _gold, ...noGold } = INVESTOR_RANGES;
+    for (const id of ["dalio-all-weather", "browne-permanent"]) {
+        const inv = INVESTORS.find((i) => i.id === id)!;
+        eq(`${id} without gold`, buildInvestor(inv, noGold, "$SP500", BLANK), null);
+    }
+    for (const inv of INVESTORS) {
+        eq(`${inv.id} on empty db`, buildInvestor(inv, {}, "$SP500", BLANK), null);
+    }
+});
+
+check("percentAllocations sums to exactly 100 at two decimals", () => {
+    const got = percentAllocations({ A: 1, B: 1, C: 1 }, ["A", "B", "C"]);
+    eq("thirds", got, { A: 33.34, B: 33.33, C: 33.33 });
+    eq("relative", percentAllocations({ A: 7.5, B: 22.5 }, ["A", "B"]), { A: 25, B: 75 });
+});
+
+check("every famous investor registers a criterion the engine accepts", () => {
+    const METRICS = [
+        "sharpe", "sortino", "calmar", "annual_return", "max_drawdown",
+        "total_return", "turnover", "exposure", "time_in_market", "p_value",
+    ];
+    for (const inv of INVESTORS) {
+        const h = investorHypothesis(inv);
+        if (!METRICS.includes(h.metric)) throw new Error(`${inv.id}: ${h.metric}`);
+        if (buildHypothesis(h) === "") throw new Error(`${inv.id} produced no hypothesis`);
+    }
+});
+
+check("rebalance.lua takes the allocations; other library picks do not", () => {
+    const weighted: SimpleForm = {
+        ...BLANK, name: "W", startDate: "2015-01-02", endDate: "2020-01-02",
+        tickers: ["SPY", "TLT"], evenSplit: false, allocations: { SPY: 60, TLT: 40 },
+    };
+    const rebal = buildToml([{ ...weighted, strategy: "rebalance.lua" }]);
+    if (!rebal.includes("Params = { weights = { SPY = 60.0, TLT = 40.0 } }")) {
+        throw new Error(`rebalance.lua lost its weights:\n${rebal}`);
+    }
+    // Even split stays the script's own equal weighting: no Params at all.
+    const even = buildToml([{ ...weighted, evenSplit: true, strategy: "rebalance.lua" }]);
+    if (even.includes("Params")) throw new Error(`even split emitted Params:\n${even}`);
+    const rsi = buildToml([{ ...weighted, strategy: "rsi.lua" }]);
+    if (rsi.includes("Params")) throw new Error(`rsi.lua was handed weights:\n${rsi}`);
+});
+
+check("the famous-investor cards render, caveats included", () => {
+    const html = renderToString(<Investors ranges={INVESTOR_RANGES} onPick={noop} />);
+    for (const inv of INVESTORS) {
+        if (!html.includes(inv.name)) throw new Error(`${inv.id} not offered`);
+    }
+    if (!html.includes("Rebalanced quarterly")) throw new Error("caveats not shown");
+    // A database with none of it offers no section at all.
+    eq("empty db", renderToString(<Investors ranges={{}} onPick={noop} />), "");
+});
+
+check("PortfolioCard / every card offers the famous investors", () => {
+    const card = (f: SimpleForm, ranges: Record<string, string[]>) =>
+        renderToString(
+            <PortfolioCard
+                form={f}
+                onChange={noop}
+                onRemove={null}
+                otherNames={[]}
+                defaultName="Portfolio 2"
+                dbPath=""
+                available={[]}
+                names={{}}
+                ranges={ranges}
+                pickable={[]}
+                showBaskets={false}
+            />,
+        );
+    // Empty or populated, baskets off: the dropdown is there regardless.
+    for (const f of [{ ...BLANK, name: "B" }, form]) {
+        const html = card(f, INVESTOR_RANGES);
+        if (!html.includes("Copy a famous investor")) {
+            throw new Error(`no investor dropdown on ${JSON.stringify(f.tickers)}`);
+        }
+        for (const inv of INVESTORS) {
+            if (!html.includes(inv.name)) throw new Error(`${inv.id} not offered`);
+        }
+    }
+    if (!card(form, INVESTOR_RANGES).includes("replaces these holdings")) {
+        throw new Error("a populated card does not warn that picking replaces it");
+    }
+    // A portfolio this database cannot build is listed, disabled, with why.
+    if (!card(form, {}).includes("(not in this database)")) {
+        throw new Error("an unbuildable investor was not marked");
+    }
+    // A card filled from one keeps its caveat on screen.
+    const built = buildInvestor(INVESTORS[1], INVESTOR_RANGES, "$SP500", BLANK)!;
+    if (!card(built, INVESTOR_RANGES).includes(INVESTORS[1].caveat.slice(0, 20))) {
+        throw new Error("the copied portfolio's caveat is not shown");
+    }
+});
+
+check("a benchmark line per deposit schedule, not one per ticker", () => {
+    const mk = (name: string, curve: number[], netContributions = 0) =>
+        main.RunResult.createFrom({
+            portfolioName: name,
+            initialCapital: 10000,
+            netContributions,
+            benchmarkCurve: curve,
+            benchmarkStats: { ticker: "$SP500" },
+        });
+    // Two lump-sum portfolios share the index's line, unlabelled.
+    const shared = benchmarkLines([mk("A", [10000, 11000]), mk("B", [10000, 11000])]);
+    eq("shared", shared.map((l) => l.name), ["$SP500"]);
+    // A monthly-deposit card's benchmark received its deposits, so it is its
+    // own line, and both are named after their portfolios.
+    const split = benchmarkLines([
+        mk("Lump sum", [10000, 11000]),
+        mk("Monthly", [10000, 17000], 6000),
+    ]);
+    eq("split", split.map((l) => l.name), ["$SP500 · Lump sum", "$SP500 · Monthly"]);
+});
+
 check("a chat message renders its markdown and insert actions", () => {
     const noop = () => {};
     const html = renderToString(
@@ -1341,6 +1659,190 @@ check("a chat message renders its markdown and insert actions", () => {
     if (!panel.includes("chat-scroll") && !panel.includes("chat-setup")) {
         throw new Error(panel);
     }
+});
+
+check("the assistant maximises and restores from its header", () => {
+    const noop = () => {};
+    const render = (maximized: boolean) =>
+        renderToString(
+            <ChatPanel
+                width={320}
+                dbPath=""
+                cfgText=""
+                luaText=""
+                onApplyToml={noop}
+                onApplyLua={noop}
+                onClose={noop}
+                maximized={maximized}
+                onToggleMax={noop}
+            />,
+        );
+    const normal = render(false);
+    if (!normal.includes("Maximise assistant")) throw new Error("no maximise button");
+    if (!normal.includes("width:320px")) throw new Error("normal panel lost its width");
+    const max = render(true);
+    if (!max.includes("chat-panel maximized") || !max.includes("Restore assistant")) {
+        throw new Error(`maximised panel does not say so:\n${max}`);
+    }
+    // Maximised, the panel's width is the row's, never the stored pixels.
+    if (max.includes("width:320px")) throw new Error("maximised panel kept a fixed width");
+});
+
+check("keyboard shortcuts map to one action each", () => {
+    const k = (key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean } = {}) =>
+        shortcutFor({
+            key,
+            ctrlKey: !!mods.ctrl,
+            metaKey: !!mods.meta,
+            shiftKey: !!mods.shift,
+            altKey: !!mods.alt,
+        });
+    eq("ctrl+enter", k("Enter", { ctrl: true }), "run");
+    eq("cmd+enter", k("Enter", { meta: true }), "run");
+    eq("ctrl+1", k("1", { ctrl: true }), "tab-backtest");
+    eq("ctrl+3", k("3", { ctrl: true }), "tab-data");
+    eq("ctrl+j", k("j", { ctrl: true }), "toggle-assistant");
+    // Shift changes the key's case; the binding must not care.
+    eq("ctrl+shift+J", k("J", { ctrl: true, shift: true }), "max-assistant");
+    eq("ctrl+m", k("m", { ctrl: true }), "toggle-results");
+    eq("ctrl+shift+M", k("M", { ctrl: true, shift: true }), "max-results");
+    eq("ctrl+s", k("s", { ctrl: true }), "save");
+    eq("f1", k("F1"), "help");
+    eq("esc", k("Escape"), "escape");
+    eq("slash", k("/"), "focus-search");
+    eq("ctrl+/ is not it", k("/", { ctrl: true }), null);
+    // A bare key never fires from a field: typingInField is App's guard.
+    const el = (tag: string, inMonaco = false) =>
+        ({ tagName: tag, isContentEditable: false, closest: () => (inMonaco ? {} : null) }) as unknown as Element;
+    eq("input types", typingInField(el("INPUT")), true);
+    eq("textarea types", typingInField(el("TEXTAREA")), true);
+    eq("monaco types", typingInField(el("DIV", true)), true);
+    eq("a button does not", typingInField(el("BUTTON")), false);
+    eq("nothing focused", typingInField(null), false);
+    // Typing is never a shortcut, and AltGr (Ctrl+Alt) types characters.
+    eq("plain j", k("j"), null);
+    eq("plain enter", k("Enter"), null);
+    eq("altgr", k("2", { ctrl: true, alt: true }), null);
+    // Zoom stays with its own handler.
+    eq("ctrl+0", k("0", { ctrl: true }), null);
+    // Every action is listed once, so the overlay is complete.
+    eq("unique", new Set(SHORTCUTS.map((s) => s.action)).size, SHORTCUTS.length);
+    eq("keysFor", keysFor("run", false), "Ctrl+Enter");
+    const html = renderToString(<ShortcutsHelp onClose={() => {}} />);
+    for (const sc of SHORTCUTS) {
+        if (!html.includes(sc.label.replace(/[()]/g, "").slice(0, 12))) {
+            throw new Error(`help overlay omits ${sc.action}`);
+        }
+    }
+});
+
+check("the command palette finds commands by any of their words", () => {
+    const cmd = (id: string, label: string, extra: Partial<Command> = {}): Command => ({
+        id, label, run: () => {}, ...extra,
+    });
+    const all = [
+        cmd("run", "Run backtest", { keys: "Ctrl+Enter" }),
+        cmd("tab-config", "Go to Config tab"),
+        cmd("check", "Check config"),
+        cmd("save", "Save config and scripts", { disabled: true, hint: "Config tab only" }),
+        cmd("zoom-reset", "Reset zoom"),
+    ];
+    const ids = (q: string) => filterCommands(all, q).map((c) => c.id);
+    eq("empty lists everything", ids(""), all.map((c) => c.id));
+    eq("prefix first", ids("check"), ["check"]);
+    // Every word must match, in any order and any case.
+    eq("words in any order", ids("CONFIG go"), ["tab-config"]);
+    // A label starting with the query outranks one merely containing it.
+    eq("ranked", ids("config"), ["tab-config", "check", "save"]);
+    eq("word start", ids("zoom"), ["zoom-reset"]);
+    eq("nothing", ids("xyzzy"), []);
+    const key = (k: string, mods: { ctrl?: boolean; meta?: boolean; shift?: boolean }) =>
+        shortcutFor({ key: k, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, shiftKey: !!mods.shift, altKey: false });
+    eq("ctrl+shift+P", key("P", { ctrl: true, shift: true }), "palette");
+    // On a Mac it is Cmd+Shift+P, and WebKit reports the key lower-case there.
+    eq("cmd+shift+p", key("p", { meta: true, shift: true }), "palette");
+    // The Slack/Linear habit still works.
+    eq("ctrl+k", key("k", { ctrl: true }), "palette");
+    // Printed the way each platform presses it.
+    eq("palette keys", keysFor("palette", false), "Ctrl+Shift+P");
+    eq("palette keys on a mac", keysFor("palette", true), "Cmd+Shift+P");
+    eq("run on a mac", keysFor("run", true), "Cmd+Enter");
+    eq("only the modifier", displayKeys("Ctrl+1", true), "Cmd+1");
+
+    const html = renderToString(<CommandPalette commands={all} onClose={() => {}} />);
+    for (const want of ["Type a command", "Run backtest", "Ctrl+Enter", "Config tab only"]) {
+        if (!html.includes(want)) throw new Error(`palette lacks ${want}`);
+    }
+    // A disabled command is listed, marked, and says why.
+    if (!html.includes('aria-disabled="true"')) throw new Error("disabled command not marked");
+});
+
+check("zoom keys work with Ctrl everywhere and Cmd on a Mac", () => {
+    const z = (key: string, mods: { ctrl?: boolean; meta?: boolean; alt?: boolean } = {}) =>
+        zoomFor({ key, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, shiftKey: false, altKey: !!mods.alt });
+    eq("ctrl+=", z("=", { ctrl: true }), "in");
+    eq("cmd+=", z("=", { meta: true }), "in");
+    eq("cmd++ (numpad)", z("+", { meta: true }), "in");
+    eq("cmd+-", z("-", { meta: true }), "out");
+    eq("cmd+0", z("0", { meta: true }), "reset");
+    eq("ctrl+up", z("ArrowUp", { ctrl: true }), "in");
+    // Cmd+arrow moves the caret on a Mac; never a zoom.
+    eq("cmd+up", z("ArrowUp", { meta: true }), null);
+    eq("plain -", z("-"), null);
+    eq("altgr", z("0", { ctrl: true, alt: true }), null);
+    // No shortcut action shadows a zoom key.
+    eq("ctrl+0 not a shortcut", shortcutFor({ key: "0", ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }), null);
+});
+
+check("a disabled Run says why, and the reason agrees with the button", () => {
+    const ranges = { AAPL: ["2010-01-04", "2026-08-07"], MSFT: ["2010-01-04", "2026-08-07"] };
+    const ok: SimpleForm = {
+        ...BLANK, name: "A", tickers: ["AAPL"], evenSplit: true, allocations: { AAPL: 100 },
+        startDate: "2015-01-02", endDate: "2020-01-02",
+    };
+    eq("runnable", runBlocker([ok], ranges, "db", false), "");
+    eq("running", runBlocker([ok], ranges, "db", true), "a run is already going");
+    if (!runBlocker([ok], ranges, "", false).startsWith("choose a database")) throw new Error("no db");
+    eq("empty", runBlocker([{ ...ok, tickers: [], allocations: {} }], ranges, "db", false), "add at least one holding");
+    eq("zero weights",
+        runBlocker([{ ...ok, evenSplit: false, allocations: { AAPL: 0 } }], ranges, "db", false),
+        "give at least one holding a percentage above 0");
+    // A date problem continues the sentence: lower-case word, no full stop...
+    eq("reversed", runBlocker([{ ...ok, startDate: "2021-01-04" }], ranges, "db", false),
+        "start date is after the end date");
+    // ...but a ticker keeps its case.
+    const early = runBlocker([{ ...ok, startDate: "2005-01-03" }], ranges, "db", false);
+    if (!early.startsWith("data for AAPL starts")) throw new Error(early);
+    // With several cards, it names the one to look at.
+    eq("named", runBlocker([ok, { ...ok, name: "B", tickers: [], allocations: {} }], ranges, "db", false),
+        "B: add at least one holding");
+    if (!runBlocker([ok, { ...ok }], ranges, "db", false).includes('both called "A"')) {
+        throw new Error("duplicate names not explained");
+    }
+    // portfolioRunnable is defined from the blocker, so they cannot disagree.
+    for (const f of [ok, { ...ok, tickers: [] }, { ...ok, startDate: "2021-01-04" }]) {
+        eq(`agree ${JSON.stringify(f.tickers)} ${f.startDate}`,
+            portfolioRunnable(f, ranges), portfolioBlocker(f, ranges) === "");
+    }
+});
+
+check("the run timer counts whole seconds, then minutes", () => {
+    eq("0", formatElapsed(0), "0s");
+    eq("7.9s", formatElapsed(7900), "7s");
+    eq("59s", formatElapsed(59999), "59s");
+    eq("1m", formatElapsed(60000), "1m 00s");
+    eq("1m05", formatElapsed(65000), "1m 05s");
+    eq("12m", formatElapsed(720000), "12m 00s");
+    // A clock that went backwards never shows a negative time.
+    eq("negative", formatElapsed(-500), "0s");
+    const html = renderToString(<RunTimer since={Date.now() - 3000} />);
+    if (!/run-timer">[34]s</.test(html)) throw new Error(html);
+});
+
+check("double-clicking the results bar steps min -> normal -> max -> normal", () => {
+    eq("min", cycleResultsLayout("min"), "normal");
+    eq("normal", cycleResultsLayout("normal"), "max");
+    eq("max", cycleResultsLayout("max"), "normal");
 });
 
 check("a drag applies at most once per frame, and its last position", () => {
@@ -1516,7 +2018,7 @@ check("the results bar minimises, maximises and restores", () => {
     const noop = () => {};
     const bar = (view: "normal" | "min" | "max", count = 0) =>
         renderToString(
-            <ResultsBar view={view} onView={noop} onResizeStart={noop} onReset={noop} count={count} />,
+            <ResultsBar view={view} onView={noop} onResizeStart={noop} count={count} />,
         );
     const normal = bar("normal", 3);
     for (const want of ["Minimise results", "Maximise results", "Results · 3", "resize-handle"]) {

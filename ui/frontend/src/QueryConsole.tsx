@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import Editor, { OnMount } from "@monaco-editor/react";
+import Editor from "./LazyEditor";
+import type { OnMount } from "@monaco-editor/react";
 import { RunUserQuery } from "../wailsjs/go/main/App";
 import { main } from "../wailsjs/go/models";
 import { readStored, writeStored } from "./storage";

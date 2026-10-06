@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"my-backtester/src/data"
 )
 
 type Config struct {
@@ -221,6 +223,13 @@ type PortfolioConfig struct {
 	// strategy actually reads. Absent or empty, nothing is fetched and nothing
 	// about the run changes, which is why every existing config is unaffected.
 	Fundamentals []string `toml:"Fundamentals"`
+	// FundamentalSource picks the table those figures are read from. Empty
+	// (or "financials") is the `financials` table, 2020-07 onward, exactly as
+	// before this existed. "sec" reads `sec_financials` instead: 2009 onward,
+	// each figure as first filed, with "annual" and "quarterly" kept apart by
+	// SEC's own period length. Under "sec", market_cap() is always nil —
+	// SEC share counts are as reported, never restated for a later split.
+	FundamentalSource string `toml:"FundamentalSource"`
 	// DelistingReturn is the fraction of a position's value lost on the day
 	// the company delists, applied only when the delisting was
 	// performance-related (bankruptcy or a compliance removal) and only to a
@@ -244,6 +253,10 @@ type PortfolioConfig struct {
 	// Margin is what a short position must be backed by. Ignored entirely
 	// unless AllowShort is on.
 	Margin MarginConfig `toml:"Margin"`
+	// Rules is a strategy written as choices from a fixed menu instead of as a
+	// script (see rules.go). It replaces Strategy; setting both is an error.
+	// Absent, nothing about the portfolio changes.
+	Rules *RulesConfig `toml:"Rules"`
 	// Sweep turns one config block into many runs: every key maps to a LIST
 	// of values, and the block expands to the cartesian product of them. Each
 	// resulting portfolio takes Params with its own sweep values written over
@@ -508,7 +521,11 @@ func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
 	}
 	// Once per block, before expanding: a swept block would otherwise repeat
 	// the same message for every combination it produces.
-	warnIgnoredParams(pc.Name, pc.Strategy, pc.Params, pc.Sweep, len(combos))
+	spec := pc.Strategy
+	if pc.Rules != nil {
+		spec = RulesSpec
+	}
+	warnIgnoredParams(pc.Name, spec, pc.Params, pc.Sweep, len(combos))
 	if len(combos) == 0 {
 		p, err := pc.ToPortfolio()
 		if err != nil {
@@ -551,6 +568,23 @@ func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
 // rule could drift, and the failure would be a check that passes a config the
 // run then rejects.
 func (pc *PortfolioConfig) ResolveStrategy(defaultLuaPath string) error {
+	if pc.Rules != nil {
+		// Refused rather than half-supported: each of these would run
+		// something other than what the rules' sentence says.
+		switch {
+		case strings.TrimSpace(pc.Strategy) != "":
+			return fmt.Errorf(
+				"portfolio %q sets both Strategy and [Portfolio.Rules]; pick one", pc.Name)
+		case len(pc.Sweep) > 0:
+			return fmt.Errorf(
+				"portfolio %q: [Portfolio.Sweep] cannot vary [Portfolio.Rules] yet; "+
+					"write one [[Portfolio]] block per setting instead", pc.Name)
+		case !pc.WalkForward.Zero():
+			return fmt.Errorf(
+				"portfolio %q: walk-forward is not available for [Portfolio.Rules] yet", pc.Name)
+		}
+		return nil
+	}
 	if strings.TrimSpace(pc.Strategy) != "" {
 		return nil
 	}
@@ -591,14 +625,33 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 		return nil, err
 	}
 
+	spec, params := pc.Strategy, pc.Params
+	if pc.Rules != nil {
+		if strings.TrimSpace(pc.Strategy) != "" {
+			return nil, fmt.Errorf(
+				"portfolio %q sets both Strategy and [Portfolio.Rules]; pick one", pc.Name)
+		}
+		c, err := compileRules(*pc.Rules, pc.Tickers, pc.Benchmark)
+		if err != nil {
+			return nil, fmt.Errorf("portfolio %q: %v", pc.Name, err)
+		}
+		if n := weekdaysBetween(startTime, endTime); c.warmup >= n {
+			return nil, fmt.Errorf(
+				"portfolio %q: the rules need %d trading days of history before "+
+					"their first decision, but %s..%s has at most %d; start earlier "+
+					"or use shorter lookbacks",
+				pc.Name, c.warmup, pc.StartTime, pc.EndTime, n)
+		}
+		spec, params = RulesSpec, pc.Rules.params()
+	}
 	p, err := InitializePortfolio(
 		pc.BuyingPower,
 		startTime,
 		endTime,
 		pc.Name,
 		pc.Tickers,
-		pc.Strategy,
-		pc.Params,
+		spec,
+		params,
 	)
 	if err != nil {
 		return nil, err
@@ -681,7 +734,27 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 	p.Margin = pc.Margin
 	p.DelistingReturn = pc.DelistingReturn
 	p.Benchmark = pc.Benchmark
-	p.Fundamentals = pc.Fundamentals
+	metrics, source := pc.Fundamentals, pc.FundamentalSource
+	if ls, ok := p.Strategy.(*LuaStrategy); ok && len(metrics) == 0 {
+		// The config declares no figures, so the script's own `fundamentals`
+		// table decides — which is what makes a fundamentals strategy work
+		// when it is picked by name and nothing else. A config that names
+		// any metrics is taken as meaning exactly those.
+		hs, hm, err := ls.DeclaredFundamentals()
+		if err != nil {
+			return nil, fmt.Errorf("portfolio %q: %w", pc.Name, err)
+		}
+		metrics = hm
+		if source == "" {
+			source = hs
+		}
+	}
+	p.Fundamentals = metrics
+	source, err = fundamentalSource(pc.Name, source, metrics)
+	if err != nil {
+		return nil, err
+	}
+	p.FundamentalSource = source
 
 	if !pc.Validation.Zero() {
 		split, err := time.Parse("2006-01-02", pc.Validation.InSampleEnd)
@@ -701,4 +774,38 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 		p.InSampleEnd = split
 	}
 	return p, nil
+}
+
+// fundamentalSource validates FundamentalSource and returns the value the
+// engine keys on: "" for `financials`, data.SourceSEC for `sec_financials`.
+//
+// Under "sec" every declared metric must be one the SEC loader writes. A name
+// it does not know would otherwise return nil forever, which reads exactly
+// like a company that has not reported — the silent failure this refuses.
+func fundamentalSource(name, source string, metrics []string) (string, error) {
+	switch source {
+	case "", "financials":
+		return "", nil
+	case data.SourceSEC:
+	default:
+		return "", fmt.Errorf(
+			"portfolio %q: FundamentalSource %q is not one of \"financials\" "+
+				"(the default) or \"sec\"", name, source)
+	}
+	if len(metrics) == 0 {
+		return "", fmt.Errorf(
+			"portfolio %q: FundamentalSource = \"sec\" but Fundamentals is "+
+				"empty, so nothing would be read from it. Declare the metrics "+
+				"the strategy uses, e.g. Fundamentals = [\"Net Income\"]", name)
+	}
+	for _, m := range metrics {
+		if !data.IsSECMetric(m) {
+			return "", fmt.Errorf(
+				"portfolio %q: %q is not a metric sec_financials carries, so "+
+					"fundamental() would return nil for it every day. The SEC "+
+					"metrics are: %s", name, m,
+				strings.Join(data.SECMetrics, ", "))
+		}
+	}
+	return data.SourceSEC, nil
 }

@@ -157,16 +157,7 @@ func LoadSECFundamentals(tickers []string) ([]SECFundamental, error) {
 		return nil, nil
 	}
 
-	// tag_rank and qtrs arrived with the 2026-09 loader; a table loaded before
-	// then has neither, and reads as rank 0 / qtrs unknown rather than failing.
-	extra := `, 0, -1`
-	if columnExists("sec_financials", "tag_rank") {
-		extra = `, tag_rank, qtrs`
-	}
-	query := `SELECT cik, ticker, company_name, sic, metric, tag,
-	                 period_end, filed, filing_period, value, form,
-	                 frequency, accession` + extra + `
-	          FROM sec_financials`
+	query := `SELECT ` + secColumns() + ` FROM sec_financials`
 	args := make([]any, 0, len(tickers))
 	if len(tickers) > 0 {
 		query += ` WHERE ticker IN (` + placeholderList(len(tickers)) + `)`
@@ -175,7 +166,25 @@ func LoadSECFundamentals(tickers []string) ([]SECFundamental, error) {
 		}
 	}
 	query += ` ORDER BY cik, metric, period_end, filed`
+	return querySECRows(query, args)
+}
 
+// secColumns is the select list every sec_financials reader scans with
+// querySECRows, in that function's order.
+func secColumns() string {
+	// tag_rank and qtrs arrived with the 2026-09 loader; a table loaded before
+	// then has neither, and reads as rank 0 / qtrs unknown rather than failing.
+	extra := `, 0, -1`
+	if columnExists("sec_financials", "tag_rank") {
+		extra = `, tag_rank, qtrs`
+	}
+	return `cik, ticker, company_name, sic, metric, tag,
+	        period_end, filed, filing_period, value, form,
+	        frequency, accession` + extra
+}
+
+// querySECRows runs a query selecting secColumns() and scans every row.
+func querySECRows(query string, args []any) ([]SECFundamental, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err

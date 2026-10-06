@@ -9,7 +9,7 @@ spec is resolved by walking up from the working directory, so it finds this one
 whether the process started at the repo root (CLI) or in `ui/` (the desktop
 app). There used to be a second copy under `ui/`, and because the walk checks
 the working directory first, the two files it held **shadowed** the library —
-including an older `buy_and_hold_weighted.lua` that floored to whole shares.
+including an older weighted buy-and-hold script that floored to whole shares.
 Do not recreate it: a script placed there silently wins over the one here.
 
 ## Using one
@@ -39,8 +39,12 @@ evenly on day 0) and `buyAndHold:greedy` (spend it all on the first ticker).
 ## The gallery: what each one needs, and how it fails
 
 Every script carries four tagged lines in its header — `@works`, `@fails`,
-`@sweep` and `@baseline` — and a test requires all four, so a strategy cannot
-join the library undocumented. List them from the CLI, which needs no database
+`@sweep` and `@baseline` — and a test requires all four of every shipped
+script, so a strategy cannot join the library undocumented. They are
+documentation for the gallery and nothing reads them at run time: delete them
+from your own copy and it runs exactly the same. What a script needs in order
+to *work* is code, never a comment — the `fundamentals` table below is the one
+example. List them from the CLI, which needs no database
 and no config:
 
 ```bash
@@ -54,16 +58,19 @@ of examples usually omits.
 | Strategy | Works when | Fails when | Sweep |
 |---|---|---|---|
 | `bollinger_reversion.lua` | the market oscillates around a stable average, so a band touch is a stretch rather than a new trend | a sustained downtrend, where it buys each new low as the band keeps moving down with the price | `period = [10, 20, 50], k = [1.5, 2.0, 2.5]` |
-| `buy_and_hold.lua` | the asset rises over your window — the default answer, and the one most strategies fail to beat | you cannot sit through the drawdown it takes on the way; it has no exit and never goes to cash | `nothing numeric to sweep; vary the UNIVERSE instead, which is what actually decides this one` |
-| `buy_and_hold_weighted.lua` | you have a real view on relative sizing and want to hold it without rebalancing | one name runs away and quietly becomes the whole book, so the weights you chose stop being the weights you hold | `weights are a table, not a number, so sweep by writing several [[portfolio]] blocks; rebalance.lua is the sweepable version` |
+| `buy_and_hold.lua` | the asset rises over your window — the default answer, and the one most strategies fail to beat | you cannot sit through the drawdown it takes on the way; it has no exit and never goes to cash. With weights, one name can run away and quietly become the whole book | `nothing numeric to sweep; vary the UNIVERSE instead, which is what actually decides this one. rebalance.lua is the version that holds its weights` |
 | `dca.lua` | the market falls before it recovers, so the later buys land cheaper | the market rises in a straight line: every day held in cash is a day of lost return, and it will lose to lump-sum roughly two thirds of the time | `every_days = [5, 21, 63], amount = [2500.0, 5000.0, 10000.0]` |
-| `example.lua` | whenever `buy_and_hold.lua` does — it is the same code, kept as the app's editable starter | as a strategy, whenever buy-and-hold fails; as a starting point, never | `nothing numeric to sweep; vary the UNIVERSE instead` |
 | `donchian_breakout.lua` | trends run far beyond the point they look extended — it takes many small losses for a few large winners | range-bound markets: every breakout fails back into the range, and the win rate is low by design even when it works | `entry_period = [20, 55, 100], exit_period = [10, 20, 40]` |
+| `gross_profitability.lua` | gross profit is the cleanest measure of how much a business earns from what it sells, before accounting choices lower down the income statement; Novy-Marx (2013) found it predicts returns about as strongly as book-to-market | a high gross margin spent on overhead — it ignores SG&A and R&D, so a company burning cash below the gross line still ranks well; and asset-light companies win by construction, whatever their prospects | `top_n = [5, 10, 15], rebalance_days = [63, 126, 252]` |
+| `low_asset_growth.lua` | companies that grow their balance sheets fastest — acquisitions, capex binges, issuing stock — go on to underperform (Cooper, Gulen and Schill 2008); it is the investment factor in the Fama-French five-factor model | growth that pays off — it avoids every company compounding assets because its investments work, and a shrinking balance sheet can be write-downs and distress rather than discipline | `top_n = [5, 10, 15], rebalance_days = [63, 126, 252]` |
 | `momentum_rotation.lua` | leadership persists for months at a time, which is the historically documented effect | a sharp reversal: momentum crashes are its signature failure, and it is fully invested in last quarter's winners when one arrives | `lookback = [63, 126, 252], top_n = [1, 2, 3], rebalance_days = [21, 63]` |
+| `piotroski_fscore.lua` | cheap or neglected companies whose fundamentals are quietly improving — Piotroski (2000) built it to separate winners from losers among value stocks, where it does most of its work | on a list of large, healthy companies most score 5-7 and it sorts noise; and the signals are year-over-year changes, so a company that is excellent but stable earns fewer points than a mediocre one recovering | `min_score = [6, 7, 8], max_names = [5, 10], rebalance_days = [63, 252]` |
+| `quality_roe.lua` | highly profitable businesses keep earning high returns for years and the market underprices that persistence — the quality factor | ROE is high because equity is tiny: leverage and heavy buybacks shrink the denominator, so it drifts toward indebted companies; and in junk rallies (2009, 2020-21) the least profitable names lead | `top_n = [5, 10, 15], rebalance_days = [63, 126, 252]` |
 | `rebalance.lua` | the holdings are volatile and take turns leading, so trimming the winner funds the laggard before it recovers | one asset trends far ahead of the rest: rebalancing sells the winner all the way up, which is the classic drag against a runaway leader | `rebalance_days = [21, 63, 126, 252]` |
 | `risk_parity.lua` | volatility is a stable predictor of risk and the low-vol assets are genuinely safer | a low-volatility asset breaks — quiet things get the biggest weights, so the one that surprises you does the most damage | `lookback = [21, 63, 126], rebalance_days = [21, 63]` |
 | `rsi.lua` | the market is range-bound and oversold readings mean stretched rather than falling | a sustained downtrend: oversold gets more oversold, and this buys the whole way down | `period = [7, 14, 21], buy_thresh = [20, 30, 40], sell_thresh = [60, 70, 80]` |
 | `sma_cross.lua` | the market makes sustained multi-month trends in one direction | a choppy sideways market whipsaws it: every false crossing is a round trip paid for in costs | `short = [10, 20, 50], long = [50, 100, 200]` |
+| `strong_balance_sheet.lua` | credit stress — selloffs that punish borrowers (2015-16 energy debt, the 2022 rate shock) hit lightly-indebted companies least | long bull markets with cheap money, where leverage is rewarded and these lag; and banks, insurers and utilities run on borrowed money by design, so they never qualify — partly a sector bet | `top_n = [5, 10, 15], rebalance_days = [63, 126, 252]` |
 | `trend_following.lua` | prices trend persistently above or below a long average | chop around the average, where the buffer is crossed repeatedly and each crossing is a trade | `period = [50, 100, 200], buffer_pct = [0.0, 0.01, 0.03]` |
 
 Paste a `@sweep` line into `[portfolio.Sweep]` to search it — that is what the
@@ -78,10 +85,8 @@ that is the intended way to build something custom.
 
 | Strategy | Idea | Key params |
 |---|---|---|
-| `buy_and_hold.lua` | Buy on day 0, hold to the end. | `buyType` |
-| `buy_and_hold_weighted.lua` | Buy a fixed weighted allocation on day 0, never rebalance. | `weights` |
+| `buy_and_hold.lua` | Buy on day 0 — equally, or at `weights` — and hold to the end, never rebalancing. Scheduled deposits are invested the day they arrive, split the same way. | `weights`, `buyType` |
 | `dca.lua` | Invest a fixed dollar amount on a cadence, never sell. | `amount`, `every_days` |
-| `example.lua` | The Lua tab's starter file: buy on day 0, hold to the end. Edit it freely. | `buyType` |
 | `rebalance.lua` | Hold target weights, rebalance on a cadence — trims winners, tops up losers. | `rebalance_days`, `weights` |
 | `risk_parity.lua` | Weight by 1/volatility so each holding contributes similar risk. | `lookback`, `rebalance_days` |
 | `momentum_rotation.lua` | Hold the top N by trailing return, rotate on a cadence, cash out when nothing has positive momentum. | `lookback`, `top_n`, `rebalance_days`, `skip_days` |
@@ -90,12 +95,43 @@ that is the intended way to build something custom.
 | `donchian_breakout.lua` | Buy N-day highs, exit on M-day lows (turtle style). | `entry_period`, `exit_period` |
 | `rsi.lua` | Buy oversold, sell overbought. | `period`, `buy_thresh`, `sell_thresh` |
 | `bollinger_reversion.lua` | Buy below the lower band, exit at the average. | `period`, `k` |
+| `quality_roe.lua` | Hold the top N by return on equity (SEC filings). | `top_n`, `rebalance_days`, `min_names` |
+| `gross_profitability.lua` | Hold the top N by gross profit / total assets (SEC filings). | `top_n`, `rebalance_days`, `min_names` |
+| `piotroski_fscore.lua` | Score each company 0–8 on whether its last annual report shows it getting healthier; hold the high scorers (SEC filings). | `min_score`, `max_names`, `rebalance_days` |
+| `low_asset_growth.lua` | Hold the N whose total assets grew least last year (SEC filings). | `top_n`, `rebalance_days`, `min_names` |
+| `strong_balance_sheet.lua` | Hold the top N by equity / assets among cash-generative companies (SEC filings). | `top_n`, `rebalance_days`, `min_names` |
 
 **Pick a universe that matches the family.** Per-ticker signal strategies
 (trend, breakout, RSI, Bollinger) judge each ticker independently, so give
 them a basket of individual names. Allocation strategies (rotation, risk
 parity, rebalance) divide capital across the universe, so they are most
 interesting across asset classes — e.g. `["$SP500", "$CASH"]`.
+
+### Fundamentals strategies
+
+The five marked *SEC filings* rank companies on their reported figures. Each
+declares what it reads in a `fundamentals` table at its top, and the engine loads
+exactly that whenever the portfolio's config declares no `Fundamentals` of its
+own — so choosing one as the strategy is all it takes, from the Simple form or
+the Config tab alike. `strategy_library.toml` has a ready block for each, over one list of large
+companies from 2015-06. Things to know before reading their results:
+
+- **They need `sec_financials`** (`python3 add_sec_financials.py`). Without
+  it every `fundamental()` is `nil`, and they hold nothing at all — by
+  design, not a bug; the `Fund Cov %` column says so.
+- **Every ratio is two dollar figures from the same filing** — ROE, gross
+  profit / assets, equity / assets. None divides by a price: SEC share counts
+  are not split-adjusted, so `market_cap()` is `nil` under the SEC source, and
+  the closes are dividend-adjusted, which biases price multiples anyway
+  (T112).
+- **Give them a cross-section.** Ranking three companies is not a screen; the
+  ranking ones leave the book alone below `min_names`. Twenty names or more is
+  where the idea starts to mean something.
+- **A hand-typed list is survivors.** Every company you can type today lived
+  through your window, which flatters any long-only screen. Delisted filers
+  are in `sec_financials` but cannot be traded until T51.
+- **Banks and insurers mostly drop out**: no gross profit, no current
+  assets/liabilities, balance sheets that are mostly debt by design.
 
 ## Writing your own
 
@@ -162,7 +198,42 @@ Fundamentals = ["Net Income", "Stockholders Equity", "Total Revenue"]
 | Function | Returns |
 |---|---|
 | `fundamental(t, metric, day)` | The newest figure published on or before that day, or **`nil`**. |
-| `market_cap(t, day)` | Shares × close, or **`nil`** when the share count is missing or the close is ≤ 0. |
+| `fundamental(t, metric, day, freq)` | Only figures of that frequency: `"annual"` (a full fiscal year) or `"quarterly"` (one quarter). Anything else is an error. **Use this for every flow** — see below. |
+| `fundamental(t, metric, day, freq, n)` | The period `n` before the newest of that frequency, as it was known on `day`. `n = 1` with `"annual"` is last fiscal year — the year-over-year comparison, with no extra price history needed. |
+| `market_cap(t, day)` | Shares × close, or **`nil`** when the share count is missing or the close is ≤ 0. Always `nil` with `FundamentalSource = "sec"`. |
+
+**Name the frequency for net income, revenue, cash flow — any flow.** The bare
+form returns whichever figure was published most recently, so it can return a
+quarter one day and a full year the next, and a ratio built on it jumps about
+4x at each company's fiscal year end. Balance-sheet figures (equity, assets,
+debt) are levels, so the bare form is fine for them.
+
+**Where the figures come from.** By default, the `financials` table: 2020-07
+onward. Add `FundamentalSource = "sec"` to the portfolio to read SEC filings
+instead — 2010 onward, each figure exactly as first filed, from the day after
+the filing. Under `"sec"` the bare form never mixes frequencies (a flow means
+its newest full year, a level its newest balance sheet), and a metric SEC does
+not carry is refused when the config loads. Its 30 metrics are listed in
+`src/data.SECMetrics`; per-share figures and share counts there are as
+reported, so they jump at every split.
+
+**Declare what your script reads in the script** and it works wherever it is
+picked, with no config changes:
+
+```lua
+fundamentals = {
+    source  = "sec",                                  -- leave out for `financials`
+    metrics = { "Net Income", "Stockholders Equity" },
+}
+```
+
+It must be a top-level assignment of a plain table of quoted names: the engine
+reads it before the run, without running the script, because the figures are
+loaded before any Lua executes. A computed name, an unknown field or a second
+assignment is an error naming the line, and ✓ Check script reports it. It
+applies when the config declares no `Fundamentals`; a config that names
+metrics means exactly those. Asking `fundamental()` for a metric that was not
+loaded logs a warning once, rather than returning `nil` in silence.
 
 **These return `nil`, not 0 — the opposite of `price()`.** That is deliberate.
 A price of zero is impossible, so `price()` can safely use 0 to mean "absent".
@@ -171,7 +242,7 @@ so a 0 here would be indistinguishable from "not published yet" — the exact
 ambiguity that makes a strategy trade on a figure it never had. Test for `nil`:
 
 ```lua
-local ni = fundamental(t, "Net Income", day)
+local ni = fundamental(t, "Net Income", day, "annual")
 local eq = fundamental(t, "Stockholders Equity", day)
 if ni ~= nil and eq ~= nil and eq > 0 then
   local roe = ni / eq
@@ -184,8 +255,8 @@ in Go, upstream of Lua, so a lookup only ever returns what was public that
 morning. Ratios, rankings and cross-sectional sorts are arithmetic you do
 yourself — there is no wider API on purpose.
 
-**Coverage is measured, not enforced.** Reported data starts in 2020, so a
-strategy run from 2010 sees `nil` for the first decade, trades only in the back
+**Coverage is measured, not enforced.** The default source starts in 2020, so
+a strategy run on it from 2010 sees `nil` for the first decade, trades only in the back
 half, and can look like it found an edge. The engine will not refuse that
 window; it reports a `Fund Cov %` metric instead — the share of
 (day × ticker × declared metric) cells that had a figure. Read it before
@@ -227,9 +298,10 @@ accident.
 | Function | Effect |
 |---|---|
 | `cash()` | Uninvested buying power. |
+| `cashflow()` | The signed amount a `[portfolio.Cashflow]` schedule moved at the top of today: positive on a deposit day, negative on a withdrawal day, `0` otherwise. Read this, not `cash()`, to invest contributions — cash can be high for reasons that are not a deposit. |
 | `position(t)` | `{amount, avg_price, current_price}`, or `nil` when flat. |
 | `buy(t, shares, price, day)` | Buy an exact share count. Fractional shares are allowed. |
-| `buy_max(t, price, buyType, day)` | Size the order automatically; `buyType` is `"equalWeights"` or `"greedy"`. |
+| `buy_max(t, price, buyType, day, [budget])` | Size the order automatically; `buyType` is `"equalWeights"` (`budget / #tickers`) or `"greedy"` (all of `budget`). `budget` defaults to `cash()`; pass `cashflow()` to invest just a deposit, or a balance snapshotted before the first leg so equal-weight legs don't shrink in turn. The order never exceeds what `cash()` buys. |
 | `sell(t, shares, price, day)` | Sell an exact share count. With `AllowShort`, a sell past the holding closes the long and **shorts the remainder**; without it, such an order is refused. |
 | `sell_all(t, price, day)` | Close the whole position, whichever way it points — a short is closed by buying the shares back. |
 | `short(t, shares, price, day)` | Be short exactly `shares` after this call. A **target**, not a delta — see below. `short(t, 0, …)` goes flat. Needs `AllowShort`. |

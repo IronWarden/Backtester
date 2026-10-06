@@ -11,9 +11,9 @@ import (
 
 // The bug as reported: from ui/, the Lua tab could not see the library, said
 // the default script was a new file, and saving created a zero-byte
-// ui/strategies/example.lua that then shadowed the real one.
+// ui/strategies/example.lua (the starter script then) that then shadowed the real one.
 func TestDefaultLuaScriptIsVisibleFromUI(t *testing.T) {
-	const spec = "strategies/example.lua" // DEFAULT_LUA_PATH in App.tsx
+	const spec = "strategies/buy_and_hold.lua" // a library script, as the form names it
 
 	if _, err := os.Stat(spec); err == nil {
 		t.Fatalf("%s resolved from cwd — ui/strategies exists again, which is "+
@@ -38,8 +38,8 @@ func TestDefaultLuaScriptIsVisibleFromUI(t *testing.T) {
 // Writing must land on the library, not create a second copy beside the
 // binary. The assertion that matters is the absence of ui/strategies.
 func TestWriteResolvesToTheLibraryNotCwd(t *testing.T) {
-	if got := resolveAppPath("strategies/example.lua"); got != filepath.Join("..", "strategies", "example.lua") {
-		t.Errorf("existing library script resolved to %q, want ../strategies/example.lua", got)
+	if got := resolveAppPath("strategies/buy_and_hold.lua"); got != filepath.Join("..", "strategies", "buy_and_hold.lua") {
+		t.Errorf("existing library script resolved to %q, want ../strategies/buy_and_hold.lua", got)
 	}
 	// A script that does not exist yet still belongs in the library the
 	// gallery lists — its parent directory is what decides.

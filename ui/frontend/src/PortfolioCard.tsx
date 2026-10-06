@@ -8,7 +8,7 @@ import {
 } from "./buildToml";
 import type { SimpleForm as Form } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
-import { BASKETS, basketTickers } from "./examples";
+import { BASKETS, INVESTORS, basketTickers, buildInvestor } from "./examples";
 import {
     allocationTotal,
     benchmarkWarningOf,
@@ -110,6 +110,8 @@ type Props = {
     // the whole form is empty, because the starter examples own that moment --
     // two answers to the same question is worse than one.
     showBaskets: boolean;
+    // Opens the chosen strategy's script in the Lua tab, read-only.
+    onViewScript?: (strategy: string) => void;
 };
 
 export default function PortfolioCard({
@@ -124,6 +126,7 @@ export default function PortfolioCard({
     ranges,
     pickable,
     showBaskets,
+    onViewScript,
 }: Props) {
     const [tickerInput, setTickerInput] = useState("");
     // Which suggestion the keyboard is on, or -1 for "none: Enter takes what
@@ -196,6 +199,29 @@ export default function PortfolioCard({
               );
         patch({ tickers, allocations });
     }
+
+    // A famous investor's portfolio replaces the card's holdings, weights,
+    // window and strategy; capital and any cashflow schedule are kept. The
+    // card's benchmark is kept too unless it is empty, in which case the
+    // market is the comparison the portfolio's whole point rests on.
+    function investorForm(id: string) {
+        const inv = INVESTORS.find((e) => e.id === id);
+        if (!inv) return null;
+        const benchmark =
+            form.benchmark || (ranges["$SP500"] ? "$SP500" : "");
+        return buildInvestor(inv, ranges, benchmark, form);
+    }
+
+    // Every investor portfolio, with the form it would build here or null
+    // when this database cannot support it -- those stay in the dropdown,
+    // disabled, so a missing one says why rather than vanishing.
+    const investorChoices = INVESTORS.map((inv) => ({
+        inv,
+        built: investorForm(inv.id),
+    }));
+    // The one this card was filled from, recognised by name, so its caveat
+    // stays on screen while the card still is that portfolio.
+    const copiedInvestor = INVESTORS.find((inv) => inv.name === form.name);
 
     function removeTicker(t: string) {
         const tickers = form.tickers.filter((x) => x !== t);
@@ -565,6 +591,16 @@ export default function PortfolioCard({
                         <p className="strategy-baseline">
                             Compare it against: {chosen.Baseline}
                         </p>
+                        {onViewScript && (
+                            <button
+                                type="button"
+                                className="link-button"
+                                onClick={() => onViewScript(form.strategy)}
+                                title="Open the script in the Config tab's Lua editor, read-only"
+                            >
+                                Read the script →
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <div className="strategy-card">
@@ -600,12 +636,13 @@ export default function PortfolioCard({
                     <div className="ticker-combo">
                         <input
                             role="combobox"
+                            data-shortcut="search"
                             aria-expanded={pickerOpen && suggestions.length > 0}
                             aria-controls="ticker-listbox"
                             aria-autocomplete="list"
                             placeholder={
                                 dbPath
-                                    ? "Symbol or company name"
+                                    ? "Symbol or company name   ( / )"
                                     : "Choose a DB first"
                             }
                             disabled={!dbPath}
@@ -679,6 +716,38 @@ export default function PortfolioCard({
                         Import…
                     </button>
                 </div>
+                {/* Always offered, on every card: picking one REPLACES the
+                    holdings, weights, dates and strategy, the same way Import…
+                    replaces the holdings. */}
+                <label className="strategy-pick investor-pick">
+                    Copy a famous investor
+                    <select
+                        value={copiedInvestor?.id ?? ""}
+                        onChange={(e) => {
+                            const choice = investorChoices.find(
+                                (c) => c.inv.id === e.target.value,
+                            );
+                            if (choice?.built) onChange(choice.built);
+                        }}
+                    >
+                        <option value="">
+                            {form.tickers.length > 0
+                                ? "Choose one — replaces these holdings"
+                                : "Choose one"}
+                        </option>
+                        {investorChoices.map(({ inv, built }) => (
+                            <option key={inv.id} value={inv.id} disabled={!built}>
+                                {inv.name} — {inv.investor}
+                                {built ? "" : " (not in this database)"}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                {copiedInvestor && (
+                    <div className="hint investor-note">
+                        {copiedInvestor.note}. {copiedInvestor.caveat}
+                    </div>
+                )}
                 {importNote && (
                     <div className={`hint import-note${importNote.err ? " err" : ""}`}>
                         {importNote.lines.map((l, i) => (

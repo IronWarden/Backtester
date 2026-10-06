@@ -97,7 +97,16 @@ func CheckLuaScript(source, name string, params map[string]any) int {
 	registerWindow(L, p, hist)
 	registerSignals(L, hist)
 	registerCrossSection(L, p)
-	registerFundamentals(L, p, hist)
+	// The checker never sees the config, so it only knows what was loaded
+	// when the script's own `fundamentals` table says; otherwise it stays
+	// quiet rather than warn about metrics the config may well declare.
+	declSource, declMetrics, declErr := ScriptFundamentals(name, []byte(source))
+	if declErr != nil {
+		fail("%v", declErr)
+		return errors
+	}
+	p.FundamentalSource, p.Fundamentals = declSource, declMetrics
+	registerFundamentals(L, p, hist, len(p.Fundamentals) > 0)
 	registerBook(L, p, hist)
 	tickersTbl := L.CreateTable(len(p.Tickers), 0)
 	for i, t := range p.Tickers {
