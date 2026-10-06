@@ -33,6 +33,7 @@ import {
     PickConfigFile,
     PickDBFile,
     ReadFile,
+    RulesFromToml,
     RunBacktest,
     CheckConfig,
     WriteFile,
@@ -67,6 +68,7 @@ import Pane from "./Pane";
 import ErrorBoundary from "./ErrorBoundary";
 import { readStored, readStoredNumber, writeStored } from "./storage";
 import { readSession, writeSession } from "./session";
+import { RULES_STRATEGY, fromRulesConfig } from "./rules";
 import type { Session } from "./session";
 import ChatPanel from "./ChatPanel";
 import QueryConsole from "./QueryConsole";
@@ -280,6 +282,10 @@ function App() {
     // ticking timer; null when nothing is running.
     const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
     const [chatOpen, setChatOpen] = useState(false);
+    // What "Describe my own idea…" puts in the assistant's input box, and
+    // which Backtest card asked, so "Use these rules" lands back on it.
+    const [chatSeed, setChatSeed] = useState<{ text: string; id: number }>();
+    const [ideaCard, setIdeaCard] = useState(0);
     const [results, setResults] = useState<main.RunResult[]>([]);
     // Pre-registration. Kept as raw TOML so the app and the CLI validate one
     // identical thing; an empty box means the run is simply not judged, which
@@ -1090,12 +1096,67 @@ function App() {
 
     // Claude's "Insert into … editor" buttons land here: swap the buffer in
     // and jump to the right tab so the user sees what changed before running.
-    function applyClaudeToml(toml: string) {
+    function applyClaudeToml(toml: string, asRules?: boolean) {
+        if (asRules) {
+            applyClaudeRules(toml);
+            return;
+        }
         setTomlText(toml);
         setTab("toml");
         setMode("advanced");
         setStatusMsg("Claude's config loaded into the TOML editor.");
     }
+    // "Use these rules in the form": the rules land on the card that asked
+    // (the first one otherwise), whose own holdings and window stay -- the
+    // engine reads the result back as the sentence the user then confirms.
+    function applyClaudeRules(toml: string) {
+        RulesFromToml(toml)
+            .then((rc) => {
+                const target = ideaCard < simpleForms.length ? ideaCard : 0;
+                setSimpleForms((fs) =>
+                    fs.map((f, i) => {
+                        if (i !== target) return f;
+                        const next = {
+                            ...f,
+                            strategy: RULES_STRATEGY,
+                            rules: fromRulesConfig(rc),
+                        };
+                        // Fixed weights arrive as the card's percentages, the
+                        // one place the card types weights.
+                        const alloc = rc.allocations ?? {};
+                        if (rc.weight === "allocations" && Object.keys(alloc).length > 0) {
+                            next.allocations = { ...f.allocations, ...alloc };
+                            next.evenSplit = false;
+                        }
+                        return next;
+                    }),
+                );
+                setMode("simple");
+                setStatusMsg("The assistant's rules are on the Backtest tab — read the sentence before you run.");
+            })
+            .catch((e) => setStatusMsg(`Could not use those rules: ${e}`));
+    }
+
+    // "Describe my own idea…" on a Backtest card: the assistant opens with the
+    // card's holdings and window already written into the message, so the
+    // user only has to say the idea.
+    function describeIdea(index: number) {
+        const f = simpleForms[index];
+        if (!f) return;
+        const holdings = f.tickers.length > 0 ? f.tickers.join(", ") : "(no holdings yet)";
+        const span =
+            f.startDate && f.endDate ? ` from ${f.startDate} to ${f.endDate}` : "";
+        const bench = f.benchmark ? `, compared with ${f.benchmark}` : "";
+        setIdeaCard(index);
+        setChatOpen(true);
+        setChatSeed({
+            text:
+                `Write my idea as rules and check it. Holdings: ${holdings}${span}${bench}. ` +
+                "My idea: ",
+            id: Date.now(),
+        });
+    }
+
     function applyClaudeLua(lua: string) {
         // Never into a library script: the scratch file takes it instead.
         const target = luaReadOnly ? SKELETON_LUA_PATH : luaPath;
@@ -1205,6 +1266,7 @@ function App() {
                         onRun={(cfg, hyp) => runConfig(cfg, false, hyp)}
                         onOpenAssistant={() => setChatOpen(true)}
                         onViewScript={viewScript}
+                        onDescribeIdea={describeIdea}
                         onEditAsToml={(cfg, hyp) => {
                             if (hyp) setHypothesis(hyp);
                             editAsToml(cfg);
@@ -1474,6 +1536,7 @@ function App() {
                         }}
                         maximized={chatMax}
                         onToggleMax={() => setChatMax((m) => !m)}
+                        seed={chatSeed}
                     />
                 </>
             )}

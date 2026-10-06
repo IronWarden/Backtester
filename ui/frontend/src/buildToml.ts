@@ -1,7 +1,9 @@
 // buildToml turns the simple-mode form into a TOML config string the
 // existing runner already understands. With no strategy chosen it stays
 // buy-and-hold: buy_and_hold.lua, with a weights table when the split is not
-// even. A library pick emits a lua: spec.
+// even. A library pick emits a lua: spec; a rules card emits [Portfolio.Rules].
+
+import { RULES_STRATEGY, toRulesConfig, type RulesForm } from "./rules";
 
 // Script paths are written the way a config writes them. The engine
 // resolves them by walking up from the working directory, so the same
@@ -70,8 +72,13 @@ export type SimpleForm = {
   cashflowFrequency: CashflowFrequency;
   // A script from the shipped library, as its bare file name ("rsi.lua").
   // EMPTY MEANS BUY-AND-HOLD — the original behaviour, and the reason an
-  // untouched form still generates byte-identical TOML.
+  // untouched form still generates byte-identical TOML. RULES_STRATEGY means
+  // the card runs `rules` below instead of a script.
   strategy: string;
+  // The rule set, read only when strategy is RULES_STRATEGY. Optional so a
+  // session saved before rules existed still restores, and so every form
+  // literal that never heard of rules stays valid.
+  rules?: RulesForm;
 };
 
 // rebalance.lua's whole job is holding target weights, so it takes the
@@ -84,7 +91,12 @@ export const REBALANCE_LUA = "rebalance.lua";
 // allocation percentages do not reach them. Only buy-and-hold
 // (strategy === "") and rebalance.lua use them.
 export function usesAllocations(form: SimpleForm): boolean {
+  if (form.strategy === RULES_STRATEGY) return form.rules?.weight === "allocations";
   return form.strategy === "" || form.strategy === REBALANCE_LUA;
+}
+
+export function usesRules(form: SimpleForm): boolean {
+  return form.strategy === RULES_STRATEGY && !!form.rules;
 }
 
 // The weights table for a non-even split, or nothing.
@@ -112,9 +124,11 @@ function tomlKey(k: string): string {
 // adding the second portfolio did not change what the first one emits.
 function portfolioBlock(form: SimpleForm): string[] {
   const tickerList = form.tickers.map((t) => JSON.stringify(t)).join(", ");
-  const fallbackName = form.strategy
-    ? (form.strategy.split(/[\\/]/).pop() ?? form.strategy).replace(/\.lua$/, "")
-    : "Buy and Hold";
+  const fallbackName = usesRules(form)
+    ? "My rules"
+    : form.strategy
+      ? (form.strategy.split(/[\\/]/).pop() ?? form.strategy).replace(/\.lua$/, "")
+      : "Buy and Hold";
   const lines: string[] = [
     "[[Portfolio]]",
     `Name = ${JSON.stringify(form.name || fallbackName)}`,
@@ -151,6 +165,12 @@ function portfolioBlock(form: SimpleForm): string[] {
   // separator is already a path and is emitted as written -- that is what lets
   // "Run this script" point a portfolio at the file open in the Lua tab,
   // wherever it lives, without the picker's names changing at all.
+  // Rules replace Strategy outright (the engine refuses both), and come
+  // after any cashflow table: sub-tables follow the portfolio's plain keys.
+  if (usesRules(form)) {
+    return lines.concat(cashflow, rulesBlock(form));
+  }
+
   if (form.strategy) {
     lines.push(`Strategy = "lua:${strategySpec(form.strategy)}"`);
     if (form.strategy === REBALANCE_LUA) lines.push(...weightsParam(form));
@@ -161,6 +181,25 @@ function portfolioBlock(form: SimpleForm): string[] {
   lines.push(...weightsParam(form));
 
   return lines.concat(cashflow);
+}
+
+// [Portfolio.Rules], with only the keys that are set: an unset key is the
+// engine's default, and writing it out would only be noise in the Config tab.
+function rulesBlock(form: SimpleForm): string[] {
+  const rc = toRulesConfig(form.rules!, form.allocations, form.tickers);
+  const out = ["", "  [Portfolio.Rules]", `  Rebalance = ${JSON.stringify(rc.rebalance)}`];
+  if (rc.rank) {
+    out.push(`  Rank = ${JSON.stringify(rc.rank)}`, `  Pick = ${rc.pick}`);
+    if (rc.keep > rc.pick) out.push(`  Keep = ${rc.keep}`);
+  }
+  if (rc.filter) out.push(`  Filter = ${JSON.stringify(rc.filter)}`);
+  if (rc.weight !== "equal") out.push(`  Weight = ${JSON.stringify(rc.weight)}`);
+  if (rc.riskOff) out.push(`  RiskOff = ${JSON.stringify(rc.riskOff)}`);
+  if (rc.weight === "allocations") {
+    out.push("", "  [Portfolio.Rules.Allocations]");
+    for (const t of form.tickers) out.push(`  ${tomlKey(t)} = ${toFloat(rc.allocations[t] ?? 0)}`);
+  }
+  return out;
 }
 
 // The whole config: a header comment, then one block per portfolio.

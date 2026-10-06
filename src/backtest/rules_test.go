@@ -463,6 +463,19 @@ func TestDescribeRules(t *testing.T) {
 			"in fixed proportions (A 75%, B 25%)." {
 		t.Errorf("fixed weights: %s", got)
 	}
+	head := RulesHeadline(RulesConfig{Rebalance: "monthly", Rank: "return_126", Pick: 3,
+		Filter: "above_sma_200"}, []string{"A", "B", "C", "D"}, "")
+	if head != "hold the 3 stocks that rose most over the last 126 trading days, "+
+		"counting only those trading above their 200-day average" {
+		t.Errorf("headline: %q", head)
+	}
+	if !strings.Contains(DescribeRules(RulesConfig{Rebalance: "monthly", Rank: "return_126", Pick: 3,
+		Filter: "above_sma_200"}, []string{"A", "B", "C", "D"}, ""), head) {
+		t.Error("the headline is not a verbatim piece of the sentence")
+	}
+	if RulesHeadline(RulesConfig{}, nil, "") != "" {
+		t.Error("rules that cannot run have no headline")
+	}
 	if got := DescribeRules(RulesConfig{}, nil, ""); !strings.HasPrefix(got, "These rules cannot run:") {
 		t.Errorf("an invalid rule set rendered as a sentence: %s", got)
 	}

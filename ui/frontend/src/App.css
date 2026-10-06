@@ -995,6 +995,46 @@ button.primary:hover:not(:disabled),
   color: var(--text-2);
 }
 
+/* The rules card (T135). The sentence is the thing being confirmed, so it is
+   the largest text on the card; the controls beneath it are how it is edited. */
+.simple-form .rules-sentence {
+  margin: 0;
+  font-size: 1.15em;
+  line-height: 1.45;
+  color: var(--text-1);
+}
+
+.simple-form .rules-sentence.pending {
+  color: var(--text-3);
+}
+
+.simple-form .rules-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+}
+
+.simple-form .rules-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6em;
+}
+
+.simple-form .rules-row .strategy-pick {
+  flex: 1 1 16em;
+}
+
+.simple-form .rules-num {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.simple-form .rules-num input {
+  width: 6em;
+}
+
 .simple-form .strategy-when {
   margin: 0;
   display: grid;

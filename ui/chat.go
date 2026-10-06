@@ -502,6 +502,13 @@ can check a sentence. So:
    propose a default and say so after the sentence, e.g. "checked monthly —
    say if you meant weekly", and "the money waits in cash; add a RiskOff if
    you want it to step aside when the S&P 500 falls".
+5. In the app, a fenced toml block containing [portfolio.Rules] gets a "Use
+   these rules in the form" button: it puts the rules on the Backtest tab's
+   card (whose own holdings and window stay), where the engine shows the
+   same sentence above editable controls and the Run button reads "Run: hold
+   the 2 stocks that ...". A user who picked "Describe my own idea…" in the
+   card's strategy dropdown arrives with their holdings and window already
+   in the message — use those, do not ask for them again.
 
 Refused, with the reason: Rules together with Strategy, an unknown entry
 (with a did-you-mean), Pick above the ticker count, Keep below Pick, RiskOff
@@ -2226,6 +2233,7 @@ total US market.
   not momentum_126). Show its sentence VERBATIM, and say the rebalance and
   risk-off you assumed ("checked monthly - say if you meant weekly").
   Use Lua only when the menu cannot say it, and name what it cannot say.
+  Its block gets "Use these rules in the form" (the Backtest card).
 - Verify coverage with query_db before recommending tickers or dates; a
   backtest fails if any ticker lacks data anywhere in the window. Offer
   fetch_history for one missing ticker; when the database as a whole is
@@ -2246,10 +2254,9 @@ total US market.
   they ask whether a result was good, instead of judging it for them after
   they have seen it.
 - Starter examples sit on the empty Backtest tab: "Hold the big five", "Chase
-  the winners", "Step out of falls", "Drip money in". Each fills a whole
-  portfolio plus its hypothesis, with the window clamped to what the database
-  and the benchmark actually cover, and each is hidden when the data cannot
-  support it. They are a starting point to EDIT, not a recommendation.
+  the winners", "Step out of falls", "Drip money in". Each fills a portfolio
+  plus its hypothesis, clamped to what the data covers (hidden when it
+  cannot). They are a starting point to EDIT, not a recommendation.
 - An empty holdings box offers STARTER BASKETS (big tech, the whole market as
   one fund, a spread across sector ETFs), filtered to symbols the database has
   and withdrawn if too few survive. Shown only once something else in the form

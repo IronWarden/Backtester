@@ -414,25 +414,8 @@ func (c *compiledRules) describe(benchmark string) string {
 		}
 	}
 	b.WriteString(reb.Phrase)
-	b.WriteString(", hold ")
-	switch {
-	case c.rank == nil && c.filter == nil:
-		b.WriteString("every one of these stocks")
-	case c.rank == nil:
-		b.WriteString("every one of these stocks ")
-		b.WriteString(fill(c.filter.entry.Phrase, c.filter.args, benchmark))
-	default:
-		if c.cfg.Pick == 1 {
-			b.WriteString("the one stock that ")
-		} else {
-			fmt.Fprintf(&b, "the %d stocks that ", c.cfg.Pick)
-		}
-		b.WriteString(fill(c.rank.entry.Phrase, c.rank.args, benchmark))
-		if c.filter != nil {
-			b.WriteString(", counting only those ")
-			b.WriteString(fill(c.filter.entry.Phrase, c.filter.args, benchmark))
-		}
-	}
+	b.WriteString(", ")
+	b.WriteString(c.holdClause(benchmark))
 	b.WriteString(", ")
 	b.WriteString(c.weightPhrase(benchmark))
 	if c.rank != nil && c.keep > c.cfg.Pick {
@@ -451,6 +434,44 @@ func (c *compiledRules) describe(benchmark string) string {
 		fmt.Fprintf(&b, " The first decision waits for %d trading days of history; until then it holds cash.", c.warmup)
 	}
 	return b.String()
+}
+
+// holdClause is what the rules hold, as the sentence says it: "hold the 3
+// stocks that rose most over the last 126 trading days, counting only those
+// trading above their 200-day average".
+func (c *compiledRules) holdClause(benchmark string) string {
+	var b strings.Builder
+	b.WriteString("hold ")
+	switch {
+	case c.rank == nil && c.filter == nil:
+		b.WriteString("every one of these stocks")
+	case c.rank == nil:
+		b.WriteString("every one of these stocks ")
+		b.WriteString(fill(c.filter.entry.Phrase, c.filter.args, benchmark))
+	default:
+		if c.cfg.Pick == 1 {
+			b.WriteString("the one stock that ")
+		} else {
+			fmt.Fprintf(&b, "the %d stocks that ", c.cfg.Pick)
+		}
+		b.WriteString(fill(c.rank.entry.Phrase, c.rank.args, benchmark))
+		if c.filter != nil {
+			b.WriteString(", counting only those ")
+			b.WriteString(fill(c.filter.entry.Phrase, c.filter.args, benchmark))
+		}
+	}
+	return b.String()
+}
+
+// RulesHeadline is the sentence's promise in a few words, for a button:
+// the hold clause, which is a verbatim piece of DescribeRules, so the label
+// and the sentence cannot disagree. Empty when the rules cannot run.
+func RulesHeadline(r RulesConfig, tickers []string, benchmark string) string {
+	c, err := compileRules(r, tickers, benchmark)
+	if err != nil {
+		return ""
+	}
+	return c.holdClause(benchmark)
 }
 
 func (c *compiledRules) weightPhrase(benchmark string) string {

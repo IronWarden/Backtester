@@ -80,6 +80,21 @@ import {
     snippetFor,
 } from "./luaApi";
 import { parseSession } from "./session";
+import RulesCard from "./RulesCard";
+import {
+    DEFAULT_RULES,
+    RULES_STRATEGY,
+    argsOf as ruleArgs,
+    entriesOf,
+    formatRule,
+    hasRulesBlock,
+    parseRule,
+    rulesBlocker,
+    runLabel,
+    settleCounts,
+    toRulesConfig,
+} from "./rules";
+import type { RulesForm } from "./rules";
 import type { Session } from "./session";
 import { readStored, readStoredNumber, readStoredObject, writeStored } from "./storage";
 import type { SimpleForm, HypothesisForm } from "./buildToml";
@@ -2033,6 +2048,241 @@ check("the results bar minimises, maximises and restores", () => {
     if (bar("normal", 0).includes("Results ·")) throw new Error("no count before a run");
 });
 
+
+// ---------------------------------------------------------------------------
+// The rules card (T135). Menu and readings are the engine's, written by
+// ui/rules_form_test.go, so these render the sentences the app will show.
+
+const RULES_MENU: backtest.RuleEntry[] = JSON.parse(
+    readFileSync(join(testdata, "rules-menu.json"), "utf8"),
+).map((e: unknown) => backtest.RuleEntry.createFrom(e));
+const RULES_READINGS: Record<string, main.RulesReading> = JSON.parse(
+    readFileSync(join(testdata, "rules-readings.json"), "utf8"),
+);
+const PROPOSED_RULES: RulesForm = {
+    rebalance: "monthly",
+    rank: "return_126",
+    pick: 2,
+    keep: 0,
+    filter: "above_sma_200",
+    weight: "equal",
+    riskOff: "benchmark_below_sma_200",
+};
+
+check("every rules menu entry round-trips through the card's controls", () => {
+    for (const e of RULES_MENU) {
+        // ruleArgs: Go sends null, not [], for an entry with no numbers --
+        // which this case first caught as a crash in the card.
+        const written = formatRule(e, ruleArgs(e).map((a) => a.default));
+        const back = parseRule(RULES_MENU, e.kind, written);
+        if (!back || back.entry.base !== e.base) {
+            throw new Error(`${e.kind} ${written} does not parse back to ${e.base}`);
+        }
+        // Out of range is clamped, never written.
+        if (ruleArgs(e).length > 0) {
+            const big = formatRule(e, ruleArgs(e).map((a) => a.max + 1000));
+            const nums = parseRule(RULES_MENU, e.kind, big)!.args;
+            ruleArgs(e).forEach((a, i) => eq(`${e.form} clamp`, nums[i], a.max));
+        }
+    }
+    if (parseRule(RULES_MENU, "rank", "retrun_126") !== null) {
+        throw new Error("a typo parsed as a menu entry");
+    }
+    if (parseRule(RULES_MENU, "rank", "momentum_126") !== null) {
+        throw new Error("momentum_126 is not on the menu (momentum_12_1 is)");
+    }
+});
+
+check("Keep never falls below Pick, and Pick never exceeds the holdings", () => {
+    eq("keep raised", settleCounts({ ...PROPOSED_RULES, pick: 3, keep: 2 }, 5).keep, 3);
+    eq("pick capped", settleCounts({ ...PROPOSED_RULES, pick: 9 }, 4).pick, 4);
+    eq("pick at least 1", settleCounts({ ...PROPOSED_RULES, pick: 0 }, 4).pick, 1);
+    const unranked = settleCounts({ ...PROPOSED_RULES, rank: "", pick: 3, keep: 5 }, 4);
+    eq("no rank, no counts", [unranked.pick, unranked.keep], [0, 0]);
+});
+
+check("RulesCard / empty, proposed, edited and invalid", () => {
+    const card = (rules: RulesForm, reading: main.RulesReading | null, hasBenchmark = true) =>
+        renderToString(
+            <RulesCard
+                menu={RULES_MENU}
+                rules={rules}
+                reading={reading}
+                tickerCount={4}
+                hasBenchmark={hasBenchmark}
+                onChange={noop}
+                onAskAssistant={noop}
+            />,
+        ).replace(/<!-- -->/g, "");
+    const unescape = (h: string) => h.replace(/&amp;/g, "&");
+
+    const empty = unescape(card(DEFAULT_RULES, RULES_READINGS.default));
+    for (const want of [RULES_READINGS.default.sentence, "How often to decide",
+        "No ranking", "Describe your idea to the assistant"]) {
+        if (!empty.includes(want)) throw new Error(`empty card lacks ${want}`);
+    }
+
+    const proposed = unescape(card(PROPOSED_RULES, RULES_READINGS.proposed));
+    if (!proposed.includes(RULES_READINGS.proposed.sentence)) {
+        throw new Error("the proposed card does not show the engine's sentence");
+    }
+    // The chosen entries are selected, with their numbers in boxes.
+    for (const want of ['value="126"', 'value="200"', "Hold the top", "Keep while in the top"]) {
+        if (!proposed.includes(want)) throw new Error(`proposed card lacks ${want}`);
+    }
+
+    const edited = unescape(card({ ...PROPOSED_RULES, rebalance: "weekly", keep: 3 },
+        RULES_READINGS.edited));
+    if (!edited.includes("stays in the top 3") || !edited.includes('value="3"')) {
+        throw new Error("the edited card does not show the edit");
+    }
+
+    const invalid = card({ ...DEFAULT_RULES, riskOff: "benchmark_below_sma_200" },
+        RULES_READINGS.invalid, false);
+    if (!invalid.includes("These rules cannot run") || !invalid.includes("Benchmark")) {
+        throw new Error(`invalid card does not say why:\n${invalid}`);
+    }
+    // Still set, so still editable: the refusal has to be clearable here.
+    if (/<select[^>]*disabled[^>]*>(?:(?!<\/select>).)*benchmark_below_sma/s.test(invalid)) {
+        throw new Error("a set risk-off was locked with no way to clear it");
+    }
+    if (!card(DEFAULT_RULES, null).includes("Reading the rules")) {
+        throw new Error("a pending reading is not shown as pending");
+    }
+    if (!card(DEFAULT_RULES, RULES_READINGS.default, false).includes("pick a comparison above")) {
+        throw new Error("risk-off without a benchmark does not say why it is off");
+    }
+});
+
+check("PortfolioCard / offers rules and shows the rules card when chosen", () => {
+    const card = (f: SimpleForm) =>
+        renderToString(
+            <PortfolioCard
+                form={f}
+                onChange={noop}
+                onRemove={null}
+                otherNames={[]}
+                defaultName="Portfolio 1"
+                dbPath=""
+                available={[]}
+                names={{}}
+                ranges={{}}
+                pickable={[]}
+                showBaskets={false}
+                rulesMenu={RULES_MENU}
+                rulesReading={RULES_READINGS.proposed}
+                onDescribeIdea={noop}
+            />,
+        ).replace(/&amp;/g, "&");
+    if (!card(form).includes("Describe my own idea")) {
+        throw new Error("the strategy picker does not offer rules");
+    }
+    const ruled = card({ ...form, strategy: RULES_STRATEGY, rules: PROPOSED_RULES });
+    if (!ruled.includes(RULES_READINGS.proposed.sentence)) {
+        throw new Error("a rules card does not show the sentence");
+    }
+    if (ruled.includes("Open a position in every holding")) {
+        throw new Error("a rules card still shows buy-and-hold's description");
+    }
+});
+
+check("buildToml writes rules instead of a strategy, and nothing unset", () => {
+    const tickers = ["AAPL", "MSFT", "JNJ"];
+    const toml = buildToml([{ ...form, tickers, strategy: RULES_STRATEGY,
+        rules: { ...PROPOSED_RULES, keep: 3 } }]);
+    for (const want of ["[Portfolio.Rules]", 'Rebalance = "monthly"', 'Rank = "return_126"',
+        "Pick = 2", "Keep = 3", 'Filter = "above_sma_200"',
+        'RiskOff = "benchmark_below_sma_200"']) {
+        if (!toml.includes(want)) throw new Error(`missing ${want}:\n${toml}`);
+    }
+    for (const never of ["Strategy =", "Weight =", "Params ="]) {
+        if (toml.includes(never)) throw new Error(`rules config writes ${never}:\n${toml}`);
+    }
+    // Fixed weights come from the card's own percentages.
+    const fixed = buildToml([{ ...form, strategy: RULES_STRATEGY,
+        rules: { ...DEFAULT_RULES, weight: "allocations" } }]);
+    for (const want of ['Weight = "allocations"', "[Portfolio.Rules.Allocations]", "AAPL = 50.0",
+        '"9988.HK" = 20.0']) {
+        if (!fixed.includes(want)) throw new Error(`missing ${want}:\n${fixed}`);
+    }
+    eq("allocations only for that weight", Object.keys(toRulesConfig(DEFAULT_RULES,
+        form.allocations, form.tickers).allocations).length, 0);
+    // A rules value with no rules object stays buy-and-hold's output shape
+    // rather than emitting an empty table.
+    if (!buildToml([{ ...form, strategy: RULES_STRATEGY }]).includes("Strategy =")) {
+        throw new Error("a rules strategy with no rules wrote no strategy at all");
+    }
+});
+
+// What a rules card generates, pinned -- and ui/rules_form_test.go runs the
+// same golden through the engine's config check, so the TOML this writes is
+// TOML the engine accepts, not just TOML that looks right.
+const RULES_GOLDEN_FORMS: SimpleForm[] = [
+    { ...form, name: "Momentum rules", tickers: ["AAPL", "MSFT", "JNJ"],
+        strategy: RULES_STRATEGY, rules: { ...PROPOSED_RULES, keep: 3 } },
+    { ...form, name: "Fixed rules", strategy: RULES_STRATEGY,
+        rules: { ...DEFAULT_RULES, rebalance: "quarterly", weight: "allocations" } },
+];
+
+check("buildToml matches the golden rules config", () => {
+    const want = readFileSync(join(testdata, "golden-rules.toml"), "utf8");
+    eq("golden-rules.toml", buildToml(RULES_GOLDEN_FORMS), want);
+});
+
+check("a refused rule set stops the run, and the Run button carries the promise", () => {
+    const two = [{ name: "A" }, { name: "B" }];
+    eq("plain", rulesBlocker(two, [undefined, undefined]), "");
+    eq("pending", rulesBlocker([{ name: "A" }], [null]), "the rules are still being checked");
+    const why = rulesBlocker(two, [undefined, RULES_READINGS.invalid]);
+    if (!why.startsWith("B: fix the rules") || !why.includes("Benchmark")) throw new Error(why);
+    eq("label", runLabel([RULES_READINGS.proposed]),
+        `Run: ${RULES_READINGS.proposed.headline}`);
+    eq("label, two portfolios", runLabel([RULES_READINGS.proposed, undefined]), "Run backtest");
+    eq("label, no rules", runLabel([undefined]), "Run backtest");
+    if (!RULES_READINGS.proposed.sentence.includes(RULES_READINGS.proposed.headline)) {
+        throw new Error("the button's words are not a piece of the sentence");
+    }
+});
+
+check("a session keeps its rules, and drops malformed ones", () => {
+    const withRules = { ...form, strategy: RULES_STRATEGY, rules: PROPOSED_RULES };
+    const ok: Session = { forms: [withRules], hypothesis: emptyHypothesis };
+    if (JSON.stringify(parseSession(JSON.stringify(ok), fallbackSession)) !== JSON.stringify(ok)) {
+        throw new Error("a session with rules did not round-trip");
+    }
+    const bad = { forms: [{ ...withRules, rules: { rebalance: "monthly" } }], hypothesis: emptyHypothesis };
+    if (parseSession(JSON.stringify(bad), fallbackSession) !== fallbackSession) {
+        throw new Error("a half rules object was restored");
+    }
+});
+
+check("only a rules block offers to go to the form", () => {
+    const msg = (code: string) =>
+        renderToString(
+            <ChatMessage
+                m={{ role: "assistant", content: "```toml\n" + code + "\n```" }}
+                busy={false}
+                onApplyToml={noop}
+                onApplyLua={noop}
+            />,
+        );
+    if (!msg('[portfolio.Rules]\nRebalance = "monthly"').includes("Use these rules in the form")) {
+        throw new Error("a rules block has no Use-these-rules action");
+    }
+    if (msg("[Output]\npath = \"x\"").includes("Use these rules")) {
+        throw new Error("a block with no rules offers to use them");
+    }
+    if (hasRulesBlock("# [portfolio.Rules] mentioned in a comment")) {
+        throw new Error("a comment was taken for a rules block");
+    }
+});
+
+check("rules entries the card lists are exactly the engine's", () => {
+    for (const kind of ["rebalance", "rank", "filter", "weight", "riskoff"]) {
+        if (entriesOf(RULES_MENU, kind).length === 0) throw new Error(`no ${kind} entries`);
+    }
+});
+
 if (process.env.SMOKE_UPDATE === "1") {
     // golden.toml is deliberately NOT rewritten here -- it is the pre-multi
     // output and refreshing it would erase the guarantee it exists to hold.
@@ -2051,6 +2301,7 @@ if (process.env.SMOKE_UPDATE === "1") {
         ]),
     );
     writeFileSync(join(testdata, "golden-cashflow.toml"), buildToml([cashflowForm]));
+    writeFileSync(join(testdata, "golden-rules.toml"), buildToml(RULES_GOLDEN_FORMS));
     writeFileSync(
         join(testdata, "golden-hypothesis.toml"),
         buildHypothesis(hypothesis).replace(/^ID(\s*)= ".*"$/m, 'ID$1= "H-<generated>"'),

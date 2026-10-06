@@ -9,6 +9,7 @@ import {
 import { main } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import { readStored, writeStored } from "./storage";
+import { hasRulesBlock } from "./rules";
 
 // Shown until the backend reports the real list (Claude models plus
 // whatever the local Ollama server has pulled). Sonnet is the default:
@@ -42,14 +43,18 @@ type Props = {
     dbPath: string;
     cfgText: string;
     luaText: string;
-    // Push a Claude-authored code block into the corresponding editor.
-    onApplyToml: (toml: string) => void;
+    // Push a Claude-authored code block into the corresponding editor, or --
+    // asRules -- lift a [portfolio.Rules] block into the Backtest form.
+    onApplyToml: (toml: string, asRules?: boolean) => void;
     onApplyLua: (lua: string) => void;
     onClose: () => void;
     // Maximised, the panel takes the whole row and the tabs step aside.
     // Optional so a caller that never maximises need not say so.
     maximized?: boolean;
     onToggleMax?: () => void;
+    // A message to start from, put in the input box (not sent): the user
+    // finishes the sentence. A new id re-seeds even with the same text.
+    seed?: { text: string; id: number };
 };
 
 const STARTERS = [
@@ -155,7 +160,7 @@ function CodeBlock({
     lang: string;
     code: string;
     busy: boolean;
-    onApplyToml: (t: string) => void;
+    onApplyToml: (t: string, asRules?: boolean) => void;
     onApplyLua: (t: string) => void;
 }) {
     const [copied, setCopied] = useState(false);
@@ -166,6 +171,13 @@ function CodeBlock({
             <div className="chat-codebar">
                 <span className="chat-lang">{lang || "code"}</span>
                 <span className="chat-codebar-spacer" />
+                {/* Rules go to the form, where the engine reads them back as
+                    the sentence the user confirms -- not to the raw editor. */}
+                {applyTarget === "TOML" && !busy && hasRulesBlock(code) && (
+                    <button className="primary" onClick={() => onApplyToml(code, true)}>
+                        Use these rules in the form
+                    </button>
+                )}
                 {applyTarget && !busy && (
                     <button
                         onClick={() =>
@@ -198,7 +210,7 @@ function Markdown({
 }: {
     text: string;
     busy: boolean;
-    onApplyToml: (t: string) => void;
+    onApplyToml: (t: string, asRules?: boolean) => void;
     onApplyLua: (t: string) => void;
 }) {
     // Split into alternating [text, lang, code, text, lang, code, ...].
@@ -235,7 +247,7 @@ export const ChatMessage = memo(function ChatMessage({
 }: {
     m: Msg;
     busy: boolean;
-    onApplyToml: (t: string) => void;
+    onApplyToml: (t: string, asRules?: boolean) => void;
     onApplyLua: (t: string) => void;
 }) {
     return (
@@ -275,6 +287,7 @@ export default function ChatPanel({
     onClose,
     maximized = false,
     onToggleMax,
+    seed,
 }: Props) {
     const [msgs, setMsgs] = useState<Msg[]>([]);
     const [input, setInput] = useState("");
@@ -287,6 +300,7 @@ export default function ChatPanel({
     const [keyInput, setKeyInput] = useState("");
     const [keyError, setKeyError] = useState("");
     const scrollRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     // Whether the view is parked at the bottom. Streaming follows the reply
     // only while it is: someone who scrolled up to reread an earlier answer
     // should not be yanked back down by every token of the current one.
@@ -296,8 +310,24 @@ export default function ChatPanel({
     // message memo; these stable wrappers always call the latest ones.
     const applyRef = useRef({ onApplyToml, onApplyLua });
     applyRef.current = { onApplyToml, onApplyLua };
-    const applyToml = useCallback((t: string) => applyRef.current.onApplyToml(t), []);
+    const applyToml = useCallback(
+        (t: string, asRules?: boolean) => applyRef.current.onApplyToml(t, asRules),
+        [],
+    );
     const applyLua = useCallback((t: string) => applyRef.current.onApplyLua(t), []);
+
+    useEffect(() => {
+        if (!seed) return;
+        setInput(seed.text);
+        // After the panel has mounted and laid out: focus with the caret at
+        // the end, where the user's idea goes.
+        requestAnimationFrame(() => {
+            const el = inputRef.current;
+            if (!el) return;
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+        });
+    }, [seed?.id]);
 
     useEffect(() => {
         HasClaudeKey().then(setHasKey).catch(() => setHasKey(false));
@@ -531,6 +561,7 @@ export default function ChatPanel({
                     </div>
                     <div className="chat-inputrow">
                         <textarea
+                            ref={inputRef}
                             placeholder="Ask about strategies, data, configs… (Enter to send)"
                             value={input}
                             rows={2}

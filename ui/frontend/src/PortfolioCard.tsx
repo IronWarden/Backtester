@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { backtest } from "../wailsjs/go/models";
+import type { backtest, main } from "../wailsjs/go/models";
 import {
     BENCHMARKS,
     CASHFLOW_FREQUENCIES,
     STRATEGY_DIR,
     usesAllocations,
+    usesRules,
 } from "./buildToml";
+import RulesCard from "./RulesCard";
+import { DEFAULT_RULES, RULES_STRATEGY, settleCounts, type MenuEntry } from "./rules";
 import type { SimpleForm as Form } from "./buildToml";
 import { searchTickers } from "./tickerSearch";
 import { BASKETS, INVESTORS, basketTickers, buildInvestor } from "./examples";
@@ -66,6 +69,7 @@ function formatMoney(n: number): string {
 
 function strategyLabel(file: string): string {
     if (!file) return "Buy and hold";
+    if (file === RULES_STRATEGY) return "Your rules";
     return file
         .replace(/\.lua$/, "")
         .replace(/[_-]+/g, " ")
@@ -112,6 +116,13 @@ type Props = {
     showBaskets: boolean;
     // Opens the chosen strategy's script in the Lua tab, read-only.
     onViewScript?: (strategy: string) => void;
+    // The engine's rules menu, and its reading of THIS card's rules (null
+    // while it is being asked). Only consulted when the card runs rules.
+    rulesMenu?: MenuEntry[];
+    rulesReading?: main.RulesReading | null;
+    // "Describe my own idea…": opens the assistant with this card's holdings
+    // and window in its first message.
+    onDescribeIdea?: () => void;
 };
 
 export default function PortfolioCard({
@@ -127,6 +138,9 @@ export default function PortfolioCard({
     pickable,
     showBaskets,
     onViewScript,
+    rulesMenu = [],
+    rulesReading = null,
+    onDescribeIdea,
 }: Props) {
     const [tickerInput, setTickerInput] = useState("");
     // Which suggestion the keyboard is on, or -1 for "none: Enter takes what
@@ -525,10 +539,29 @@ export default function PortfolioCard({
                     What should it do?
                     <select
                         value={form.strategy}
-                        onChange={(e) => patch({ strategy: e.target.value })}
+                        onChange={(e) => {
+                            const strategy = e.target.value;
+                            if (strategy !== RULES_STRATEGY) {
+                                patch({ strategy });
+                                return;
+                            }
+                            // Kept when switching away and back, so an edited
+                            // rule set is not lost to a stray click.
+                            patch({
+                                strategy,
+                                rules: settleCounts(
+                                    form.rules ?? DEFAULT_RULES,
+                                    form.tickers.length,
+                                ),
+                            });
+                            onDescribeIdea?.();
+                        }}
                     >
                         <option value="">
                             Buy and hold — buy on day 1, never sell
+                        </option>
+                        <option value={RULES_STRATEGY}>
+                            Describe my own idea… (read back as a sentence)
                         </option>
                         {pickable.map((c) => (
                             <option key={c.File} value={c.File}>
@@ -579,7 +612,17 @@ export default function PortfolioCard({
                 {/* The failure mode is the most useful sentence here, and it
                     has to be readable BEFORE the run, not explained after a
                     bad result. */}
-                {chosen ? (
+                {usesRules(form) ? (
+                    <RulesCard
+                        menu={rulesMenu}
+                        rules={form.rules!}
+                        reading={rulesReading}
+                        tickerCount={form.tickers.length}
+                        hasBenchmark={!!form.benchmark}
+                        onChange={(rules) => patch({ rules })}
+                        onAskAssistant={onDescribeIdea}
+                    />
+                ) : chosen ? (
                     <div className="strategy-card">
                         <p className="strategy-idea">{chosen.Idea}</p>
                         <dl className="strategy-when">
@@ -765,7 +808,9 @@ export default function PortfolioCard({
 
                 {!allocationsApply && form.tickers.length > 0 && (
                     <div className="hint">
-                        {strategyLabel(form.strategy)} sizes its own positions, so
+                        {usesRules(form)
+                            ? "Your rules split the money themselves (see Split the money above)"
+                            : `${strategyLabel(form.strategy)} sizes its own positions`}, so
                         these percentages are not used — they apply to buy and
                         hold. The symbols below are still the universe it trades.
                     </div>

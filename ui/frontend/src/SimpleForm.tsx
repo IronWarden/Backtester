@@ -6,18 +6,22 @@ import {
     TickerNames,
     TickerDateRanges,
     CriterionMetrics,
+    ReadRules,
+    RulesMenu,
 } from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
-import { backtest } from "../wailsjs/go/models";
+import { backtest, main } from "../wailsjs/go/models";
 import {
     CRITERION_OPS,
     STARTER_SCRIPT,
     buildHypothesis,
     buildToml,
     criterionLabel,
+    usesRules,
 } from "./buildToml";
+import { readingKey, rulesBlocker, runLabel, toRulesConfig } from "./rules";
 import type { SimpleForm as Form, HypothesisForm } from "./buildToml";
-import { duplicateNames, maskDecimal, runBlocker } from "./portfolioCheck";
+import { duplicateNames, isValidDate, maskDecimal, runBlocker } from "./portfolioCheck";
 import {
     BLANK,
     CRITERION_PRESETS,
@@ -72,6 +76,9 @@ type Props = {
     // Opens a picked strategy's script in the Lua tab. Optional so a host
     // without an editor (the smoke harness) can leave it out.
     onViewScript?: (strategy: string) => void;
+    // "Describe my own idea…" on card i: App opens the assistant seeded with
+    // that card's holdings and window, and routes proposed rules back to it.
+    onDescribeIdea?: (index: number) => void;
 };
 
 
@@ -256,6 +263,7 @@ export default function SimpleForm({
     onRun,
     onEditAsToml,
     onViewScript,
+    onDescribeIdea,
 }: Props) {
     const [available, setAvailable] = useState<string[]>([]);
     // {"AAPL": "Apple Inc."} for every symbol we can name. Partial by nature
@@ -272,6 +280,11 @@ export default function SimpleForm({
     // ParseCriterion would reject.
     const [metrics, setMetrics] = useState<string[]>([]);
     const [onboarded, setOnboarded] = useState(readOnboarded);
+    // The engine's rules menu, and its readings of rule sets, keyed by
+    // everything ReadRules was asked -- so an edit asks once and switching
+    // back to an earlier state is instant.
+    const [rulesMenu, setRulesMenu] = useState<backtest.RuleEntry[]>([]);
+    const [readings, setReadings] = useState<Record<string, main.RulesReading>>({});
 
     useEffect(
         () => EventsOn("chat:db-changed", () => setDbVersion((v) => v + 1)),
@@ -289,6 +302,13 @@ export default function SimpleForm({
             })
             .catch(() => {
                 if (!cancelled) setGallery([]);
+            });
+        RulesMenu()
+            .then((m) => {
+                if (!cancelled) setRulesMenu(m ?? []);
+            })
+            .catch(() => {
+                if (!cancelled) setRulesMenu([]);
             });
         CriterionMetrics()
             .then((ms) => {
@@ -370,7 +390,48 @@ export default function SimpleForm({
     // broken card stops the run rather than quietly contributing a bad block.
     // runBlocker says WHY when it cannot, and the reason is shown beside the
     // button: a disabled button with no explanation reads as broken.
-    const blocker = runBlocker(forms, ranges, dbPath, running);
+    // What to ask the engine about each card that runs rules. Dates go along
+    // only once both are real dates; until then the rules alone are read.
+    const rulesAsks = useMemo(
+        () =>
+            forms.map((f) => {
+                if (!usesRules(f)) return null;
+                const rc = toRulesConfig(f.rules!, f.allocations, f.tickers);
+                const dated = isValidDate(f.startDate) && isValidDate(f.endDate);
+                const start = dated ? f.startDate : "";
+                const end = dated ? f.endDate : "";
+                return {
+                    key: readingKey(rc, f.tickers, start, end, f.benchmark),
+                    rc,
+                    tickers: f.tickers,
+                    start,
+                    end,
+                    benchmark: f.benchmark,
+                };
+            }),
+        [forms],
+    );
+    useEffect(() => {
+        for (const ask of rulesAsks) {
+            if (!ask || readings[ask.key]) continue;
+            // Keyed by the question, so a late answer to an old question
+            // lands under its own key and is simply never read.
+            ReadRules(ask.rc, ask.tickers, ask.start, ask.end, ask.benchmark)
+                .then((r) => setReadings((m) => ({ ...m, [ask.key]: r })))
+                .catch((e) =>
+                    setReadings((m) => ({
+                        ...m,
+                        [ask.key]: { sentence: "", headline: "", error: String(e) },
+                    })),
+                );
+        }
+    }, [rulesAsks, readings]);
+    const cardReadings = rulesAsks.map((ask) =>
+        ask ? (readings[ask.key] ?? null) : undefined,
+    );
+
+    const blocker =
+        runBlocker(forms, ranges, dbPath, running) || rulesBlocker(forms, cardReadings);
     const canRun = blocker === "";
 
     const anyTickers = forms.some((f) => f.tickers.length > 0);
@@ -453,6 +514,9 @@ export default function SimpleForm({
                     showBaskets={anyTickers}
                     pickable={pickable}
                     onViewScript={onViewScript}
+                    rulesMenu={rulesMenu}
+                    rulesReading={cardReadings[i] ?? null}
+                    onDescribeIdea={onDescribeIdea ? () => onDescribeIdea(i) : undefined}
                 />
             ))}
 
@@ -577,7 +641,7 @@ export default function SimpleForm({
                     onClick={() => onRun(buildToml(forms), hypothesisToml)}
                     title={`Run the backtest (${keysFor("run")})`}
                 >
-                    {running ? "Running…" : "Run backtest"}
+                    {running ? "Running…" : runLabel(cardReadings)}
                 </button>
                 <button
                     disabled={!anyTickers}

@@ -82,6 +82,18 @@ export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
 }
 
+export function ReadRules(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['ReadRules'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function RulesFromToml(arg1) {
+  return window['go']['main']['App']['RulesFromToml'](arg1);
+}
+
+export function RulesMenu() {
+  return window['go']['main']['App']['RulesMenu']();
+}
+
 export function RunBacktest(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['RunBacktest'](arg1, arg2, arg3, arg4);
 }

@@ -294,6 +294,90 @@ export namespace backtest {
 		    return a;
 		}
 	}
+	export class RuleArg {
+	    name: string;
+	    min: number;
+	    max: number;
+	    default: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RuleArg(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.min = source["min"];
+	        this.max = source["max"];
+	        this.default = source["default"];
+	    }
+	}
+	export class RuleEntry {
+	    kind: string;
+	    base: string;
+	    form: string;
+	    args: RuleArg[];
+	    phrase: string;
+	    summary: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RuleEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.base = source["base"];
+	        this.form = source["form"];
+	        this.args = this.convertValues(source["args"], RuleArg);
+	        this.phrase = source["phrase"];
+	        this.summary = source["summary"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class RulesConfig {
+	    rebalance: string;
+	    rank: string;
+	    pick: number;
+	    keep: number;
+	    filter: string;
+	    weight: string;
+	    allocations: Record<string, number>;
+	    riskOff: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RulesConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rebalance = source["rebalance"];
+	        this.rank = source["rank"];
+	        this.pick = source["pick"];
+	        this.keep = source["keep"];
+	        this.filter = source["filter"];
+	        this.weight = source["weight"];
+	        this.allocations = source["allocations"];
+	        this.riskOff = source["riskOff"];
+	    }
+	}
 	export class SegmentStats {
 	    label: string;
 	    start: string;
@@ -692,6 +776,22 @@ export namespace main {
 	        this.rows = source["rows"];
 	        this.truncated = source["truncated"];
 	        this.elapsedMs = source["elapsedMs"];
+	    }
+	}
+	export class RulesReading {
+	    sentence: string;
+	    headline: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RulesReading(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sentence = source["sentence"];
+	        this.headline = source["headline"];
+	        this.error = source["error"];
 	    }
 	}
 	export class RunResult {

@@ -24,6 +24,7 @@
 import { CASHFLOW_FREQUENCIES } from "./buildToml";
 import type { CashflowFrequency, HypothesisForm, SimpleForm } from "./buildToml";
 import { readStored, writeStored } from "./storage";
+import { validRules } from "./rules";
 
 // Versioned: a shape change bumps the key, so an old session is simply not
 // found rather than validated field by field against a shape it predates.
@@ -69,7 +70,9 @@ function validForm(v: unknown): v is SimpleForm {
         (v.cashflowDirection === "deposit" || v.cashflowDirection === "withdraw") &&
         isNumber(v.cashflowAmount) &&
         validFrequency(v.cashflowFrequency) &&
-        isString(v.strategy)
+        isString(v.strategy) &&
+        // Optional: sessions saved before rules existed carry none.
+        (v.rules === undefined || validRules(v.rules))
     );
 }
 

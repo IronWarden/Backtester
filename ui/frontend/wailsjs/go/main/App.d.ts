@@ -43,6 +43,12 @@ export function PickLuaFile():Promise<string>;
 
 export function ReadFile(arg1:string):Promise<string>;
 
+export function ReadRules(arg1:backtest.RulesConfig,arg2:Array<string>,arg3:string,arg4:string,arg5:string):Promise<main.RulesReading>;
+
+export function RulesFromToml(arg1:string):Promise<backtest.RulesConfig>;
+
+export function RulesMenu():Promise<Array<backtest.RuleEntry>>;
+
 export function RunBacktest(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.RunOutput>;
 
 export function RunUserQuery(arg1:string,arg2:string):Promise<main.QueryResult>;

@@ -1243,6 +1243,33 @@ yet — a `[portfolio.Sweep]` or `[portfolio.WalkForward]` on a rules portfolio.
 The universe is the portfolio's own `Tickers`, and the menu is price-only:
 fundamental signals still need a Lua strategy.
 
+#### Rules in the Backtest tab: describe it, read it back, run it
+
+You do not have to write the block above by hand. On the **Backtest** tab, a
+card's *What should it do?* dropdown has **Describe my own idea…** just under
+buy-and-hold:
+
+1. Choosing it opens the assistant with the card's holdings, window and
+   comparison already in the message — you finish the sentence with your idea.
+   The assistant answers with a rule set it has checked with `check_rules`,
+   and its toml block carries a **Use these rules in the form** button.
+2. That button puts the rules on the card (your holdings and dates stay). The
+   card shows the engine's sentence large, with each rule beneath it as a
+   control — dropdowns and number boxes filled from the engine's menu, so there
+   is no free text to mistype, every number is clamped to its range, and
+   *Keep while in the top* cannot go below *Hold the top*. Change a control and
+   the sentence is read again. You can also build the rules with the controls
+   alone and never open the assistant.
+3. The Run button carries the sentence's promise — **Run: hold the 2 stocks
+   that rose most over the last 126 trading days…** — so pressing it is the
+   confirmation. With more than one portfolio it reads *Run backtest*. A rule
+   set the engine refuses disables Run and says why, in the engine's words.
+
+*Split the money* → *In fixed proportions* uses the card's own percentage
+boxes as `[portfolio.Rules.Allocations]`. The rules travel into *Edit as TOML*
+and the session like everything else on the card. There is no "open as Lua"
+yet: a rule set that outgrows the menu has to be rewritten as a script.
+
 ### `[portfolio.Costs]`
 
 Trading is free unless you say otherwise. Every field defaults to `0.0`, so

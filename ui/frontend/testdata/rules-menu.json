@@ -1,0 +1,252 @@
+[
+  {
+    "kind": "rebalance",
+    "base": "daily",
+    "form": "daily",
+    "args": null,
+    "phrase": "Every trading day",
+    "summary": "Re-decide every trading day."
+  },
+  {
+    "kind": "rebalance",
+    "base": "weekly",
+    "form": "weekly",
+    "args": null,
+    "phrase": "Every 5 trading days (about weekly)",
+    "summary": "Re-decide every 5 trading days."
+  },
+  {
+    "kind": "rebalance",
+    "base": "monthly",
+    "form": "monthly",
+    "args": null,
+    "phrase": "Every 21 trading days (about monthly)",
+    "summary": "Re-decide every 21 trading days."
+  },
+  {
+    "kind": "rebalance",
+    "base": "quarterly",
+    "form": "quarterly",
+    "args": null,
+    "phrase": "Every 63 trading days (about quarterly)",
+    "summary": "Re-decide every 63 trading days."
+  },
+  {
+    "kind": "rebalance",
+    "base": "annually",
+    "form": "annually",
+    "args": null,
+    "phrase": "Every 252 trading days (about yearly)",
+    "summary": "Re-decide every 252 trading days."
+  },
+  {
+    "kind": "rank",
+    "base": "return",
+    "form": "return_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 126
+      }
+    ],
+    "phrase": "rose most over the last {N} trading days",
+    "summary": "Total price change over the last N trading days; highest first."
+  },
+  {
+    "kind": "rank",
+    "base": "momentum_12_1",
+    "form": "momentum_12_1",
+    "args": null,
+    "phrase": "rose most over the past year, not counting the latest month",
+    "summary": "Return from 273 to 21 trading days ago — classic 12-1 momentum; highest first."
+  },
+  {
+    "kind": "rank",
+    "base": "low_vol",
+    "form": "low_vol_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 63
+      }
+    ],
+    "phrase": "moved least day to day over the last {N} trading days",
+    "summary": "Standard deviation of daily returns over N days; LOWEST first."
+  },
+  {
+    "kind": "rank",
+    "base": "drawdown",
+    "form": "drawdown_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 252
+      }
+    ],
+    "phrase": "are closest to their highest close of the last {N} trading days",
+    "summary": "How far the close sits below its N-day highest close; closest first."
+  },
+  {
+    "kind": "filter",
+    "base": "above_sma",
+    "form": "above_sma_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 200
+      }
+    ],
+    "phrase": "trading above their {N}-day average",
+    "summary": "Close is above the average of the previous N closes."
+  },
+  {
+    "kind": "filter",
+    "base": "below_sma",
+    "form": "below_sma_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 200
+      }
+    ],
+    "phrase": "trading below their {N}-day average",
+    "summary": "Close is below the average of the previous N closes."
+  },
+  {
+    "kind": "filter",
+    "base": "sma_cross",
+    "form": "sma_cross_S_L",
+    "args": [
+      {
+        "name": "S",
+        "min": 2,
+        "max": 500,
+        "default": 50
+      },
+      {
+        "name": "L",
+        "min": 3,
+        "max": 1000,
+        "default": 200
+      }
+    ],
+    "phrase": "whose {S}-day average is above their {L}-day average",
+    "summary": "The short average is above the long one (S must be smaller than L)."
+  },
+  {
+    "kind": "filter",
+    "base": "rising",
+    "form": "rising_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 126
+      }
+    ],
+    "phrase": "up over the last {N} trading days",
+    "summary": "Price is higher than N trading days ago."
+  },
+  {
+    "kind": "filter",
+    "base": "rsi_below",
+    "form": "rsi_below_X",
+    "args": [
+      {
+        "name": "X",
+        "min": 1,
+        "max": 99,
+        "default": 30
+      }
+    ],
+    "phrase": "with a 14-day RSI below {X}",
+    "summary": "14-day RSI is below X (oversold when X is around 30)."
+  },
+  {
+    "kind": "filter",
+    "base": "rsi_above",
+    "form": "rsi_above_X",
+    "args": [
+      {
+        "name": "X",
+        "min": 1,
+        "max": 99,
+        "default": 50
+      }
+    ],
+    "phrase": "with a 14-day RSI above {X}",
+    "summary": "14-day RSI is above X."
+  },
+  {
+    "kind": "riskoff",
+    "base": "benchmark_below_sma",
+    "form": "benchmark_below_sma_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 200
+      }
+    ],
+    "phrase": "{B} is below its {N}-day average",
+    "summary": "The benchmark's close is below the average of its previous N closes."
+  },
+  {
+    "kind": "riskoff",
+    "base": "benchmark_drawdown_over",
+    "form": "benchmark_drawdown_over_X",
+    "args": [
+      {
+        "name": "X",
+        "min": 1,
+        "max": 90,
+        "default": 20
+      }
+    ],
+    "phrase": "{B} is more than {X}% below its highest close of the past year",
+    "summary": "The benchmark has fallen more than X% from its 252-day highest close."
+  },
+  {
+    "kind": "weight",
+    "base": "equal",
+    "form": "equal",
+    "args": null,
+    "phrase": "equally weighted",
+    "summary": "Split the money evenly."
+  },
+  {
+    "kind": "weight",
+    "base": "inverse_vol",
+    "form": "inverse_vol_N",
+    "args": [
+      {
+        "name": "N",
+        "min": 2,
+        "max": 1000,
+        "default": 63
+      }
+    ],
+    "phrase": "weighted so the steadier ones get more (by {N}-day volatility)",
+    "summary": "Weight each holding by 1 / its N-day volatility."
+  },
+  {
+    "kind": "weight",
+    "base": "allocations",
+    "form": "allocations",
+    "args": null,
+    "phrase": "in fixed proportions",
+    "summary": "Weight by the Allocations table, rescaled over what is held."
+  }
+]
