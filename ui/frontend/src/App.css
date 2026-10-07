@@ -3192,14 +3192,6 @@ td.num.dim {
   font-weight: 600;
 }
 
-.watch-earnings {
-  cursor: default;
-}
-
-.watch-list .filing-row {
-  grid-template-columns: 9.5em 4.5em 4.5em 1fr;
-}
-
 /* ResearchTable (T144): one look for every Research table. The wrap
    scrolls, so the header can stay put inside it. */
 .rt-wrap {

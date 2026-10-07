@@ -2619,7 +2619,7 @@ a company* does the same):
 | `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it, drawn as a bar; above the table, the next report with a countdown and the average move with how many went up and down | `earnings_calendar`, `stock_data_optimized` |
 | `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — timed to the minute EDGAR accepted it. Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
 | `ECO` | the **economy**, no ticker needed: the latest official reading of CPI, core CPI, nonfarm payrolls, unemployment, real GDP growth, industrial production, M2 and the fed funds rate — each with the period it describes, its change from the previous reading and over a year, when it was published and when the next release comes out — and the FOMC's last three and next four meetings, with links to each statement and its minutes | FRED (keyless CSV; release dates need `FRED_API_KEY`), federalreserve.gov, live |
-| `MY` | **your watchlist**, no ticker needed: the last 90 days of every company on it, merged and newest first — its SEC filings as CN labels them (events, reports and proxies) and its earnings reports with ERN's price move — plus the earnings dates still to come. Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR, `earnings_calendar` |
+| `MY` | **your watchlist**, no ticker needed, as three sortable tables over the last 90 days of every company on it: *Upcoming earnings* (date, time, timing, countdown), *Recent earnings* (with ERN's price move and bar) and *Filings* (filing date, form, what — events, reports and proxies as CN labels them). Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR, `earnings_calendar` |
 | `"going concern"` or `"share repurchase" AAPL` | **full-text search** of every SEC filing since 2001: words in quotes are an exact phrase, a ticker narrows to that company. Each row is a document whose text matches — an 8-K's press release says *in EX-99.1* — and opens in the reader. Past year by default (or past 30 days, or since 2001), narrowed by form, newest first or by relevance | EDGAR full-text search, live (keyless) |
 
 The function may come first (`FA AAPL`), case does not matter, and a name
@@ -2722,6 +2722,9 @@ because an economic number is only knowable from the day it is published:
   JPMorgan's are the latter — and the record does not say which. An
   earnings report appears twice on purpose: once from `earnings_calendar`
   with the price's answer, once as the 8-K that carries the release.
+- **Filings show their filing date, not a time**, until T143 is settled:
+  EDGAR's API is four hours off for some filers (Microsoft and NVIDIA) and
+  not others (Apple). Earnings times come from your database and are shown.
 - A ticker with no SEC filer (a fund, a delisted symbol) or that EDGAR does
   not answer for is named in a note; the rest of the feed still shows. Each
   company is one EDGAR request, paced like CN's.

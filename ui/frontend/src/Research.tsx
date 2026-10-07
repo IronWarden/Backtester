@@ -622,12 +622,57 @@ export function EcoView({ e }: { e: main.EconomicCalendar }) {
     );
 }
 
+const tickerColumn = <T extends { ticker: string }>(): Column<T> => ({
+    key: "ticker", label: "Ticker", sortValue: (r) => r.ticker,
+    render: (r) => <span className="watch-ticker">{r.ticker}</span>,
+});
+
+function upcomingColumns(today: Date): Column<main.WatchItem>[] {
+    return [
+        tickerColumn<main.WatchItem>(),
+        { key: "date", label: "Date", sortValue: (u) => u.when, render: (u) => fmtDate(u.when) },
+        { key: "time", label: "Time (ET)", render: (u) => fmtTime(u.when) },
+        { key: "timing", label: "Timing", sortValue: (u) => u.timing, render: (u) => <TimingTag timing={u.timing} /> },
+        { key: "in", label: "When", sortValue: (u) => u.when, render: (u) => countdown(u.when, today) },
+    ];
+}
+
+function recentEarningsColumns(largest: number): Column<main.WatchItem>[] {
+    return [
+        tickerColumn<main.WatchItem>(),
+        { key: "date", label: "Reported", sortValue: (it) => it.when, firstDir: "desc", render: (it) => fmtDate(it.when) },
+        { key: "time", label: "Time (ET)", render: (it) => fmtTime(it.when) },
+        { key: "timing", label: "Timing", sortValue: (it) => it.timing, render: (it) => <TimingTag timing={it.timing} /> },
+        {
+            key: "move", label: "Price move", numeric: true, firstDir: "desc",
+            sortValue: (it) => (it.hasMove ? it.move : null),
+            render: (it) => <MoveCell move={it.move} has={it.hasMove} largest={largest} />,
+        },
+    ];
+}
+
+// Filings show their filing date only: EDGAR's acceptance times are wrong
+// by four hours for some filers (T143).
+const watchFilingColumns: Column<main.WatchItem>[] = [
+    {
+        key: "filed", label: "Filed", firstDir: "desc",
+        sortValue: (it) => `${it.filing!.filed} ${it.when}`, render: (it) => fmtDate(it.filing!.filed),
+    },
+    tickerColumn<main.WatchItem>(),
+    {
+        key: "form", label: "Form", sortValue: (it) => it.filing!.form,
+        render: (it) => <FormChip form={it.filing!.form} kind={it.filing!.kind} />,
+    },
+    { key: "what", label: "What", sortValue: (it) => it.title, render: (it) => it.title },
+];
+
 export function MyView({
     feed,
     holdings,
     onChange,
     selected,
     onSelect,
+    today = new Date(),
 }: {
     feed: main.WatchFeed;
     // The Backtest form's tickers, offered for the list.
@@ -635,9 +680,14 @@ export function MyView({
     onChange: (tickers: string[]) => void;
     selected: string;
     onSelect: (row: main.FilingRow, cik: string) => void;
+    today?: Date;
 }) {
     const [adding, setAdding] = useState("");
     const offer = holdingsToAdd(holdings, feed.tickers);
+    const earnings = feed.recent.filter((it) => !it.filing);
+    const filings = feed.recent.filter((it) => !!it.filing);
+    const largest = Math.max(0, ...earnings.filter((it) => it.hasMove).map((it) => Math.abs(it.move)));
+    const activeFiling = filings.find((it) => it.filing!.accession === selected);
     const add = () => {
         const more = adding.split(/[\s,]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
         if (more.length > 0) onChange([...feed.tickers, ...more]);
@@ -696,58 +746,50 @@ export function MyView({
 
             {feed.upcoming.length > 0 && (
                 <section className="research-section">
-                    <h3>Coming up</h3>
-                    <ul className="research-list">
-                        {feed.upcoming.map((u) => (
-                            <li key={`${u.ticker} ${u.when}`} className="research-upcoming">
-                                <strong>{u.ticker}</strong> earnings {u.when} ET
-                                {u.timing && <span className="research-dim"> · {u.timing}</span>}
-                            </li>
-                        ))}
-                    </ul>
+                    <h3>Upcoming earnings</h3>
+                    <ResearchTable
+                        label="Upcoming earnings"
+                        rows={feed.upcoming}
+                        columns={upcomingColumns(today)}
+                        rowKey={(u) => `${u.ticker} ${u.when}`}
+                        initialSort={{ key: "date", dir: "asc" }}
+                    />
                 </section>
             )}
 
-            {feed.recent.length > 0 && (
-                <ul className="filing-list watch-list">
-                    {feed.recent.map((it) =>
-                        it.filing ? (
-                            <li key={`${it.ticker} ${it.filing.accession}`}>
-                                <button
-                                    type="button"
-                                    className={`filing-row${selected === it.filing.accession ? " active" : ""}`}
-                                    onClick={() => onSelect(it.filing!, it.cik)}
-                                >
-                                    <span className="filing-when">{it.when} ET</span>
-                                    <span className="watch-ticker">{it.ticker}</span>
-                                    <span className={`filing-form kind-${it.filing.kind}`}>{it.filing.form}</span>
-                                    <span className="filing-title">{it.title}</span>
-                                </button>
-                            </li>
-                        ) : (
-                            <li key={`${it.ticker} ${it.when} earnings`}>
-                                <div className="filing-row watch-earnings">
-                                    <span className="filing-when">{it.when} ET</span>
-                                    <span className="watch-ticker">{it.ticker}</span>
-                                    <span className="filing-form">ERN</span>
-                                    <span className="filing-title">
-                                        {it.title}
-                                        {it.timing && <span className="research-dim"> · {it.timing}</span>}
-                                        {it.hasMove && (
-                                            <span className={it.move >= 0 ? "pos" : "neg"}> {formatMove(it.move)}</span>
-                                        )}
-                                    </span>
-                                </div>
-                            </li>
-                        ),
-                    )}
-                </ul>
+            {earnings.length > 0 && (
+                <section className="research-section">
+                    <h3>Recent earnings</h3>
+                    <ResearchTable
+                        label="Recent earnings"
+                        rows={earnings}
+                        columns={recentEarningsColumns(largest)}
+                        rowKey={(it) => `${it.ticker} ${it.when}`}
+                        initialSort={{ key: "date", dir: "desc" }}
+                    />
+                </section>
+            )}
+
+            {filings.length > 0 && (
+                <section className="research-section">
+                    <h3>Filings</h3>
+                    <ResearchTable
+                        label="Filings"
+                        rows={filings}
+                        columns={watchFilingColumns}
+                        rowKey={(it) => `${it.ticker} ${it.filing!.accession}`}
+                        initialSort={{ key: "filed", dir: "desc" }}
+                        onRowClick={(it) => onSelect(it.filing!, it.cik)}
+                        activeKey={activeFiling ? `${activeFiling.ticker} ${selected}` : ""}
+                    />
+                </section>
             )}
             {feed.tickers.length > 0 && (
                 <p className="research-dim">
-                    Since {feed.since}: each company's SEC events, reports and proxy statements, and
-                    its earnings reports with the price's answer, newest first, US Eastern. Click a
-                    filing to read it.
+                    Since {fmtDate(feed.since)}: each company's SEC events, reports and proxy
+                    statements, and its earnings reports with the price's answer. Times are US
+                    Eastern; filings show their filing date. Click a filing to read it, a column to
+                    sort.
                 </p>
             )}
             <Notes notes={feed.notes} />

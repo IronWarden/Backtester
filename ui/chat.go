@@ -1418,10 +1418,10 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   the next Fed meeting". You cannot fetch these yourself yet — point at ECO.
   "MY" (no ticker): the user's watchlist, saved in their config directory
   (not the database) and seeded from the Backtest form's holdings the first
-  time; tickers are added or removed in the view. It merges the last 90 days
-  of each company's SEC filings (events, reports, proxies only) and its
-  earnings reports with ERN's price move, newest first, plus upcoming earnings
-  dates; a filing opens in the same reader. Send a user there for "what has
+  time; tickers are added or removed in the view. Three sortable tables over
+  the last 90 days: upcoming earnings (with a countdown), recent earnings
+  with ERN's price move, and each company's SEC filings (events, reports,
+  proxies only; filing DATE shown, no time); a filing opens in the reader. Send a user there for "what has
   happened with the stocks I follow". Up to 50 tickers.
   Words in QUOTES search the text of every SEC filing since 2001 (EDGAR's own
   full-text search): '"going concern"' across all filers, '"share repurchase"

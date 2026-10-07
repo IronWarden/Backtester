@@ -2617,14 +2617,23 @@ check("MY merges a watchlist's filings and earnings, newest first", () => {
 
     const feed = fixture<main.WatchFeed>("research-my");
     const html = renderToString(<MyView feed={feed} holdings={["AAPL", "NVDA"]} onChange={noop}
-        selected="0000320193-26-000018" onSelect={noop} />).replace(/<!-- -->/g, "").replace(/&#x27;/g, "'");
-    for (const want of ["My watchlist", "Remove AAPL", "Add the form's holdings (1)", "Coming up",
-        "2026-10-29 16:30 ET", "Quarterly report", "Earnings results", "+5.00%", "filing-row active",
-        "Since 2026-07-09", "No SEC filer under ZZZZ"]) {
+        selected="0000320193-26-000018" onSelect={noop} today={new Date(2026, 9, 7)} />)
+        .replace(/<!-- -->/g, "").replace(/&#x27;/g, "'");
+    for (const want of ["My watchlist", "Remove AAPL", "Add the form's holdings (1)",
+        "Upcoming earnings", "Oct 29, 2026", "4:30 pm", "in 22 days", "After close",
+        "Recent earnings", "+5.00%", "rt-bar", "Filings", "Jul 31, 2026", "Quarterly report",
+        "Earnings results", "rt-click active", "Since Jul 9, 2026", "No SEC filer under ZZZZ"]) {
         if (!html.includes(want)) throw new Error(`MY lacks ${want}`);
     }
-    const order = ["2026-07-31 06:01", "2026-07-30 16:30"].map((s) => html.indexOf(s));
-    if (order[0] < 0 || order[0] > order[1]) throw new Error("MY is not newest first");
+    // Three tables, each sortable; filings newest first, by date only.
+    eq("tables", (html.match(/<table/g) ?? []).length, 3);
+    const filingsHTML = html.slice(html.indexOf("Filings</h3>"));
+    if (filingsHTML.indexOf("Jul 31, 2026") > filingsHTML.indexOf("Jul 30, 2026")) {
+        throw new Error("MY's filings are not newest first");
+    }
+    if (filingsHTML.includes("06:01") || filingsHTML.includes("am<")) {
+        throw new Error("a filing shows an EDGAR time (T143: dates only)");
+    }
     if (html.includes("Insider")) throw new Error("MY shows insider forms");
 
     const empty = renderToString(<MyView feed={main.WatchFeed.createFrom({ tickers: [], upcoming: [],
