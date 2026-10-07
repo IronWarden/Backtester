@@ -3199,3 +3199,157 @@ td.num.dim {
 .watch-list .filing-row {
   grid-template-columns: 9.5em 4.5em 4.5em 1fr;
 }
+
+/* ResearchTable (T144): one look for every Research table. The wrap
+   scrolls, so the header can stay put inside it. */
+.rt-wrap {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.research-table.rt th,
+.research-table.rt td {
+  text-align: left;
+}
+
+.research-table.rt th.num,
+.research-table.rt td.num {
+  text-align: right;
+}
+
+.research-table.rt thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.research-table.rt tbody tr:nth-child(even) {
+  background: var(--bg-inset);
+}
+
+.research-table.rt tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.research-table.rt tbody tr.active {
+  background: var(--accent-soft);
+}
+
+.research-table.rt tr.rt-click {
+  cursor: pointer;
+}
+
+.research-table.rt tr.rt-click:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+
+.research-table.rt tr.research-upcoming td {
+  font-style: normal;
+}
+
+.rt-sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.rt-sort:focus-visible {
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-xs);
+}
+
+.rt-arrow {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+th[aria-sort="ascending"] .rt-arrow,
+th[aria-sort="descending"] .rt-arrow {
+  color: var(--accent-strong);
+}
+
+.rt-tag {
+  display: inline-block;
+  padding: 0.05em 0.5em;
+  border-radius: 999px;
+  font-size: var(--fs-s);
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+
+.rt-tag.tag-after {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.rt-tag.tag-before {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.rt-move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5em;
+  min-width: 9em;
+}
+
+.rt-bar {
+  display: inline-block;
+  width: 4em;
+  height: 0.45em;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.rt-bar > span {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.rt-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7em;
+  padding: 0.6em 0.9em;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-s);
+  background: var(--accent-soft);
+}
+
+.rt-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em;
+}
+
+.rt-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  padding: 0.5em 0.9em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg-card);
+  min-width: 9em;
+}
+
+.rt-stats > div > span {
+  font-size: var(--fs-s);
+}
+
+.rt-stats strong {
+  font-size: var(--fs-l);
+  font-variant-numeric: tabular-nums;
+}

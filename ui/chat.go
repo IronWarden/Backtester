@@ -1389,7 +1389,9 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   from sec_financials, annual (5 years) or quarterly (8), each figure AS FIRST
   FILED with its filing date and form on hover; restatements are not shown.
   "AAPL ERN": earnings_calendar report times (US Eastern) and the price move
-  from the last close before each report to the first close after it. All of
+  from the last close before each report to the first close after it, with
+  the next report and a countdown, and the average absolute move and up/down
+  count above the table. Every Research table sorts by clicking a column. All of
   it is primary data with its date; there are no headlines, ads or live
   quotes, by design. Missing tables are named with the loader that fills them.
   "AAPL CN": the company's own news — its SEC filings live from EDGAR, newest

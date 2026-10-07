@@ -34,6 +34,16 @@ import {
 import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 import type { main } from "../wailsjs/go/models";
 import { searchTickers } from "./tickerSearch";
+import { ResearchTable, type Column } from "./ResearchTable";
+import {
+    barWidth,
+    countdown,
+    fmtDate,
+    fmtShortDate,
+    fmtTime,
+    moveSummary,
+    timingTag,
+} from "./researchFormat";
 import {
     FILING_FILTERS,
     RESEARCH_FUNCTIONS,
@@ -258,45 +268,103 @@ export function FaView({
     );
 }
 
-export function ErnView({ e }: { e: main.CompanyEarnings }) {
+export function TimingTag({ timing }: { timing: string }) {
+    if (!timing) return null;
+    const tag = timingTag(timing);
+    return <span className={`rt-tag ${tag.cls}`}>{tag.label}</span>;
+}
+
+// A price move: signed and coloured, with a bar scaled to the largest move
+// in the same table.
+export function MoveCell({ move, has, largest }: { move: number; has: boolean; largest: number }) {
+    if (!has) return <span className="research-dim">—</span>;
+    return (
+        <span className={`rt-move ${move >= 0 ? "pos" : "neg"}`}>
+            <span className="rt-bar" aria-hidden="true">
+                <span style={{ width: `${barWidth(move, largest)}%` }} />
+            </span>
+            {formatMove(move)}
+        </span>
+    );
+}
+
+export function FormChip({ form, kind }: { form: string; kind: string }) {
+    return <span className={`filing-form kind-${kind}`}>{form}</span>;
+}
+
+const ernColumns: Column<main.EarningsRow>[] = [
+    {
+        key: "date", label: "Reported", sortValue: (r) => r.reported, firstDir: "desc",
+        render: (r) => fmtDate(r.reported),
+    },
+    { key: "time", label: "Time (ET)", render: (r) => fmtTime(r.reported) },
+    { key: "timing", label: "Timing", sortValue: (r) => r.timing, render: (r) => <TimingTag timing={r.timing} /> },
+    {
+        key: "move", label: "Price move", numeric: true, firstDir: "desc",
+        sortValue: (r) => (r.hasMove ? r.move : null),
+        render: () => null, // replaced per table, to know the largest move
+    },
+    {
+        key: "measured", label: "Measured",
+        render: (r) => (r.hasMove ? `${fmtShortDate(r.from)} close → ${fmtShortDate(r.to)} close` : ""),
+    },
+];
+
+export function ErnView({ e, today = new Date() }: { e: main.CompanyEarnings; today?: Date }) {
+    const past = e.reports.filter((r) => !r.upcoming);
+    const next = e.reports.filter((r) => r.upcoming).sort((a, b) => (a.reported < b.reported ? -1 : 1));
+    const moves = past.filter((r) => r.hasMove).map((r) => r.move);
+    const largest = Math.max(0, ...moves.map(Math.abs));
+    const summary = moveSummary(moves);
+    const columns = ernColumns.map((c) =>
+        c.key === "move"
+            ? { ...c, render: (r: main.EarningsRow) => <MoveCell move={r.move} has={r.hasMove} largest={largest} /> }
+            : c,
+    );
     return (
         <div className="research-view">
             <h2 className="research-title">
                 <span className="research-ticker">{e.ticker} ERN</span>
             </h2>
-            {e.reports.length > 0 && (
-                <div className="research-table-wrap">
-                    <table className="research-table">
-                        <thead>
-                            <tr>
-                                <th>Reported (US Eastern)</th>
-                                <th>When</th>
-                                <th>Price move</th>
-                                <th>Measured</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {e.reports.map((r) => (
-                                <tr key={r.reported} className={r.upcoming ? "research-upcoming" : ""}>
-                                    <td>{r.reported}</td>
-                                    <td>{r.upcoming ? `upcoming, ${r.timing}` : r.timing}</td>
-                                    <td className={r.hasMove ? (r.move >= 0 ? "pos" : "neg") : "research-dim"}>
-                                        {r.hasMove ? formatMove(r.move) : "—"}
-                                    </td>
-                                    <td className="research-dim">
-                                        {r.hasMove ? `close ${r.from} → close ${r.to}` : ""}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {next.length > 0 && (
+                <div className="rt-next">
+                    <span className="research-dim">Next report</span>
+                    <strong>{fmtDate(next[0].reported)}</strong>
+                    {fmtTime(next[0].reported) && <span>{fmtTime(next[0].reported)} ET</span>}
+                    <TimingTag timing={next[0].timing} />
+                    <span className="research-dim">{countdown(next[0].reported, today)}</span>
                 </div>
             )}
-            {e.reports.length > 0 && (
+            {summary && (
+                <div className="rt-stats">
+                    <div>
+                        <span className="research-dim">Reports measured</span>
+                        <strong>{moves.length}</strong>
+                    </div>
+                    <div>
+                        <span className="research-dim">Average move (either way)</span>
+                        <strong>{(summary.avgAbs * 100).toFixed(2)}%</strong>
+                    </div>
+                    <div>
+                        <span className="research-dim">Up / down</span>
+                        <strong>
+                            <span className="pos">{summary.up}</span> / <span className="neg">{summary.down}</span>
+                        </strong>
+                    </div>
+                </div>
+            )}
+            <ResearchTable
+                label={`${e.ticker} earnings reports`}
+                rows={past}
+                columns={columns}
+                rowKey={(r) => r.reported}
+                initialSort={{ key: "date", dir: "desc" }}
+            />
+            {past.length > 0 && (
                 <p className="research-dim">
                     The move runs from the last close before the report to the first close after
                     it, from this database's bars. A report during the session mixes in that
-                    morning's trading.
+                    morning's trading. Click a column to sort.
                 </p>
             )}
             <Notes notes={e.notes} />

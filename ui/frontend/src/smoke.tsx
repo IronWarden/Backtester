@@ -81,6 +81,8 @@ import {
 } from "./luaApi";
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
+import { ResearchTable, nextSort, sortRows, type Column, type Sort } from "./ResearchTable";
+import { barWidth, countdown, fmtDate, fmtShortDate, fmtTime, moveSummary, timingTag } from "./researchFormat";
 import Research, { DesView, EcoView, ErnView, FaView, FilingsView, MyView, ReaderView, SearchView, edgarURL } from "./Research";
 import {
     filterFilings,
@@ -2432,17 +2434,74 @@ check("FA shows first-filed figures, gaps as a dash, filing dates on hover", () 
     }
 });
 
-check("ERN shows each report and the move across it", () => {
+check("ERN shows each report and the move across it, as a sortable table", () => {
     const e = fixture<main.CompanyEarnings>("research-ern");
     const html = renderToString(<ErnView e={e} />).replace(/<!-- -->/g, "");
-    for (const want of ["2025-01-28 16:00", "after close", "+10.00%",
-        "close 2025-01-28 → close 2025-01-29"]) {
+    for (const want of ["Jan 28, 2025", "4:00 pm", "After close", "+10.00%",
+        "Jan 28 close → Jan 29 close", "Average move", "10.00%", 'aria-sort="descending"', "rt-bar"]) {
         if (!html.includes(want)) throw new Error(`ERN lacks ${want}:\n${html}`);
     }
-    const upcoming = renderToString(<ErnView e={main.CompanyEarnings.createFrom({ ticker: "ACME",
-        reports: [{ reported: "2099-01-28 16:00", timing: "after close", from: "", to: "",
-            move: 0, hasMove: false, upcoming: true }], notes: [] })} />);
-    if (!upcoming.includes("upcoming, after close")) throw new Error(upcoming);
+    const upcoming = renderToString(<ErnView today={new Date(2099, 0, 6)} e={main.CompanyEarnings.createFrom({
+        ticker: "ACME", notes: [], reports: [
+            { reported: "2099-01-28 16:00", timing: "after close", from: "", to: "", move: 0,
+                hasMove: false, upcoming: true },
+            { reported: "2098-10-28 08:00", timing: "before open", from: "2098-10-27", to: "2098-10-28",
+                move: -0.04, hasMove: true, upcoming: false },
+        ] })} />).replace(/<!-- -->/g, "");
+    for (const want of ["Next report", "Jan 28, 2099", "in 22 days", "Before open", "−4.00%"]) {
+        if (!upcoming.includes(want)) throw new Error(`ERN lacks ${want}:\n${upcoming}`);
+    }
+    // The upcoming report is the panel, not a row with no move.
+    if ((upcoming.match(/Jan 28, 2099/g) ?? []).length !== 1) throw new Error("upcoming report listed twice");
+});
+
+check("research tables sort by any column, blanks last, ties stable", () => {
+    type R = { name: string; move: number | null };
+    const rows: R[] = [{ name: "b", move: 0.02 }, { name: "a", move: null }, { name: "c", move: -0.05 },
+        { name: "d", move: 0.02 }];
+    const cols: Column<R>[] = [
+        { key: "name", label: "Name", render: (r) => r.name, sortValue: (r) => r.name },
+        { key: "move", label: "Move", render: () => "", sortValue: (r) => r.move, firstDir: "desc" },
+        { key: "note", label: "Note", render: () => "" },
+    ];
+    const names = (s: Sort) => sortRows(rows, cols, s).map((r) => r.name).join("");
+    eq("unsorted", names(null), "bacd");
+    eq("name asc", names({ key: "name", dir: "asc" }), "abcd");
+    eq("move desc, blank last", names({ key: "move", dir: "desc" }), "bdca");
+    eq("move asc, blank still last", names({ key: "move", dir: "asc" }), "cbda");
+    eq("unsortable column", names({ key: "note", dir: "asc" }), "bacd");
+    eq("first click", nextSort(null, cols[1]), { key: "move", dir: "desc" });
+    eq("second click", nextSort({ key: "move", dir: "desc" }, cols[1]), { key: "move", dir: "asc" });
+    const html = renderToString(<ResearchTable label="t" rows={rows} columns={cols} rowKey={(r) => r.name}
+        initialSort={{ key: "name", dir: "desc" }} />);
+    if (html.indexOf(">d<") > html.indexOf(">a<") || !html.includes('aria-sort="descending"')) {
+        throw new Error(`initial sort not applied:\n${html}`);
+    }
+    if (!renderToString(<ResearchTable label="t" rows={[] as R[]} columns={cols} rowKey={(r) => r.name}
+        empty="Nothing yet." />).includes("Nothing yet.")) {
+        throw new Error("an empty table must say so");
+    }
+});
+
+check("research dates, times and countdowns read as words", () => {
+    eq("date", fmtDate("2026-07-30"), "Jul 30, 2026");
+    eq("date of a time", fmtDate("2026-07-30 16:30"), "Jul 30, 2026");
+    eq("short", fmtShortDate("2026-01-05"), "Jan 5");
+    eq("pm", fmtTime("2026-07-30 16:30"), "4:30 pm");
+    eq("am", fmtTime("2026-07-30 08:05"), "8:05 am");
+    eq("noon", fmtTime("2026-07-30 12:00"), "12:00 pm");
+    eq("midnight", fmtTime("2026-07-30 00:15"), "12:15 am");
+    eq("no time", fmtTime("2026-07-30"), "");
+    eq("not a date", fmtDate("soon"), "soon");
+    const today = new Date(2026, 9, 7, 23, 30);
+    eq("today", countdown("2026-10-07", today), "today");
+    eq("tomorrow", countdown("2026-10-08 06:00", today), "tomorrow");
+    eq("ahead", countdown("2026-10-29", today), "in 22 days");
+    eq("behind", countdown("2026-10-01", today), "6 days ago");
+    eq("across a month", countdown("2026-11-01", new Date(2026, 9, 31)), "tomorrow");
+    eq("tag", timingTag("before open").label, "Before open");
+    eq("bar", barWidth(-0.05, 0.1), 50);
+    eq("summary", moveSummary([0.5, -0.25, 0.75]), { avgAbs: 0.5, up: 2, down: 1 });
 });
 
 check("the Research tab explains itself before the first lookup", () => {

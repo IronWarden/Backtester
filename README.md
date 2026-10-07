@@ -2616,7 +2616,7 @@ a company* does the same):
 |---|---|---|
 | `AAPL` or `AAPL DES` | what the company is: name, industry (SIC), exchange, state of incorporation, former names, SEC CIK with a link to its filings on EDGAR; S&P 500 membership spans; last close and 52-week closing range; the data-quality verdict on its price series | `company_profile`, `index_membership`, `stock_data_optimized`, `data_quality` |
 | `AAPL FA` | reported financials — revenue through shares outstanding — for the last 5 fiscal years, or 8 quarters with *Quarterly*. Each figure **as first filed**: hover a cell for the filing date and form. Later restatements are not shown, so this is what the market could know at the time | `sec_financials` |
-| `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it | `earnings_calendar`, `stock_data_optimized` |
+| `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it, drawn as a bar; above the table, the next report with a countdown and the average move with how many went up and down | `earnings_calendar`, `stock_data_optimized` |
 | `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — timed to the minute EDGAR accepted it. Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
 | `ECO` | the **economy**, no ticker needed: the latest official reading of CPI, core CPI, nonfarm payrolls, unemployment, real GDP growth, industrial production, M2 and the fed funds rate — each with the period it describes, its change from the previous reading and over a year, when it was published and when the next release comes out — and the FOMC's last three and next four meetings, with links to each statement and its minutes | FRED (keyless CSV; release dates need `FRED_API_KEY`), federalreserve.gov, live |
 | `MY` | **your watchlist**, no ticker needed: the last 90 days of every company on it, merged and newest first — its SEC filings as CN labels them (events, reports and proxies) and its earnings reports with ERN's price move — plus the earnings dates still to come. Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR, `earnings_calendar` |
@@ -2625,7 +2625,9 @@ a company* does the same):
 The function may come first (`FA AAPL`), case does not matter, and a name
 resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
 Backtest tab's ticker search does. The function buttons under the box switch
-view without retyping the ticker. A lone `ECO` or `MY` is that view; the
+view without retyping the ticker. **Every table sorts**: click a column header,
+click again to reverse (dates and moves start newest/largest first). A lone
+`ECO` or `MY` is that view; the
 tickers ECO and MY themselves are still `ECO DES` and `MY DES`. Anything in
 quotes is a search, wherever the ticker goes (`AAPL "buyback"` works too).
 
