@@ -147,14 +147,26 @@ export function DesView({ d }: { d: main.CompanyOverview }) {
             {d.price && (
                 <section className="research-section">
                     <h3>Price history in this database</h3>
-                    <p>
-                        Last close <strong>{formatPrice(d.price.lastClose)}</strong> on{" "}
-                        {d.price.lastDate}. 52-week closing range {formatPrice(d.price.low52)}–
-                        {formatPrice(d.price.high52)}.
-                    </p>
+                    <div className="rt-stats">
+                        <div>
+                            <span className="research-dim">Last close · {fmtDate(d.price.lastDate)}</span>
+                            <strong>{formatPrice(d.price.lastClose)}</strong>
+                        </div>
+                        <div>
+                            <span className="research-dim">52-week low (close)</span>
+                            <strong>{formatPrice(d.price.low52)}</strong>
+                        </div>
+                        <div>
+                            <span className="research-dim">52-week high (close)</span>
+                            <strong>{formatPrice(d.price.high52)}</strong>
+                        </div>
+                        <div>
+                            <span className="research-dim">Sessions since {fmtDate(d.price.firstDate)}</span>
+                            <strong>{d.price.bars.toLocaleString("en-US")}</strong>
+                        </div>
+                    </div>
                     <p className="research-dim">
-                        {d.price.bars.toLocaleString("en-US")} sessions since {d.price.firstDate}. From
-                        the database's own bars, not a live quote.
+                        From the database&rsquo;s own bars, not a live quote.
                     </p>
                 </section>
             )}
@@ -180,7 +192,7 @@ export function DesView({ d }: { d: main.CompanyOverview }) {
                         </ul>
                     )}
                     <p className="research-dim">
-                        Reconstructed from the index's published changes
+                        Reconstructed from the index&rsquo;s published changes
                         {current?.confidence ? `; ${current.confidence} confidence for that year` : ""}.
                     </p>
                 </section>
@@ -198,6 +210,26 @@ export function DesView({ d }: { d: main.CompanyOverview }) {
             <Notes notes={d.notes} />
         </div>
     );
+}
+
+// FA is a pivot: one row per figure, one column per period. Sorting by a
+// period ranks the figures by their value then.
+function faColumns(periods: string[]): Column<main.FinancialsRow>[] {
+    return [
+        { key: "metric", label: "Period ending", sortValue: (r) => r.metric, render: (r) => r.metric },
+        ...periods.map((p, i): Column<main.FinancialsRow> => ({
+            key: `p${i}`, label: fmtDate(p), numeric: true, firstDir: "desc",
+            sortValue: (r) => r.cells[i]?.value ?? null,
+            title: (r) => {
+                const c = r.cells[i];
+                return c ? `Filed ${fmtDate(c.filed)}${c.form ? ` in a ${c.form}` : ""}` : "";
+            },
+            render: (r) => {
+                const c = r.cells[i];
+                return c ? formatFigure(r.metric, c.value) : <span className="research-dim">—</span>;
+            },
+        })),
+    ];
 }
 
 export function FaView({
@@ -224,42 +256,16 @@ export function FaView({
                     </button>
                 ))}
             </div>
-            {f.periods.length > 0 && (
-                <div className="research-table-wrap">
-                    <table className="research-table">
-                        <thead>
-                            <tr>
-                                <th>Period ending</th>
-                                {f.periods.map((p) => (
-                                    <th key={p}>{p}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {f.rows.map((r) => (
-                                <tr key={r.metric}>
-                                    <th scope="row">{r.metric}</th>
-                                    {r.cells.map((c, i) =>
-                                        c ? (
-                                            <td key={i} title={`Filed ${c.filed}${c.form ? ` in a ${c.form}` : ""}`}>
-                                                {formatFigure(r.metric, c.value)}
-                                            </td>
-                                        ) : (
-                                            <td key={i} className="research-dim">
-                                                —
-                                            </td>
-                                        ),
-                                    )}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+            <ResearchTable
+                label={`${f.ticker} reported financials`}
+                rows={f.rows}
+                columns={faColumns(f.periods)}
+                rowKey={(r) => r.metric}
+            />
             {f.periods.length > 0 && (
                 <p className="research-dim">
                     Each figure as first filed with the SEC (hover for the filing date and form);
-                    later restatements are not shown. CIK {f.cik}.
+                    later restatements are not shown. Click a period to rank the figures. CIK {f.cik}.
                 </p>
             )}
             <Notes notes={f.notes} />
@@ -362,8 +368,8 @@ export function ErnView({ e, today = new Date() }: { e: main.CompanyEarnings; to
             {past.length > 0 && (
                 <p className="research-dim">
                     The move runs from the last close before the report to the first close after
-                    it, from this database's bars. A report during the session mixes in that
-                    morning's trading. Click a column to sort.
+                    it, from this database&rsquo;s bars. A report during the session mixes in that
+                    morning&rsquo;s trading. Click a column to sort.
                 </p>
             )}
             <Notes notes={e.notes} />
@@ -433,7 +439,7 @@ export function FilingsView({
             />
             {c.filings.length > 0 && (
                 <p className="research-dim">
-                    Straight from SEC EDGAR: the company's own filings, by filing date. Click one to
+                    Straight from SEC EDGAR: the company&rsquo;s own filings, by filing date. Click one to
                     read it, a column to sort.
                 </p>
             )}
@@ -503,116 +509,187 @@ export function ReaderView({
     );
 }
 
-export function EcoView({ e }: { e: main.EconomicCalendar }) {
-    const past = e.meetings.filter((m) => !m.upcoming);
-    const next = e.meetings.filter((m) => m.upcoming);
+// Which way a reading moved. Neutral on purpose: rising unemployment and
+// rising output are both "up", and only one of them is good news.
+function Direction({ v }: { v: number }) {
+    if (Math.abs(v) < 1e-12) return null;
+    return <span className="rt-dir">{v > 0 ? "▲" : "▼"} </span>;
+}
+
+function ecoColumns(today: Date): Column<main.EconReading>[] {
+    return [
+        {
+            key: "name", label: "Indicator", sortValue: (r) => r.name,
+            render: (r) => (
+                <>
+                    <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => openExternal(r.url)}
+                        title={`${r.id} on FRED, from the ${r.releaseName} release`}
+                    >
+                        {r.name}
+                    </button>
+                    <span className={`eco-badge${r.source === "database" ? " stale" : ""}`}>
+                        {r.source === "database" ? "Database copy" : "Official statistic"}
+                    </span>
+                </>
+            ),
+        },
+        {
+            key: "latest", label: "Latest", numeric: true, firstDir: "desc", sortValue: (r) => r.periodEnd,
+            render: (r) => (
+                <>
+                    <strong>{formatEcoValue(r.kind, r.units, r.value)}</strong>{" "}
+                    <span className="research-dim">{r.period}</span>
+                </>
+            ),
+        },
+        {
+            key: "change", label: "Change", numeric: true, firstDir: "desc",
+            sortValue: (r) => (r.hasPrior ? r.change : null),
+            title: (r) => (r.hasPrior ? `From ${formatEcoValue(r.kind, r.units, r.prior)} in ${r.priorPeriod}` : ""),
+            render: (r) =>
+                r.hasPrior ? (
+                    <>
+                        <Direction v={r.change} />
+                        {formatEcoChange(r.kind, r.units, r.change)}
+                        <span className="research-dim"> vs {r.priorPeriod}</span>
+                    </>
+                ) : (
+                    <span className="research-dim">—</span>
+                ),
+        },
+        {
+            key: "year", label: "Over a year", numeric: true, firstDir: "desc",
+            sortValue: (r) => (r.hasYearChange ? r.yearChange : null),
+            render: (r) =>
+                r.hasYearChange ? (
+                    <>
+                        <Direction v={r.yearChange} />
+                        {formatEcoChange(r.kind, r.units, r.yearChange)}
+                    </>
+                ) : (
+                    <span className="research-dim">—</span>
+                ),
+        },
+        {
+            key: "published", label: "Published", firstDir: "desc", sortValue: (r) => r.published,
+            title: (r) => (r.publishedExact ? "From FRED's release calendar" : "Estimated from the release's usual timing"),
+            render: (r) => (r.publishedExact ? fmtDate(r.published) : `≈ ${fmtDate(r.published)}`),
+        },
+        {
+            key: "next", label: "Next release", sortValue: (r) => r.nextRelease,
+            render: (r) =>
+                r.nextRelease ? (
+                    <>
+                        {fmtDate(r.nextRelease)} <span className="research-dim">{countdown(r.nextRelease, today)}</span>
+                    </>
+                ) : (
+                    <span className="research-dim">—</span>
+                ),
+        },
+    ];
+}
+
+function meetingColumns(today: Date, nextStart: string): Column<main.FOMCMeeting>[] {
+    return [
+        {
+            key: "dates", label: "Meeting", sortValue: (m) => m.start,
+            render: (m) => (
+                <>
+                    <strong>{m.dates}</strong>
+                    {m.note && <span className="research-dim"> · {m.note}</span>}
+                </>
+            ),
+        },
+        {
+            key: "status", label: "Status", sortValue: (m) => m.start,
+            render: (m) =>
+                !m.upcoming ? (
+                    <span className="research-dim">held</span>
+                ) : (
+                    <span className={m.start === nextStart ? "rt-tag tag-after" : ""}>
+                        {m.start === nextStart ? "next · " : ""}
+                        {countdown(m.start, today)}
+                    </span>
+                ),
+        },
+        {
+            key: "sep", label: "Projections", sortValue: (m) => (m.projections ? 1 : 0), firstDir: "desc",
+            render: (m) => (m.projections ? "✓ dot plot" : ""),
+        },
+        {
+            key: "statement", label: "Statement",
+            render: (m) =>
+                m.statementUrl ? (
+                    <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => openExternal(m.statementUrl)}
+                        title="The FOMC statement on federalreserve.gov"
+                    >
+                        Statement ↗
+                    </button>
+                ) : null,
+        },
+        {
+            key: "minutes", label: "Minutes", sortValue: (m) => m.minutesReleased,
+            render: (m) =>
+                m.minutesUrl ? (
+                    <>
+                        <button
+                            type="button"
+                            className="link-button"
+                            onClick={() => openExternal(m.minutesUrl)}
+                            title="The minutes on federalreserve.gov"
+                        >
+                            Minutes ↗
+                        </button>
+                        {m.minutesReleased && (
+                            <span className="research-dim"> {fmtDate(m.minutesReleased)}</span>
+                        )}
+                    </>
+                ) : null,
+        },
+    ];
+}
+
+export function EcoView({ e, today = new Date() }: { e: main.EconomicCalendar; today?: Date }) {
+    const nextStart = e.meetings.find((m) => m.upcoming)?.start ?? "";
     return (
         <div className="research-view">
             <h2 className="research-title">
                 The economy <span className="research-ticker">ECO</span>
             </h2>
-            {e.readings.length > 0 && (
-                <div className="research-table-wrap">
-                    <table className="research-table eco-table">
-                        <thead>
-                            <tr>
-                                <th>Indicator</th>
-                                <th>Latest</th>
-                                <th>Change</th>
-                                <th>Over a year</th>
-                                <th>Published</th>
-                                <th>Next release</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {e.readings.map((r) => (
-                                <tr key={r.id}>
-                                    <th scope="row">
-                                        <button
-                                            type="button"
-                                            className="link-button"
-                                            onClick={() => openExternal(r.url)}
-                                            title={`${r.id} on FRED, from the ${r.releaseName} release`}
-                                        >
-                                            {r.name}
-                                        </button>
-                                        <span className={`eco-badge${r.source === "database" ? " stale" : ""}`}>
-                                            {r.source === "database" ? "Database copy" : "Official statistic"}
-                                        </span>
-                                    </th>
-                                    <td>
-                                        <strong>{formatEcoValue(r.kind, r.units, r.value)}</strong>{" "}
-                                        <span className="research-dim">{r.period}</span>
-                                    </td>
-                                    <td title={r.hasPrior ? `From ${formatEcoValue(r.kind, r.units, r.prior)} in ${r.priorPeriod}` : ""}>
-                                        {r.hasPrior ? formatEcoChange(r.kind, r.units, r.change) : "—"}
-                                        {r.hasPrior && <span className="research-dim"> vs {r.priorPeriod}</span>}
-                                    </td>
-                                    <td>{r.hasYearChange ? formatEcoChange(r.kind, r.units, r.yearChange) : "—"}</td>
-                                    <td
-                                        title={r.publishedExact
-                                            ? "From FRED's release calendar"
-                                            : "Estimated from the release's usual timing"}
-                                    >
-                                        {r.publishedExact ? r.published : `≈ ${r.published}`}
-                                    </td>
-                                    <td className={r.nextRelease ? "" : "research-dim"}>{r.nextRelease || "—"}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+            <ResearchTable
+                label="Economic readings"
+                rows={e.readings}
+                columns={ecoColumns(today)}
+                rowKey={(r) => r.id}
+            />
             {e.readings.length > 0 && (
                 <p className="research-dim">
                     Official statistics from the agencies that produce them, as republished unchanged
                     by FRED (St. Louis Fed). Each reading names the period it describes and when it
-                    came out — a number is only knowable from the day it is published.
+                    came out — a number is only knowable from the day it is published. Click a
+                    column to sort.
                 </p>
             )}
 
             {e.meetings.length > 0 && (
                 <section className="research-section">
                     <h3>FOMC meetings</h3>
-                    <ul className="research-list eco-meetings">
-                        {[...past, ...next].map((m) => (
-                            <li key={m.start} className={m.upcoming ? "research-upcoming" : ""}>
-                                <strong>{m.dates}</strong>
-                                {m.projections && <span className="research-dim"> · with economic projections</span>}
-                                {m.note && <span className="research-dim"> · {m.note}</span>}
-                                {m.upcoming && <span className="research-dim"> · upcoming</span>}
-                                {m.statementUrl && (
-                                    <>
-                                        {" "}
-                                        <button
-                                            type="button"
-                                            className="link-button"
-                                            onClick={() => openExternal(m.statementUrl)}
-                                            title="The FOMC's statement on federalreserve.gov"
-                                        >
-                                            Statement ↗
-                                        </button>
-                                    </>
-                                )}
-                                {m.minutesUrl && (
-                                    <>
-                                        {" "}
-                                        <button
-                                            type="button"
-                                            className="link-button"
-                                            onClick={() => openExternal(m.minutesUrl)}
-                                            title={m.minutesReleased ? `Minutes, released ${m.minutesReleased}` : "Minutes"}
-                                        >
-                                            Minutes ↗
-                                        </button>
-                                    </>
-                                )}
-                            </li>
-                        ))}
-                    </ul>
+                    <ResearchTable
+                        label="FOMC meetings"
+                        rows={e.meetings}
+                        columns={meetingColumns(today, nextStart)}
+                        rowKey={(m) => m.start}
+                        initialSort={{ key: "dates", dir: "asc" }}
+                    />
                     <p className="research-dim">
-                        From the Federal Reserve's own calendar; a date ahead is tentative until the
-                        meeting before it confirms it.{" "}
+                        From the Federal Reserve&rsquo;s own calendar; a date ahead is tentative until
+                        the meeting before it confirms it.{" "}
                         <button
                             type="button"
                             className="link-button"
@@ -738,7 +815,7 @@ export function MyView({
                         onClick={() => onChange([...feed.tickers, ...offer])}
                         title={offer.join(", ")}
                     >
-                        Add the form's holdings ({offer.length})
+                        Add the form&rsquo;s holdings ({offer.length})
                     </button>
                 )}
             </div>
@@ -792,8 +869,8 @@ export function MyView({
             )}
             {feed.tickers.length > 0 && (
                 <p className="research-dim">
-                    Since {fmtDate(feed.since)}: each company's SEC events, reports and proxy
-                    statements, and its earnings reports with the price's answer. Times are US
+                    Since {fmtDate(feed.since)}: each company&rsquo;s SEC events, reports and proxy
+                    statements, and its earnings reports with the price&rsquo;s answer. Times are US
                     Eastern; filings show their filing date. Click a filing to read it, a column to
                     sort.
                 </p>
@@ -921,7 +998,7 @@ export function SearchView({
             )}
             {s.hits.length > 0 && (
                 <p className="research-dim">
-                    EDGAR's own full-text search over every filing since 2001. Each row is a document
+                    EDGAR&rsquo;s own full-text search over every filing since 2001. Each row is a document
                     whose text matches; click it to read that document. Sort by # for the order EDGAR
                     ranks by relevance. Quotes search for an exact phrase.
                 </p>
@@ -1182,7 +1259,7 @@ export default function Research({
             {!dbPath && <p className="research-empty">Choose a database first (the database chip in the top bar).</p>}
             {dbPath && !ticker && !isMarketFunction(fn) && (
                 <div className="research-empty">
-                    <p>Look a company up by ticker or name, type ECO for the economy, MY for your watchlist, or put words in quotes to search the text of every SEC filing since 2001 (add a ticker to search one company's). Everything shown comes from primary data — SEC filings, official statistics and the database's own prices — and says where it came from.</p>
+                    <p>Look a company up by ticker or name, type ECO for the economy, MY for your watchlist, or put words in quotes to search the text of every SEC filing since 2001 (add a ticker to search one company&rsquo;s). Everything shown comes from primary data — SEC filings, official statistics and the database&rsquo;s own prices — and says where it came from.</p>
                     <ul>
                         {RESEARCH_FUNCTIONS.map((f) => (
                             <li key={f.code}>

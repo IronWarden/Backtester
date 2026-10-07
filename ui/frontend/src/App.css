@@ -3041,9 +3041,6 @@ td.num.dim {
   border-bottom: none;
 }
 
-.research-upcoming td {
-  font-style: italic;
-}
 
 .research-empty {
   color: var(--text-2);
@@ -3107,9 +3104,6 @@ td.num.dim {
 }
 
 /* ECO (T142c) */
-.eco-table th[scope="row"] {
-  white-space: normal;
-}
 
 .eco-badge {
   display: inline-block;
@@ -3120,10 +3114,6 @@ td.num.dim {
 
 .eco-badge.stale {
   color: var(--accent-strong);
-}
-
-.eco-meetings li {
-  padding: 0.15em 0;
 }
 
 /* MY (T142d) */
@@ -3201,9 +3191,6 @@ td.num.dim {
   box-shadow: inset var(--focus-ring);
 }
 
-.research-table.rt tr.research-upcoming td {
-  font-style: normal;
-}
 
 .rt-sort {
   all: unset;
@@ -3306,4 +3293,9 @@ th[aria-sort="descending"] .rt-arrow {
 .rt-stats strong {
   font-size: var(--fs-l);
   font-variant-numeric: tabular-nums;
+}
+
+.rt-dir {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
 }

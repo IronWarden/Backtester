@@ -2405,7 +2405,7 @@ check("DES shows what the company is, with every date", () => {
     const d = fixture<main.CompanyOverview>("research-des");
     const html = renderToString(<DesView d={d} />).replace(/<!-- -->/g, "").replace(/&amp;/g, "&");
     for (const want of ["Acme Corp", "ACME", "Electronic Computers", "Nasdaq", "121.00",
-        "2025-01-29", "not a live quote", "A member at least since 2011-01-03",
+        "Last close · Jan 29, 2025", "52-week high (close)", "Sessions since Jan 27, 2025", "not a live quote", "A member at least since 2011-01-03",
         "Filings on EDGAR", "add_data_quality.py"]) {
         if (!html.includes(want)) throw new Error(`DES lacks ${want}:\n${html}`);
     }
@@ -2420,8 +2420,8 @@ check("DES shows what the company is, with every date", () => {
 check("FA shows first-filed figures, gaps as a dash, filing dates on hover", () => {
     const f = fixture<main.CompanyFinancials>("research-fa");
     const html = renderToString(<FaView f={f} onFrequency={noop} />).replace(/<!-- -->/g, "");
-    for (const want of ["ACME CORP", "2024-12-31", "$420.00B", "−$1.50B", "$6.42",
-        "Filed 2025-02-14 in a 10-K", "as first filed", "Quarterly"]) {
+    for (const want of ["ACME CORP", "Dec 31, 2024", "$420.00B", "−$1.50B", "$6.42",
+        "Filed Feb 14, 2025 in a 10-K", "as first filed", "Quarterly", "rt-sort"]) {
         if (!html.includes(want)) throw new Error(`FA lacks ${want}:\n${html}`);
     }
     if (!html.includes(">—<")) throw new Error("a missing figure is not shown as a dash");
@@ -2584,25 +2584,28 @@ check("ECO needs no ticker, and a lone ECO is the function", () => {
 
 check("ECO shows each reading with its period, publication and source", () => {
     const e = fixture<main.EconomicCalendar>("research-eco");
-    const html = renderToString(<EcoView e={e} />).replace(/<!-- -->/g, "").replace(/&amp;/g, "&")
-        .replace(/&#x27;/g, "'");
-    for (const want of ["The economy", "Unemployment rate", "4.2%", "Sep 2026", "vs Aug 2026",
+    const html = renderToString(<EcoView e={e} today={new Date(2026, 9, 7)} />).replace(/<!-- -->/g, "")
+        .replace(/&amp;/g, "&").replace(/&#x27;/g, "'");
+    for (const want of ["The economy", "Unemployment rate", "4.2%", "Sep 2026", "vs Aug 2026", "▲ ",
         "Consumer prices (CPI)", "Real GDP growth (annualized)", "Q2 2026", "Official statistic",
-        "≈ 2026-10-05", "Estimated from the release's usual timing", "FRED_API_KEY",
-        "FOMC meetings", "Sep 15–16, 2026", "with economic projections", "Statement ↗",
-        "Oct 27–28, 2026", "upcoming", "Calendar on federalreserve.gov"]) {
+        "≈ Oct 5, 2026", "Estimated from the release's usual timing", "FRED_API_KEY",
+        "FOMC meetings", "Sep 15–16, 2026", "✓ dot plot", "Statement ↗", "held",
+        "Oct 27–28, 2026", "next · in 20 days", "in 62 days", "Calendar on federalreserve.gov"]) {
         if (!html.includes(want)) throw new Error(`ECO lacks ${want}`);
     }
+    // Two sortable tables; meetings in date order.
+    eq("tables", (html.match(/<table/g) ?? []).length, 2);
+    if (html.indexOf("Jun 16–17, 2026") > html.indexOf("Mar 16–17, 2027")) throw new Error("meetings out of order");
     // FRED unreachable for one series, and no calendar: the rest still shows.
     const partial = main.EconomicCalendar.createFrom({ ...e, meetings: [],
         readings: [{ ...e.readings[0], source: "database", publishedExact: true,
             published: "2026-03-11", nextRelease: "2026-10-15" }],
         notes: ["FOMC meetings could not be read: The Federal Reserve answered 403 Forbidden."] });
     const p = renderToString(<EcoView e={partial} />).replace(/<!-- -->/g, "");
-    for (const want of ["Database copy", "2026-03-11", "2026-10-15", "could not be read"]) {
+    for (const want of ["Database copy", "Mar 11, 2026", "Oct 15, 2026", "could not be read"]) {
         if (!p.includes(want)) throw new Error(`partial ECO lacks ${want}`);
     }
-    if (p.includes("FOMC meetings</h3>") || p.includes("≈ 2026-03-11")) {
+    if (p.includes("FOMC meetings</h3>") || p.includes("≈ Mar 11, 2026")) {
         throw new Error("partial ECO shows a section it has no data for, or estimates an exact date");
     }
 });
@@ -2620,7 +2623,7 @@ check("MY merges a watchlist's filings and earnings, newest first", () => {
     const html = renderToString(<MyView feed={feed} holdings={["AAPL", "NVDA"]} onChange={noop}
         selected="0000320193-26-000018" onSelect={noop} today={new Date(2026, 9, 7)} />)
         .replace(/<!-- -->/g, "").replace(/&#x27;/g, "'");
-    for (const want of ["My watchlist", "Remove AAPL", "Add the form's holdings (1)",
+    for (const want of ["My watchlist", "Remove AAPL", "Add the form’s holdings (1)",
         "Upcoming earnings", "Oct 29, 2026", "4:30 pm", "in 22 days", "After close",
         "Recent earnings", "+5.00%", "rt-bar", "Filings", "Jul 31, 2026", "Quarterly report",
         "Earnings results", "rt-click active", "Since Jul 9, 2026", "No SEC filer under ZZZZ"]) {

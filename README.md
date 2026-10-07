@@ -2691,7 +2691,9 @@ because an economic number is only knowable from the day it is published:
   on the daily H.15, shows the day after the month closes rather than tomorrow.
 - **Changes read the way each series is quoted**: an index (CPI, production,
   M2) by percent, a rate (unemployment, GDP growth, fed funds) by points,
-  payrolls by jobs. *Change* is against the previous reading and names its
+  payrolls by jobs. Direction is a neutral ▲/▼, never green or red:
+  rising unemployment and rising output are both "up", and only one of them
+  is good news. *Change* is against the previous reading and names its
   month, because FRED leaves a period it never collected blank — October 2025's
   CPI and unemployment, cancelled by the shutdown — and the previous reading
   then is two months back, not one.
