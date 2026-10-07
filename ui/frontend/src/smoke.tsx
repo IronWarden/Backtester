@@ -81,7 +81,7 @@ import {
 } from "./luaApi";
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
-import Research, { DesView, EcoView, ErnView, FaView, FilingsView, ReaderView, edgarURL } from "./Research";
+import Research, { DesView, EcoView, ErnView, FaView, FilingsView, MyView, ReaderView, edgarURL } from "./Research";
 import {
     filterFilings,
     firstDocument,
@@ -89,6 +89,7 @@ import {
     formatEcoValue,
     formatFigure,
     formatMove,
+    holdingsToAdd,
     parseResearchCommand,
     resolveQuery,
 } from "./researchCommand";
@@ -2541,6 +2542,35 @@ check("ECO shows each reading with its period, publication and source", () => {
     }
     if (p.includes("FOMC meetings</h3>") || p.includes("≈ 2026-03-11")) {
         throw new Error("partial ECO shows a section it has no data for, or estimates an exact date");
+    }
+});
+
+// MY (T142d): the recorded Apple filings and a scratch database's earnings,
+// passed through the binding by ui/watchlist_test.go.
+
+check("MY merges a watchlist's filings and earnings, newest first", () => {
+    eq("lone", parseResearchCommand("my"), { query: "", fn: "MY" });
+    eq("the ticker MY", parseResearchCommand("MY DES"), { query: "MY", fn: "DES" });
+    eq("offer", holdingsToAdd(["aapl", "NVDA", "nvda", " "], ["AAPL"]), ["NVDA"]);
+    eq("nothing new", holdingsToAdd(["AAPL"], ["AAPL"]), []);
+
+    const feed = fixture<main.WatchFeed>("research-my");
+    const html = renderToString(<MyView feed={feed} holdings={["AAPL", "NVDA"]} onChange={noop}
+        selected="0000320193-26-000018" onSelect={noop} />).replace(/<!-- -->/g, "").replace(/&#x27;/g, "'");
+    for (const want of ["My watchlist", "Remove AAPL", "Add the form's holdings (1)", "Coming up",
+        "2026-10-29 16:30 ET", "Quarterly report", "Earnings results", "+5.00%", "filing-row active",
+        "Since 2026-07-09", "No SEC filer under ZZZZ"]) {
+        if (!html.includes(want)) throw new Error(`MY lacks ${want}`);
+    }
+    const order = ["2026-07-31 06:01", "2026-07-30 16:30"].map((s) => html.indexOf(s));
+    if (order[0] < 0 || order[0] > order[1]) throw new Error("MY is not newest first");
+    if (html.includes("Insider")) throw new Error("MY shows insider forms");
+
+    const empty = renderToString(<MyView feed={main.WatchFeed.createFrom({ tickers: [], upcoming: [],
+        recent: [], since: "2026-07-09", notes: [] })} holdings={[]} onChange={noop} selected=""
+        onSelect={noop} />);
+    if (!empty.includes("The watchlist is empty") || empty.includes("Add the form")) {
+        throw new Error("an empty watchlist must explain itself, with nothing to offer");
     }
 });
 

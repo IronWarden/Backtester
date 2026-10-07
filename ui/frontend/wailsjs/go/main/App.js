@@ -86,6 +86,10 @@ export function ListTickers(arg1) {
   return window['go']['main']['App']['ListTickers'](arg1);
 }
 
+export function LoadWatchlist() {
+  return window['go']['main']['App']['LoadWatchlist']();
+}
+
 export function LuaAPI() {
   return window['go']['main']['App']['LuaAPI']();
 }
@@ -138,6 +142,10 @@ export function SaveClaudeKey(arg1) {
   return window['go']['main']['App']['SaveClaudeKey'](arg1);
 }
 
+export function SaveWatchlist(arg1) {
+  return window['go']['main']['App']['SaveWatchlist'](arg1);
+}
+
 export function TickerDateRanges(arg1) {
   return window['go']['main']['App']['TickerDateRanges'](arg1);
 }
@@ -148,6 +156,10 @@ export function TickerNames(arg1) {
 
 export function Version() {
   return window['go']['main']['App']['Version']();
+}
+
+export function WatchlistFeed(arg1, arg2) {
+  return window['go']['main']['App']['WatchlistFeed'](arg1, arg2);
 }
 
 export function WriteFile(arg1, arg2) {

@@ -7,6 +7,7 @@
 //   ERN  report dates and how the price met each one
 //   CN   the company's own SEC filings, in a clean reader
 //   ECO  the economy's official readings and the FOMC's meetings (no ticker)
+//   MY   the watchlist: its companies' filings and earnings, newest first
 //
 // Nothing here is a live quote or a headline: every number says where it came
 // from and as of when. The three views are exported and take plain data, so
@@ -22,8 +23,11 @@ import {
     EconomicReleases,
     FilingDocuments,
     ListTickers,
+    LoadWatchlist,
     ReadFiling,
+    SaveWatchlist,
     TickerNames,
+    WatchlistFeed,
 } from "../wailsjs/go/main/App";
 import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 import type { main } from "../wailsjs/go/models";
@@ -39,6 +43,7 @@ import {
     formatFigure,
     formatMove,
     formatPrice,
+    holdingsToAdd,
     parseResearchCommand,
     resolveQuery,
     type FilingFilter,
@@ -543,20 +548,157 @@ export function EcoView({ e }: { e: main.EconomicCalendar }) {
     );
 }
 
+export function MyView({
+    feed,
+    holdings,
+    onChange,
+    selected,
+    onSelect,
+}: {
+    feed: main.WatchFeed;
+    // The Backtest form's tickers, offered for the list.
+    holdings: string[];
+    onChange: (tickers: string[]) => void;
+    selected: string;
+    onSelect: (row: main.FilingRow, cik: string) => void;
+}) {
+    const [adding, setAdding] = useState("");
+    const offer = holdingsToAdd(holdings, feed.tickers);
+    const add = () => {
+        const more = adding.split(/[\s,]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+        if (more.length > 0) onChange([...feed.tickers, ...more]);
+        setAdding("");
+    };
+    return (
+        <div className="research-view">
+            <h2 className="research-title">
+                My watchlist <span className="research-ticker">MY</span>
+            </h2>
+            <div className="watch-chips">
+                {feed.tickers.map((t) => (
+                    <span key={t} className="watch-chip">
+                        {t}
+                        <button
+                            type="button"
+                            className="link-button"
+                            aria-label={`Remove ${t}`}
+                            title={`Remove ${t} from the watchlist`}
+                            onClick={() => onChange(feed.tickers.filter((x) => x !== t))}
+                        >
+                            ×
+                        </button>
+                    </span>
+                ))}
+                <input
+                    className="watch-add"
+                    placeholder="Add tickers"
+                    value={adding}
+                    spellCheck={false}
+                    onChange={(e) => setAdding(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") add();
+                    }}
+                />
+                <button type="button" onClick={add} disabled={!adding.trim()}>
+                    Add
+                </button>
+                {offer.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => onChange([...feed.tickers, ...offer])}
+                        title={offer.join(", ")}
+                    >
+                        Add the form's holdings ({offer.length})
+                    </button>
+                )}
+            </div>
+
+            {feed.tickers.length === 0 && (
+                <p className="research-dim">
+                    The watchlist is empty. Add the companies you follow, and MY gathers what they
+                    have filed and reported in one list.
+                </p>
+            )}
+
+            {feed.upcoming.length > 0 && (
+                <section className="research-section">
+                    <h3>Coming up</h3>
+                    <ul className="research-list">
+                        {feed.upcoming.map((u) => (
+                            <li key={`${u.ticker} ${u.when}`} className="research-upcoming">
+                                <strong>{u.ticker}</strong> earnings {u.when} ET
+                                {u.timing && <span className="research-dim"> · {u.timing}</span>}
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+
+            {feed.recent.length > 0 && (
+                <ul className="filing-list watch-list">
+                    {feed.recent.map((it) =>
+                        it.filing ? (
+                            <li key={`${it.ticker} ${it.filing.accession}`}>
+                                <button
+                                    type="button"
+                                    className={`filing-row${selected === it.filing.accession ? " active" : ""}`}
+                                    onClick={() => onSelect(it.filing!, it.cik)}
+                                >
+                                    <span className="filing-when">{it.when} ET</span>
+                                    <span className="watch-ticker">{it.ticker}</span>
+                                    <span className={`filing-form kind-${it.filing.kind}`}>{it.filing.form}</span>
+                                    <span className="filing-title">{it.title}</span>
+                                </button>
+                            </li>
+                        ) : (
+                            <li key={`${it.ticker} ${it.when} earnings`}>
+                                <div className="filing-row watch-earnings">
+                                    <span className="filing-when">{it.when} ET</span>
+                                    <span className="watch-ticker">{it.ticker}</span>
+                                    <span className="filing-form">ERN</span>
+                                    <span className="filing-title">
+                                        {it.title}
+                                        {it.timing && <span className="research-dim"> · {it.timing}</span>}
+                                        {it.hasMove && (
+                                            <span className={it.move >= 0 ? "pos" : "neg"}> {formatMove(it.move)}</span>
+                                        )}
+                                    </span>
+                                </div>
+                            </li>
+                        ),
+                    )}
+                </ul>
+            )}
+            {feed.tickers.length > 0 && (
+                <p className="research-dim">
+                    Since {feed.since}: each company's SEC events, reports and proxy statements, and
+                    its earnings reports with the price's answer, newest first, US Eastern. Click a
+                    filing to read it.
+                </p>
+            )}
+            <Notes notes={feed.notes} />
+        </div>
+    );
+}
+
 type Result =
     | { fn: "DES"; data: main.CompanyOverview }
     | { fn: "FA"; data: main.CompanyFinancials }
     | { fn: "ERN"; data: main.CompanyEarnings }
     | { fn: "CN"; data: main.CompanyFilings }
-    | { fn: "ECO"; data: main.EconomicCalendar };
+    | { fn: "ECO"; data: main.EconomicCalendar }
+    | { fn: "MY"; data: main.WatchFeed };
 
 export default function Research({
     dbPath,
     focusSignal = 0,
+    holdings = [],
 }: {
     dbPath: string;
     // Bumped by the command palette to put the cursor in the command line.
     focusSignal?: number;
+    // The Backtest form's tickers: what a first watchlist is seeded from.
+    holdings?: string[];
 }) {
     const [input, setInput] = useState("");
     const [ticker, setTicker] = useState("");
@@ -576,6 +718,12 @@ export default function Research({
     // Only the newest request may land, so a slow document cannot replace
     // the one clicked after it.
     const readSeq = useRef(0);
+    // MY: bumped after the watchlist is saved, to read the feed again.
+    const [watchVersion, setWatchVersion] = useState(0);
+    // The holdings as of the first MY, for seeding; a ref so editing the form
+    // does not refetch the feed.
+    const holdingsRef = useRef(holdings);
+    holdingsRef.current = holdings;
 
     useEffect(() => {
         if (focusSignal > 0) inputRef.current?.focus();
@@ -607,7 +755,18 @@ export default function Research({
             }
         };
         const fail = () => !cancelled && setLoading(false);
-        if (fn === "ECO") {
+        if (fn === "MY") {
+            // A user with no saved watchlist starts from the form's holdings.
+            LoadWatchlist()
+                .then((w) =>
+                    !w.saved && holdingsToAdd(holdingsRef.current, []).length > 0
+                        ? SaveWatchlist(holdingsToAdd(holdingsRef.current, []))
+                        : w,
+                )
+                .then((w) => WatchlistFeed(dbPath, w.tickers ?? []))
+                .then((data) => done({ fn: "MY", data }))
+                .catch(fail);
+        } else if (fn === "ECO") {
             EconomicReleases(dbPath).then((data) => done({ fn, data })).catch(fail);
         } else if (fn === "DES") {
             CompanyOverview(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
@@ -621,14 +780,20 @@ export default function Research({
         return () => {
             cancelled = true;
         };
-    }, [ticker, fn, freq, dbPath]);
+    }, [ticker, fn, freq, dbPath, watchVersion]);
 
-    // A new company closes the reader.
+    // A new company or view closes the reader.
     useEffect(() => {
         setFiling(null);
         setDocs([]);
         setDoc(null);
-    }, [ticker]);
+    }, [ticker, fn]);
+
+    function saveWatchlist(tickers: string[]) {
+        SaveWatchlist(tickers)
+            .then(() => setWatchVersion((n) => n + 1))
+            .catch(() => setWatchVersion((n) => n + 1));
+    }
 
     function openDocument(url: string) {
         const seq = ++readSeq.current;
@@ -648,8 +813,7 @@ export default function Research({
             });
     }
 
-    function selectFiling(row: main.FilingRow) {
-        const cik = result?.fn === "CN" ? result.data.cik : "";
+    function selectFiling(row: main.FilingRow, cik: string) {
         const seq = ++readSeq.current;
         setFiling(row);
         setDocs([]);
@@ -709,7 +873,7 @@ export default function Research({
                     ref={inputRef}
                     className="research-input"
                     data-shortcut="research"
-                    placeholder="A ticker or company name, then DES, FA, ERN or CN — e.g. AAPL CN — or ECO for the economy"
+                    placeholder="A ticker or company name, then DES, FA, ERN or CN — e.g. AAPL CN — or ECO, or MY for your watchlist"
                     value={input}
                     spellCheck={false}
                     onChange={(e) => setInput(e.target.value)}
@@ -740,7 +904,7 @@ export default function Research({
             {!dbPath && <p className="research-empty">Choose a database first (the database chip in the top bar).</p>}
             {dbPath && !ticker && !isMarketFunction(fn) && (
                 <div className="research-empty">
-                    <p>Look a company up by ticker or name, or type ECO for the economy. Everything shown comes from primary data — SEC filings, official statistics and the database's own prices — and says where it came from.</p>
+                    <p>Look a company up by ticker or name, type ECO for the economy, or MY for your watchlist. Everything shown comes from primary data — SEC filings, official statistics and the database's own prices — and says where it came from.</p>
                     <ul>
                         {RESEARCH_FUNCTIONS.map((f) => (
                             <li key={f.code}>
@@ -756,6 +920,26 @@ export default function Research({
             {!loading && !error && result?.fn === "FA" && <FaView f={result.data} onFrequency={setFreq} />}
             {!loading && !error && result?.fn === "ERN" && <ErnView e={result.data} />}
             {!loading && !error && result?.fn === "ECO" && <EcoView e={result.data} />}
+            {!loading && !error && result?.fn === "MY" && (
+                <div className={filing ? "cn-split" : ""}>
+                    <MyView
+                        feed={result.data}
+                        holdings={holdings}
+                        onChange={saveWatchlist}
+                        selected={filing?.accession ?? ""}
+                        onSelect={selectFiling}
+                    />
+                    {filing && (
+                        <ReaderView
+                            filing={filing}
+                            docs={docs}
+                            doc={doc}
+                            loading={reading}
+                            onOpen={openDocument}
+                        />
+                    )}
+                </div>
+            )}
             {!loading && !error && result?.fn === "CN" && (
                 <div className={filing ? "cn-split" : ""}>
                     <FilingsView
@@ -763,7 +947,7 @@ export default function Research({
                         filter={filter}
                         onFilter={setFilter}
                         selected={filing?.accession ?? ""}
-                        onSelect={selectFiling}
+                        onSelect={(row) => selectFiling(row, result.data.cik)}
                     />
                     {filing && (
                         <ReaderView

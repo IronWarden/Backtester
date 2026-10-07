@@ -1414,6 +1414,13 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   falls back to the database's economic_indicators copy, badged "Database
   copy". Send a user there for "what was the last CPI / jobs number / when is
   the next Fed meeting". You cannot fetch these yourself yet — point at ECO.
+  "MY" (no ticker): the user's watchlist, saved in their config directory
+  (not the database) and seeded from the Backtest form's holdings the first
+  time; tickers are added or removed in the view. It merges the last 90 days
+  of each company's SEC filings (events, reports, proxies only) and its
+  earnings reports with ERN's price move, newest first, plus upcoming earnings
+  dates; a filing opens in the same reader. Send a user there for "what has
+  happened with the stocks I follow". Up to 50 tickers.
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -2289,7 +2296,7 @@ total US market.
   leaving an "in its own window" stub. The bar above minimises (▁) or
   maximises (□) the results; a vanished form means they are maximised.
 - Tabs: Backtest (form), Config (TOML+Lua), Data (SQL), Research (Ctrl+4:
-  "AAPL DES|FA|ERN|CN", "ECO" = economy; dated primary data); "simple mode" = Backtest.
+  "AAPL DES|FA|ERN|CN", ECO economy, MY watchlist; dated data); "simple mode" = Backtest.
 - The Backtest tab can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

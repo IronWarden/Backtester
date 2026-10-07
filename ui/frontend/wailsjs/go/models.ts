@@ -1492,6 +1492,110 @@ export namespace main {
 		}
 	}
 	
+	
+	export class WatchItem {
+	    ticker: string;
+	    when: string;
+	    kind: string;
+	    title: string;
+	    filing?: FilingRow;
+	    cik: string;
+	    timing: string;
+	    move: number;
+	    hasMove: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new WatchItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.when = source["when"];
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.filing = this.convertValues(source["filing"], FilingRow);
+	        this.cik = source["cik"];
+	        this.timing = source["timing"];
+	        this.move = source["move"];
+	        this.hasMove = source["hasMove"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WatchFeed {
+	    tickers: string[];
+	    upcoming: WatchItem[];
+	    recent: WatchItem[];
+	    since: string;
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WatchFeed(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tickers = source["tickers"];
+	        this.upcoming = this.convertValues(source["upcoming"], WatchItem);
+	        this.recent = this.convertValues(source["recent"], WatchItem);
+	        this.since = source["since"];
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class Watchlist {
+	    tickers: string[];
+	    saved: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Watchlist(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tickers = source["tickers"];
+	        this.saved = source["saved"];
+	        this.error = source["error"];
+	    }
+	}
 
 }
 

@@ -3163,3 +3163,39 @@ td.num.dim {
 .eco-meetings li {
   padding: 0.15em 0;
 }
+
+/* MY (T142d) */
+.watch-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.watch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: var(--fs-s);
+}
+
+.watch-add {
+  width: 9em;
+}
+
+.watch-ticker {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.watch-earnings {
+  cursor: default;
+}
+
+.watch-list .filing-row {
+  grid-template-columns: 9.5em 4.5em 4.5em 1fr;
+}

@@ -45,6 +45,8 @@ export function ListStrategies():Promise<Array<backtest.StrategyCard>>;
 
 export function ListTickers(arg1:string):Promise<Array<string>>;
 
+export function LoadWatchlist():Promise<main.Watchlist>;
+
 export function LuaAPI():Promise<Array<backtest.LuaGlobal>>;
 
 export function LuaSkeletons():Promise<Array<backtest.LuaSkeleton>>;
@@ -71,10 +73,14 @@ export function RunUserQuery(arg1:string,arg2:string):Promise<main.QueryResult>;
 
 export function SaveClaudeKey(arg1:string):Promise<void>;
 
+export function SaveWatchlist(arg1:Array<string>):Promise<main.Watchlist>;
+
 export function TickerDateRanges(arg1:string):Promise<Record<string, Array<string>>>;
 
 export function TickerNames(arg1:string):Promise<Record<string, string>>;
 
 export function Version():Promise<string>;
+
+export function WatchlistFeed(arg1:string,arg2:Array<string>):Promise<main.WatchFeed>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

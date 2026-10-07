@@ -2619,12 +2619,13 @@ a company* does the same):
 | `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it | `earnings_calendar`, `stock_data_optimized` |
 | `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — timed to the minute EDGAR accepted it. Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
 | `ECO` | the **economy**, no ticker needed: the latest official reading of CPI, core CPI, nonfarm payrolls, unemployment, real GDP growth, industrial production, M2 and the fed funds rate — each with the period it describes, its change from the previous reading and over a year, when it was published and when the next release comes out — and the FOMC's last three and next four meetings, with links to each statement and its minutes | FRED (keyless CSV; release dates need `FRED_API_KEY`), federalreserve.gov, live |
+| `MY` | **your watchlist**, no ticker needed: the last 90 days of every company on it, merged and newest first — its SEC filings as CN labels them (events, reports and proxies) and its earnings reports with ERN's price move — plus the earnings dates still to come. Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR, `earnings_calendar` |
 
 The function may come first (`FA AAPL`), case does not matter, and a name
 resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
 Backtest tab's ticker search does. The function buttons under the box switch
-view without retyping the ticker. A lone `ECO` is the economy view; the ticker
-ECO itself is still `ECO DES`.
+view without retyping the ticker. A lone `ECO` or `MY` is that view; the
+tickers ECO and MY themselves are still `ECO DES` and `MY DES`.
 
 Honest edges, each said in the view rather than discovered:
 
@@ -2699,6 +2700,28 @@ because an economic number is only knowable from the day it is published:
 - Nothing is written to the database; responses are cached in memory, a
   reading for an hour and a calendar for twelve.
 
+**MY is CN and ERN across a watchlist.**
+
+- **The list is yours, not the database's**: `watchlist.json` in the per-user
+  config directory (`~/.config/backtester` on Linux), beside the API key — a
+  shipped database may be read-only, and a watchlist is a preference, not
+  data. The first time you open MY with no list saved, it is seeded from the
+  Backtest form's holdings; after that, *Add the form's holdings* offers any
+  you have added since. Emptying the list is kept as a choice — it does not
+  re-seed. Up to 50 tickers, upper-cased, repeats dropped.
+- **One quarter, newest first**: 90 days, so every company's latest earnings
+  and quarterly report are in it, at most 300 items. Only events, reports and
+  proxies are shown. Insider forms and securities offerings would bury the
+  rest (JPMorgan alone files thousands of structured-note prospectuses a
+  quarter). Ownership stakes (13D/13G) are left out because a company's EDGAR
+  list mixes stakes in it with stakes it holds elsewhere — most of
+  JPMorgan's are the latter — and the record does not say which. An
+  earnings report appears twice on purpose: once from `earnings_calendar`
+  with the price's answer, once as the 8-K that carries the release.
+- A ticker with no SEC filer (a fund, a delisted symbol) or that EDGAR does
+  not answer for is named in a note; the rest of the feed still shows. Each
+  company is one EDGAR request, paced like CN's.
+
 Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
 `EarningsReactions`, `SummarizePrices` — plus thin readers), `ui/research.go`
 (the `CompanyOverview` / `CompanyFinancials` / `CompanyEarnings` bindings), and
@@ -2706,7 +2729,7 @@ Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
 text reader, tested against SEC responses recorded in `src/edgar/testdata`) and
 `ui/filings.go`; ECO is `src/econ` (FRED CSV, release calendar and the Fed's
 meeting page, tested against responses recorded in `src/econ/testdata`) and
-`ui/eco.go`. A watchlist and full-text search are T142d–e.
+`ui/eco.go`; MY is `ui/watchlist.go`. Full-text search is T142e.
 
 ## The Backtest tab (UI)
 

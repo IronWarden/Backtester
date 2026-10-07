@@ -557,7 +557,7 @@ function App() {
             act("tab-backtest", "Go to Backtest tab"),
             act("tab-config", "Go to Config tab"),
             act("tab-data", "Go to Data tab"),
-            act("tab-research", "Look up a company (Research: DES / FA / ERN)", {
+            act("tab-research", "Look up a company (Research: DES / FA / ERN / CN, ECO, MY)", {
                 // Deferred, like Find a ticker: the palette must unmount
                 // before the command line takes focus.
                 run: () => {
@@ -1304,7 +1304,11 @@ function App() {
             )}
             {visited.current.has("research") && (
                 <Pane active={mode === "research"} className="main-scroll">
-                    <Research dbPath={dbPath} focusSignal={researchFocus} />
+                    <Research
+                        dbPath={dbPath}
+                        focusSignal={researchFocus}
+                        holdings={simpleForms.flatMap((f) => f.tickers)}
+                    />
                 </Pane>
             )}
             {visited.current.has("advanced") && (

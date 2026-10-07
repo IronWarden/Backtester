@@ -7,16 +7,18 @@
 //   aapl ern     -> earnings dates and the price's answer
 //   apple fa     -> a name: resolved to the best-matching symbol
 //   ECO          -> the economy: needs no company (T142c)
+//   MY           -> the watchlist's filings and earnings (T142d)
 // The function may come first ("FA AAPL"); case never matters.
 
-// market: the function is about the economy, not a company, so it needs no
-// ticker.
+// market: the function is not about one company -- the economy, or the
+// whole watchlist -- so it needs no ticker.
 export const RESEARCH_FUNCTIONS = [
   { code: "DES", label: "Description", hint: "What the company is", market: false },
   { code: "FA", label: "Financials", hint: "Reported figures, as first filed", market: false },
   { code: "ERN", label: "Earnings", hint: "Report dates and the price's answer", market: false },
   { code: "CN", label: "Filings", hint: "The company's own news: its SEC filings, read as clean text", market: false },
   { code: "ECO", label: "Economy", hint: "Official readings, release dates and FOMC meetings", market: true },
+  { code: "MY", label: "Watchlist", hint: "Filings and earnings across the companies you follow", market: true },
 ] as const;
 
 export type ResearchFn = (typeof RESEARCH_FUNCTIONS)[number]["code"];
@@ -150,4 +152,19 @@ export function formatEcoChange(kind: string, units: string, c: number): string 
   if (kind === "rate") return `${sign}${trimmed(Math.abs(c), 2)} pt`;
   if (kind === "index") return formatMove(c);
   return `${sign}${inUnits(units, Math.abs(c))}`;
+}
+
+// The holdings a watchlist could still take: the form's tickers, upper-cased,
+// that are not on it yet, in the form's order.
+export function holdingsToAdd(holdings: string[], watchlist: string[]): string[] {
+  const have = new Set(watchlist);
+  const out: string[] = [];
+  for (const h of holdings) {
+    const t = h.trim().toUpperCase();
+    if (t && !have.has(t)) {
+      have.add(t);
+      out.push(t);
+    }
+  }
+  return out;
 }
