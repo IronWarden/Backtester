@@ -1403,6 +1403,17 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Send a user there for "what does X do / what did it earn / how did it react
   to earnings / what has X announced" before reaching for screen_stocks or
   lookup_quote. You cannot read filings yourself yet — point at CN.
+  "ECO" (no ticker; the ticker ECO is "ECO DES"): the economy's latest
+  official readings from FRED — CPI, core CPI, nonfarm payrolls, unemployment,
+  real GDP growth, industrial production, M2, fed funds — each with the
+  PERIOD it describes, its change from the previous reading and over a year,
+  when it was PUBLISHED and the next release date; and the FOMC's last three
+  and next four meetings from federalreserve.gov, with statement and minutes
+  links. Release dates need FRED_API_KEY; without it "Published" is an
+  estimate marked ≈ and the next release is blank. A series FRED cannot serve
+  falls back to the database's economic_indicators copy, badged "Database
+  copy". Send a user there for "what was the last CPI / jobs number / when is
+  the next Fed meeting". You cannot fetch these yourself yet — point at ECO.
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -2278,7 +2289,7 @@ total US market.
   leaving an "in its own window" stub. The bar above minimises (▁) or
   maximises (□) the results; a vanished form means they are maximised.
 - Tabs: Backtest (form), Config (TOML+Lua), Data (SQL), Research (Ctrl+4:
-  "AAPL DES|FA|ERN|CN", dated primary data); "simple mode" = Backtest.
+  "AAPL DES|FA|ERN|CN", "ECO" = economy; dated primary data); "simple mode" = Backtest.
 - The Backtest tab can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

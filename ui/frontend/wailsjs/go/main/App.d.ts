@@ -23,6 +23,8 @@ export function DatabaseNotice(arg1:string):Promise<string>;
 
 export function DefaultDBPath():Promise<string>;
 
+export function EconomicReleases(arg1:string):Promise<main.EconomicCalendar>;
+
 export function FileExists(arg1:string):Promise<boolean>;
 
 export function FilingDocuments(arg1:string,arg2:string):Promise<main.FilingDocuments>;

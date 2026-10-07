@@ -2605,8 +2605,8 @@ bounds.
 
 A company lookup that works like a terminal's command line, in limited scope
 and on purpose without noise: **no headlines, no adverts, no live quotes**.
-Everything it shows is primary data — SEC filings and the database's own
-prices — and says where it came from and as of when.
+Everything it shows is primary data — SEC filings, official statistics and the
+database's own prices — and says where it came from and as of when.
 
 Type a ticker or a company name, then a function, and press Enter
 (`Ctrl+4` jumps here with the cursor in the box; the command palette's *Look up
@@ -2618,11 +2618,13 @@ a company* does the same):
 | `AAPL FA` | reported financials — revenue through shares outstanding — for the last 5 fiscal years, or 8 quarters with *Quarterly*. Each figure **as first filed**: hover a cell for the filing date and form. Later restatements are not shown, so this is what the market could know at the time | `sec_financials` |
 | `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it | `earnings_calendar`, `stock_data_optimized` |
 | `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — timed to the minute EDGAR accepted it. Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
+| `ECO` | the **economy**, no ticker needed: the latest official reading of CPI, core CPI, nonfarm payrolls, unemployment, real GDP growth, industrial production, M2 and the fed funds rate — each with the period it describes, its change from the previous reading and over a year, when it was published and when the next release comes out — and the FOMC's last three and next four meetings, with links to each statement and its minutes | FRED (keyless CSV; release dates need `FRED_API_KEY`), federalreserve.gov, live |
 
 The function may come first (`FA AAPL`), case does not matter, and a name
 resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
 Backtest tab's ticker search does. The function buttons under the box switch
-view without retyping the ticker.
+view without retyping the ticker. A lone `ECO` is the economy view; the ticker
+ECO itself is still `ECO DES`.
 
 Honest edges, each said in the view rather than discovered:
 
@@ -2667,13 +2669,44 @@ skips the rewrite, the adverts and the spin.
   table, and works for current filers only (delisted symbols have no profile).
 - Wire-service press releases and media headlines are deliberately absent.
 
+**ECO reads FRED and the Federal Reserve live**, and is honest about time,
+because an economic number is only knowable from the day it is published:
+
+- **Period and publication are separate columns.** *Sep 2026* is the month the
+  unemployment rate describes; *Published* is when it came out. With a
+  `FRED_API_KEY` (environment or `.env`, the key `update_treasury_yields.py`
+  already uses) both *Published* and *Next release* come from FRED's release
+  calendar. Without one, *Published* is an estimate from the release's usual
+  timing, marked `≈`, and *Next release* is blank — the view says so rather
+  than guess. *Next release* is when the **next reading** is due — the first
+  release after the next period ends — so the fed funds average, which rides
+  on the daily H.15, shows the day after the month closes rather than tomorrow.
+- **Changes read the way each series is quoted**: an index (CPI, production,
+  M2) by percent, a rate (unemployment, GDP growth, fed funds) by points,
+  payrolls by jobs. *Change* is against the previous reading and names its
+  month, because FRED leaves a period it never collected blank — October 2025's
+  CPI and unemployment, cancelled by the shutdown — and the previous reading
+  then is two months back, not one.
+- **One source failing never blanks the view.** A series FRED does not answer
+  for falls back to the database's `economic_indicators` copy, badged
+  *Database copy* and noted with where that copy ends (it is months behind
+  unless the loader was re-run). A failed meeting calendar is a note beside
+  readings that still show.
+- **FOMC meetings** are read off the Fed's own calendar page: the last three
+  and next four, *with economic projections* where the Fed marks one, notation
+  votes as such, and links to each statement and its minutes once published.
+  A date ahead is tentative until the meeting before it confirms it.
+- Nothing is written to the database; responses are cached in memory, a
+  reading for an hour and a calendar for twelve.
+
 Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
 `EarningsReactions`, `SummarizePrices` — plus thin readers), `ui/research.go`
 (the `CompanyOverview` / `CompanyFinancials` / `CompanyEarnings` bindings), and
 `ui/frontend/src/Research.tsx`; CN is `src/edgar` (the client, parsing and the
 text reader, tested against SEC responses recorded in `src/edgar/testdata`) and
-`ui/filings.go`. Economic releases, a watchlist and full-text search are
-T142c–e.
+`ui/filings.go`; ECO is `src/econ` (FRED CSV, release calendar and the Fed's
+meeting page, tested against responses recorded in `src/econ/testdata`) and
+`ui/eco.go`. A watchlist and full-text search are T142d–e.
 
 ## The Backtest tab (UI)
 

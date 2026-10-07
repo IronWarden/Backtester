@@ -3143,3 +3143,23 @@ td.num.dim {
   padding: 0.8em 1em;
   color: var(--text-1);
 }
+
+/* ECO (T142c) */
+.eco-table th[scope="row"] {
+  white-space: normal;
+}
+
+.eco-badge {
+  display: inline-block;
+  margin-left: 0.5em;
+  font-size: var(--fs-s);
+  color: var(--text-2);
+}
+
+.eco-badge.stale {
+  color: var(--accent-strong);
+}
+
+.eco-meetings li {
+  padding: 0.15em 0;
+}

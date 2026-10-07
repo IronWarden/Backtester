@@ -6,13 +6,17 @@
 //   AAPL FA      -> reported financials
 //   aapl ern     -> earnings dates and the price's answer
 //   apple fa     -> a name: resolved to the best-matching symbol
+//   ECO          -> the economy: needs no company (T142c)
 // The function may come first ("FA AAPL"); case never matters.
 
+// market: the function is about the economy, not a company, so it needs no
+// ticker.
 export const RESEARCH_FUNCTIONS = [
-  { code: "DES", label: "Description", hint: "What the company is" },
-  { code: "FA", label: "Financials", hint: "Reported figures, as first filed" },
-  { code: "ERN", label: "Earnings", hint: "Report dates and the price's answer" },
-  { code: "CN", label: "Filings", hint: "The company's own news: its SEC filings, read as clean text" },
+  { code: "DES", label: "Description", hint: "What the company is", market: false },
+  { code: "FA", label: "Financials", hint: "Reported figures, as first filed", market: false },
+  { code: "ERN", label: "Earnings", hint: "Report dates and the price's answer", market: false },
+  { code: "CN", label: "Filings", hint: "The company's own news: its SEC filings, read as clean text", market: false },
+  { code: "ECO", label: "Economy", hint: "Official readings, release dates and FOMC meetings", market: true },
 ] as const;
 
 export type ResearchFn = (typeof RESEARCH_FUNCTIONS)[number]["code"];
@@ -24,11 +28,21 @@ export type ResearchCommand = {
 };
 
 const CODES = new Set<string>(RESEARCH_FUNCTIONS.map((f) => f.code));
+const MARKET_CODES = new Set<string>(RESEARCH_FUNCTIONS.filter((f) => f.market).map((f) => f.code));
+
+export function isMarketFunction(fn: ResearchFn): boolean {
+  return MARKET_CODES.has(fn);
+}
 
 export function parseResearchCommand(input: string): ResearchCommand | null {
   const words = input.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return null;
   const isCode = (w: string | undefined) => !!w && CODES.has(w.toUpperCase());
+  // A lone market function is the function -- it has nothing to look up. Any
+  // other lone code is a symbol, so "ECO DES" still reaches the ticker ECO.
+  if (words.length === 1 && MARKET_CODES.has(words[0].toUpperCase())) {
+    return { query: "", fn: words[0].toUpperCase() as ResearchFn };
+  }
   // The function is the last word ("AAPL FA") or the first ("FA AAPL");
   // anything else, including a code in the middle of a name, is the query.
   let fn: ResearchFn = "DES";
@@ -110,4 +124,30 @@ export function firstDocument<T extends { type: string }>(docs: T[], form: strin
     if (release) return release;
   }
   return docs.find((d) => d.type === form) ?? docs[0];
+}
+
+// ECO's numbers. kind is the reading's: a rate changes by points, an index by
+// percent, a count (payrolls) by its own units. Units come from the series.
+function trimmed(v: number, places: number): string {
+  return String(Number(v.toFixed(places)));
+}
+
+function inUnits(units: string, abs: number): string {
+  if (units.startsWith("billions of dollars")) return `$${scaled(abs * 1e9)}`;
+  if (units.startsWith("thousands")) return scaled(abs * 1e3);
+  return abs.toFixed(1);
+}
+
+export function formatEcoValue(kind: string, units: string, v: number): string {
+  const sign = v < 0 ? "−" : "";
+  if (kind === "rate") return `${sign}${trimmed(Math.abs(v), 2)}%`;
+  return `${sign}${inUnits(units, Math.abs(v))}`;
+}
+
+export function formatEcoChange(kind: string, units: string, c: number): string {
+  if (Math.abs(c) < 1e-12) return "unchanged";
+  const sign = c > 0 ? "+" : "−";
+  if (kind === "rate") return `${sign}${trimmed(Math.abs(c), 2)} pt`;
+  if (kind === "index") return formatMove(c);
+  return `${sign}${inUnits(units, Math.abs(c))}`;
 }

@@ -102,3 +102,32 @@ func TestGetCPISeriesWithoutTheTable(t *testing.T) {
 		t.Errorf("expected nil for a database with no economic_indicators, got %d points", len(got))
 	}
 }
+
+func TestLoadIndicator(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "eco.db")
+	if _, err := InitDB(path); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if got, err := LoadIndicator("UNRATE"); got != nil || err != nil {
+		t.Fatalf("no table must be nil, nil: %v %v", got, err)
+	}
+	if _, err := db.Exec(`CREATE TABLE economic_indicators (
+		Date DATE, series_id VARCHAR, indicator_name VARCHAR, value DOUBLE)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO economic_indicators VALUES
+		('2026-02-01', 'FEDFUNDS', 'Federal Funds Rate', 0),
+		('2026-01-01', 'FEDFUNDS', 'Federal Funds Rate', 0.25),
+		('2026-01-01', 'UNRATE', 'Unemployment Rate', 4.3),
+		('2026-03-01', 'FEDFUNDS', 'Federal Funds Rate', NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadIndicator("FEDFUNDS")
+	if err != nil || len(got) != 2 || got[0].Value != 0.25 || got[1].Value != 0 ||
+		!got[1].Date.Equal(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("sorted, one series, a real zero kept, a NULL dropped: %v %+v", err, got)
+	}
+	if got, err := LoadIndicator("PAYEMS"); err != nil || got == nil || len(got) != 0 {
+		t.Errorf("a missing series is empty, not nil: %v %v", got, err)
+	}
+}

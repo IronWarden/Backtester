@@ -81,10 +81,12 @@ import {
 } from "./luaApi";
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
-import Research, { DesView, ErnView, FaView, FilingsView, ReaderView, edgarURL } from "./Research";
+import Research, { DesView, EcoView, ErnView, FaView, FilingsView, ReaderView, edgarURL } from "./Research";
 import {
     filterFilings,
     firstDocument,
+    formatEcoChange,
+    formatEcoValue,
     formatFigure,
     formatMove,
     parseResearchCommand,
@@ -2497,6 +2499,49 @@ check("an earnings 8-K opens on its press release, read as clean text", () => {
         onOpen={noop} doc={main.ReaderDoc.createFrom({ url: "x", text: "", truncated: false,
             error: "EDGAR did not answer" })} />);
     if (!failed.includes("EDGAR did not answer")) throw new Error("a failed read is not explained");
+});
+
+// ECO (T142c): FRED's CSVs and the Fed's meeting calendar, recorded
+// 2026-10-07 in src/econ/testdata and passed through the binding by
+// ui/eco_test.go, with no FRED API key.
+
+check("ECO needs no ticker, and a lone ECO is the function", () => {
+    eq("lone", parseResearchCommand("eco"), { query: "", fn: "ECO" });
+    eq("the ticker ECO", parseResearchCommand("ECO DES"), { query: "ECO", fn: "DES" });
+    eq("rate", formatEcoValue("rate", "%", 3.75), "3.75%");
+    eq("rate change", formatEcoChange("rate", "%", 0.1000000001), "+0.1 pt");
+    eq("rate fall", formatEcoChange("rate", "%", -0.25), "−0.25 pt");
+    eq("index change", formatEcoChange("index", "index", 0.00396), "+0.40%");
+    eq("payrolls", formatEcoValue("count", "thousands of jobs", 159044), "159.0M");
+    eq("payrolls change", formatEcoChange("count", "thousands of jobs", 29), "+29.0K");
+    eq("payrolls loss", formatEcoChange("count", "thousands of jobs", -1250), "−1.3M");
+    eq("money", formatEcoValue("index", "billions of dollars", 23342.8), "$23.34T");
+    eq("flat", formatEcoChange("rate", "%", 0), "unchanged");
+});
+
+check("ECO shows each reading with its period, publication and source", () => {
+    const e = fixture<main.EconomicCalendar>("research-eco");
+    const html = renderToString(<EcoView e={e} />).replace(/<!-- -->/g, "").replace(/&amp;/g, "&")
+        .replace(/&#x27;/g, "'");
+    for (const want of ["The economy", "Unemployment rate", "4.2%", "Sep 2026", "vs Aug 2026",
+        "Consumer prices (CPI)", "Real GDP growth (annualized)", "Q2 2026", "Official statistic",
+        "≈ 2026-10-05", "Estimated from the release's usual timing", "FRED_API_KEY",
+        "FOMC meetings", "Sep 15–16, 2026", "with economic projections", "Statement ↗",
+        "Oct 27–28, 2026", "upcoming", "Calendar on federalreserve.gov"]) {
+        if (!html.includes(want)) throw new Error(`ECO lacks ${want}`);
+    }
+    // FRED unreachable for one series, and no calendar: the rest still shows.
+    const partial = main.EconomicCalendar.createFrom({ ...e, meetings: [],
+        readings: [{ ...e.readings[0], source: "database", publishedExact: true,
+            published: "2026-03-11", nextRelease: "2026-10-15" }],
+        notes: ["FOMC meetings could not be read: The Federal Reserve answered 403 Forbidden."] });
+    const p = renderToString(<EcoView e={partial} />).replace(/<!-- -->/g, "");
+    for (const want of ["Database copy", "2026-03-11", "2026-10-15", "could not be read"]) {
+        if (!p.includes(want)) throw new Error(`partial ECO lacks ${want}`);
+    }
+    if (p.includes("FOMC meetings</h3>") || p.includes("≈ 2026-03-11")) {
+        throw new Error("partial ECO shows a section it has no data for, or estimates an exact date");
+    }
 });
 
 if (process.env.SMOKE_UPDATE === "1") {

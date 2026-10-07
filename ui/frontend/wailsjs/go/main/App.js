@@ -42,6 +42,10 @@ export function DefaultDBPath() {
   return window['go']['main']['App']['DefaultDBPath']();
 }
 
+export function EconomicReleases(arg1) {
+  return window['go']['main']['App']['EconomicReleases'](arg1);
+}
+
 export function FileExists(arg1) {
   return window['go']['main']['App']['FileExists'](arg1);
 }

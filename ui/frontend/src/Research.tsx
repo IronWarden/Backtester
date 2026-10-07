@@ -5,6 +5,8 @@
 //        database's own price history and its quality audit)
 //   FA   reported financials, each figure as first FILED, with the date
 //   ERN  report dates and how the price met each one
+//   CN   the company's own SEC filings, in a clean reader
+//   ECO  the economy's official readings and the FOMC's meetings (no ticker)
 //
 // Nothing here is a live quote or a headline: every number says where it came
 // from and as of when. The three views are exported and take plain data, so
@@ -17,6 +19,7 @@ import {
     CompanyFilings,
     CompanyFinancials,
     CompanyOverview,
+    EconomicReleases,
     FilingDocuments,
     ListTickers,
     ReadFiling,
@@ -30,6 +33,9 @@ import {
     RESEARCH_FUNCTIONS,
     filterFilings,
     firstDocument,
+    isMarketFunction,
+    formatEcoChange,
+    formatEcoValue,
     formatFigure,
     formatMove,
     formatPrice,
@@ -412,11 +418,137 @@ export function ReaderView({
     );
 }
 
+export function EcoView({ e }: { e: main.EconomicCalendar }) {
+    const past = e.meetings.filter((m) => !m.upcoming);
+    const next = e.meetings.filter((m) => m.upcoming);
+    return (
+        <div className="research-view">
+            <h2 className="research-title">
+                The economy <span className="research-ticker">ECO</span>
+            </h2>
+            {e.readings.length > 0 && (
+                <div className="research-table-wrap">
+                    <table className="research-table eco-table">
+                        <thead>
+                            <tr>
+                                <th>Indicator</th>
+                                <th>Latest</th>
+                                <th>Change</th>
+                                <th>Over a year</th>
+                                <th>Published</th>
+                                <th>Next release</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {e.readings.map((r) => (
+                                <tr key={r.id}>
+                                    <th scope="row">
+                                        <button
+                                            type="button"
+                                            className="link-button"
+                                            onClick={() => openExternal(r.url)}
+                                            title={`${r.id} on FRED, from the ${r.releaseName} release`}
+                                        >
+                                            {r.name}
+                                        </button>
+                                        <span className={`eco-badge${r.source === "database" ? " stale" : ""}`}>
+                                            {r.source === "database" ? "Database copy" : "Official statistic"}
+                                        </span>
+                                    </th>
+                                    <td>
+                                        <strong>{formatEcoValue(r.kind, r.units, r.value)}</strong>{" "}
+                                        <span className="research-dim">{r.period}</span>
+                                    </td>
+                                    <td title={r.hasPrior ? `From ${formatEcoValue(r.kind, r.units, r.prior)} in ${r.priorPeriod}` : ""}>
+                                        {r.hasPrior ? formatEcoChange(r.kind, r.units, r.change) : "—"}
+                                        {r.hasPrior && <span className="research-dim"> vs {r.priorPeriod}</span>}
+                                    </td>
+                                    <td>{r.hasYearChange ? formatEcoChange(r.kind, r.units, r.yearChange) : "—"}</td>
+                                    <td
+                                        title={r.publishedExact
+                                            ? "From FRED's release calendar"
+                                            : "Estimated from the release's usual timing"}
+                                    >
+                                        {r.publishedExact ? r.published : `≈ ${r.published}`}
+                                    </td>
+                                    <td className={r.nextRelease ? "" : "research-dim"}>{r.nextRelease || "—"}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+            {e.readings.length > 0 && (
+                <p className="research-dim">
+                    Official statistics from the agencies that produce them, as republished unchanged
+                    by FRED (St. Louis Fed). Each reading names the period it describes and when it
+                    came out — a number is only knowable from the day it is published.
+                </p>
+            )}
+
+            {e.meetings.length > 0 && (
+                <section className="research-section">
+                    <h3>FOMC meetings</h3>
+                    <ul className="research-list eco-meetings">
+                        {[...past, ...next].map((m) => (
+                            <li key={m.start} className={m.upcoming ? "research-upcoming" : ""}>
+                                <strong>{m.dates}</strong>
+                                {m.projections && <span className="research-dim"> · with economic projections</span>}
+                                {m.note && <span className="research-dim"> · {m.note}</span>}
+                                {m.upcoming && <span className="research-dim"> · upcoming</span>}
+                                {m.statementUrl && (
+                                    <>
+                                        {" "}
+                                        <button
+                                            type="button"
+                                            className="link-button"
+                                            onClick={() => openExternal(m.statementUrl)}
+                                            title="The FOMC's statement on federalreserve.gov"
+                                        >
+                                            Statement ↗
+                                        </button>
+                                    </>
+                                )}
+                                {m.minutesUrl && (
+                                    <>
+                                        {" "}
+                                        <button
+                                            type="button"
+                                            className="link-button"
+                                            onClick={() => openExternal(m.minutesUrl)}
+                                            title={m.minutesReleased ? `Minutes, released ${m.minutesReleased}` : "Minutes"}
+                                        >
+                                            Minutes ↗
+                                        </button>
+                                    </>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                    <p className="research-dim">
+                        From the Federal Reserve's own calendar; a date ahead is tentative until the
+                        meeting before it confirms it.{" "}
+                        <button
+                            type="button"
+                            className="link-button"
+                            onClick={() => openExternal(e.calendarUrl)}
+                        >
+                            Calendar on federalreserve.gov ↗
+                        </button>
+                    </p>
+                </section>
+            )}
+            <Notes notes={e.notes} />
+        </div>
+    );
+}
+
 type Result =
     | { fn: "DES"; data: main.CompanyOverview }
     | { fn: "FA"; data: main.CompanyFinancials }
     | { fn: "ERN"; data: main.CompanyEarnings }
-    | { fn: "CN"; data: main.CompanyFilings };
+    | { fn: "CN"; data: main.CompanyFilings }
+    | { fn: "ECO"; data: main.EconomicCalendar };
 
 export default function Research({
     dbPath,
@@ -465,7 +597,7 @@ export default function Research({
     }, [dbPath]);
 
     useEffect(() => {
-        if (!ticker || !dbPath) return;
+        if (!dbPath || (!ticker && !isMarketFunction(fn))) return;
         let cancelled = false;
         setLoading(true);
         const done = (r: Result) => {
@@ -475,7 +607,9 @@ export default function Research({
             }
         };
         const fail = () => !cancelled && setLoading(false);
-        if (fn === "DES") {
+        if (fn === "ECO") {
+            EconomicReleases(dbPath).then((data) => done({ fn, data })).catch(fail);
+        } else if (fn === "DES") {
             CompanyOverview(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
         } else if (fn === "FA") {
             CompanyFinancials(dbPath, ticker, freq).then((data) => done({ fn, data })).catch(fail);
@@ -549,6 +683,11 @@ export default function Research({
     function submit() {
         const cmd = parseResearchCommand(input);
         if (!cmd) return;
+        if (isMarketFunction(cmd.fn)) {
+            setFn(cmd.fn);
+            setInput(cmd.fn);
+            return;
+        }
         const sym = resolveQuery(cmd.query, pool, (q) => searchTickers(pool, names, q, 1));
         setTicker(sym);
         setFn(cmd.fn);
@@ -557,7 +696,8 @@ export default function Research({
 
     function choose(next: ResearchFn) {
         setFn(next);
-        if (ticker) setInput(`${ticker} ${next}`);
+        if (isMarketFunction(next)) setInput(next);
+        else if (ticker) setInput(`${ticker} ${next}`);
     }
 
     const error = result?.data.error ?? "";
@@ -569,7 +709,7 @@ export default function Research({
                     ref={inputRef}
                     className="research-input"
                     data-shortcut="research"
-                    placeholder="A ticker or company name, then DES, FA, ERN or CN — e.g. AAPL CN"
+                    placeholder="A ticker or company name, then DES, FA, ERN or CN — e.g. AAPL CN — or ECO for the economy"
                     value={input}
                     spellCheck={false}
                     onChange={(e) => setInput(e.target.value)}
@@ -587,20 +727,20 @@ export default function Research({
                         key={f.code}
                         type="button"
                         className={fn === f.code ? "active" : ""}
-                        disabled={!ticker}
+                        disabled={!ticker && !f.market}
                         onClick={() => choose(f.code)}
                         title={f.hint}
                     >
                         <strong>{f.code}</strong> {f.label}
                     </button>
                 ))}
-                {named && <span className="research-dim research-resolved">{ticker} — {named}</span>}
+                {named && !isMarketFunction(fn) && <span className="research-dim research-resolved">{ticker} — {named}</span>}
             </div>
 
             {!dbPath && <p className="research-empty">Choose a database first (the database chip in the top bar).</p>}
-            {dbPath && !ticker && (
+            {dbPath && !ticker && !isMarketFunction(fn) && (
                 <div className="research-empty">
-                    <p>Look a company up by ticker or name. Everything shown comes from primary data — SEC filings and the database's own prices — and says where it came from.</p>
+                    <p>Look a company up by ticker or name, or type ECO for the economy. Everything shown comes from primary data — SEC filings, official statistics and the database's own prices — and says where it came from.</p>
                     <ul>
                         {RESEARCH_FUNCTIONS.map((f) => (
                             <li key={f.code}>
@@ -615,6 +755,7 @@ export default function Research({
             {!loading && !error && result?.fn === "DES" && <DesView d={result.data} />}
             {!loading && !error && result?.fn === "FA" && <FaView f={result.data} onFrequency={setFreq} />}
             {!loading && !error && result?.fn === "ERN" && <ErnView e={result.data} />}
+            {!loading && !error && result?.fn === "ECO" && <EcoView e={result.data} />}
             {!loading && !error && result?.fn === "CN" && (
                 <div className={filing ? "cn-split" : ""}>
                     <FilingsView

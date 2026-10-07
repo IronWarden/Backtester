@@ -991,6 +991,125 @@ export namespace main {
 		}
 	}
 	
+	export class EconReading {
+	    id: string;
+	    name: string;
+	    units: string;
+	    kind: string;
+	    period: string;
+	    periodEnd: string;
+	    value: number;
+	    prior: number;
+	    priorPeriod: string;
+	    hasPrior: boolean;
+	    change: number;
+	    yearChange: number;
+	    hasYearChange: boolean;
+	    published: string;
+	    publishedExact: boolean;
+	    nextRelease: string;
+	    releaseName: string;
+	    source: string;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EconReading(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.units = source["units"];
+	        this.kind = source["kind"];
+	        this.period = source["period"];
+	        this.periodEnd = source["periodEnd"];
+	        this.value = source["value"];
+	        this.prior = source["prior"];
+	        this.priorPeriod = source["priorPeriod"];
+	        this.hasPrior = source["hasPrior"];
+	        this.change = source["change"];
+	        this.yearChange = source["yearChange"];
+	        this.hasYearChange = source["hasYearChange"];
+	        this.published = source["published"];
+	        this.publishedExact = source["publishedExact"];
+	        this.nextRelease = source["nextRelease"];
+	        this.releaseName = source["releaseName"];
+	        this.source = source["source"];
+	        this.url = source["url"];
+	    }
+	}
+	export class FOMCMeeting {
+	    dates: string;
+	    start: string;
+	    end: string;
+	    projections: boolean;
+	    note: string;
+	    upcoming: boolean;
+	    statementUrl: string;
+	    minutesUrl: string;
+	    minutesReleased: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FOMCMeeting(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dates = source["dates"];
+	        this.start = source["start"];
+	        this.end = source["end"];
+	        this.projections = source["projections"];
+	        this.note = source["note"];
+	        this.upcoming = source["upcoming"];
+	        this.statementUrl = source["statementUrl"];
+	        this.minutesUrl = source["minutesUrl"];
+	        this.minutesReleased = source["minutesReleased"];
+	    }
+	}
+	export class EconomicCalendar {
+	    asOf: string;
+	    readings: EconReading[];
+	    meetings: FOMCMeeting[];
+	    hasReleaseKey: boolean;
+	    calendarUrl: string;
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EconomicCalendar(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.asOf = source["asOf"];
+	        this.readings = this.convertValues(source["readings"], EconReading);
+	        this.meetings = this.convertValues(source["meetings"], FOMCMeeting);
+	        this.hasReleaseKey = source["hasReleaseKey"];
+	        this.calendarUrl = source["calendarUrl"];
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class FilingDocument {
 	    name: string;
 	    type: string;
