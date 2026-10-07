@@ -201,9 +201,3 @@ export function searchSince(range: SearchRange, today: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-
-// EDGAR returns a page by relevance; "newest" re-orders that page by date.
-export function orderHits<T extends { filed: string }>(hits: T[], order: "newest" | "relevance"): T[] {
-  if (order === "relevance") return hits;
-  return [...hits].sort((a, b) => (a.filed < b.filed ? 1 : a.filed > b.filed ? -1 : 0));
-}

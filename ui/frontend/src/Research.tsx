@@ -57,7 +57,6 @@ import {
     formatMove,
     formatPrice,
     holdingsToAdd,
-    orderHits,
     parseResearchCommand,
     resolveQuery,
     searchSince,
@@ -372,6 +371,21 @@ export function ErnView({ e, today = new Date() }: { e: main.CompanyEarnings; to
     );
 }
 
+// Filings carry their filing date, not EDGAR's acceptance time, which is
+// four hours off for some filers (T143).
+const cnColumns: Column<main.FilingRow>[] = [
+    {
+        key: "filed", label: "Filed", firstDir: "desc",
+        sortValue: (f) => `${f.filed} ${f.accepted}`, render: (f) => fmtDate(f.filed),
+    },
+    { key: "form", label: "Form", sortValue: (f) => f.form, render: (f) => <FormChip form={f.form} kind={f.kind} /> },
+    { key: "what", label: "What", sortValue: (f) => f.title, render: (f) => f.title },
+    {
+        key: "period", label: "Period", firstDir: "desc",
+        sortValue: (f) => f.reportDate, render: (f) => (f.reportDate ? fmtDate(f.reportDate) : ""),
+    },
+];
+
 export function FilingsView({
     c,
     filter,
@@ -408,27 +422,19 @@ export function FilingsView({
             {c.filings.length > 0 && shown.length === 0 && (
                 <p className="research-dim">None of the recent filings are of this kind.</p>
             )}
-            {shown.length > 0 && (
-                <ul className="filing-list">
-                    {shown.map((f) => (
-                        <li key={f.accession}>
-                            <button
-                                type="button"
-                                className={`filing-row${selected === f.accession ? " active" : ""}`}
-                                onClick={() => onSelect(f)}
-                            >
-                                <span className="filing-when">{f.accepted || f.filed}</span>
-                                <span className={`filing-form kind-${f.kind}`}>{f.form}</span>
-                                <span className="filing-title">{f.title}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
+            <ResearchTable
+                label={`${c.ticker} filings`}
+                rows={shown}
+                columns={cnColumns}
+                rowKey={(f) => f.accession}
+                initialSort={{ key: "filed", dir: "desc" }}
+                onRowClick={onSelect}
+                activeKey={selected}
+            />
             {c.filings.length > 0 && (
                 <p className="research-dim">
-                    Straight from SEC EDGAR: the company's own filings, newest first, timed when EDGAR
-                    accepted them (US Eastern) — the moment each became public.
+                    Straight from SEC EDGAR: the company's own filings, by filing date. Click one to
+                    read it, a column to sort.
                 </p>
             )}
             <Notes notes={c.notes} />
@@ -454,7 +460,7 @@ export function ReaderView({
             <div className="reader-head">
                 <strong>{filing.title}</strong>
                 <span className="research-dim">
-                    {filing.form} · accepted {filing.accepted || filing.filed}
+                    {filing.form} · filed {fmtDate(filing.filed)}
                 </span>
                 <button
                     type="button"
@@ -797,12 +803,39 @@ export function MyView({
     );
 }
 
+type SearchRow = main.SearchHitRow & { rank: number };
+
+function searchColumns(everyFiler: boolean): Column<SearchRow>[] {
+    const cols: Column<SearchRow>[] = [
+        { key: "rank", label: "#", numeric: true, sortValue: (h) => h.rank, render: (h) => h.rank },
+        { key: "filed", label: "Filed", firstDir: "desc", sortValue: (h) => h.filed, render: (h) => fmtDate(h.filed) },
+    ];
+    if (everyFiler) {
+        cols.push({ key: "company", label: "Company", sortValue: (h) => h.company, render: (h) => h.company });
+    }
+    cols.push(
+        { key: "form", label: "Form", sortValue: (h) => h.form, render: (h) => <FormChip form={h.form} kind={h.kind} /> },
+        {
+            key: "what", label: "What", sortValue: (h) => h.title,
+            render: (h) => (
+                <>
+                    {h.title}
+                    {h.others.length > 0 && <span className="research-dim"> · with {h.others.join(", ")}</span>}
+                </>
+            ),
+        },
+        {
+            key: "doc", label: "Matched in", sortValue: (h) => h.docType,
+            render: (h) => (h.docType && h.docType !== h.form ? h.docType : <span className="research-dim">the filing</span>),
+        },
+    );
+    return cols;
+}
+
 export function SearchView({
     s,
     range,
     onRange,
-    order,
-    onOrder,
     onForm,
     onPage,
     selected,
@@ -811,15 +844,14 @@ export function SearchView({
     s: main.FilingSearch;
     range: SearchRange;
     onRange: (r: SearchRange) => void;
-    order: "newest" | "relevance";
-    onOrder: (o: "newest" | "relevance") => void;
     // One form to narrow to, or "" for all.
     onForm: (form: string) => void;
     onPage: (from: number) => void;
     selected: string;
     onSelect: (hit: main.SearchHitRow) => void;
 }) {
-    const hits = orderHits(s.hits, order);
+    // # is EDGAR's relevance rank, so sorting by it restores EDGAR's order.
+    const rows: SearchRow[] = s.hits.map((h, i) => ({ ...h, rank: s.from + i + 1 }) as SearchRow);
     const narrowed = s.forms.length === 1 && s.hits.every((h) => h.form.replace("/A", "") === s.forms[0].form);
     return (
         <div className="research-view">
@@ -840,20 +872,6 @@ export function SearchView({
                     </button>
                 ))}
             </div>
-            {s.hits.length > 1 && (
-                <div className="research-toggle" role="group" aria-label="Order">
-                    <button type="button" className={order === "newest" ? "active" : ""} onClick={() => onOrder("newest")}>
-                        Newest first
-                    </button>
-                    <button
-                        type="button"
-                        className={order === "relevance" ? "active" : ""}
-                        onClick={() => onOrder("relevance")}
-                    >
-                        Most relevant
-                    </button>
-                </div>
-            )}
             {s.forms.length > 1 && (
                 <div className="research-toggle" role="group" aria-label="Form">
                     {s.forms.slice(0, 8).map((f) => (
@@ -878,32 +896,15 @@ export function SearchView({
                     .
                 </p>
             )}
-            {hits.length > 0 && (
-                <ul className="filing-list search-list">
-                    {hits.map((h) => (
-                        <li key={`${h.accession}:${h.fileName}`}>
-                            <button
-                                type="button"
-                                className={`filing-row${selected === `${h.accession}:${h.fileName}` ? " active" : ""}`}
-                                onClick={() => onSelect(h)}
-                            >
-                                <span className="filing-when">{h.filed}</span>
-                                <span className={`filing-form kind-${h.kind}`}>{h.form}</span>
-                                <span className="filing-title">
-                                    {!s.ticker && <strong>{h.company} · </strong>}
-                                    {h.title}
-                                    {h.docType && h.docType !== h.form && (
-                                        <span className="research-dim"> · in {h.docType}</span>
-                                    )}
-                                    {h.others.length > 0 && (
-                                        <span className="research-dim"> · with {h.others.join(", ")}</span>
-                                    )}
-                                </span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
+            <ResearchTable
+                label={`Search results for ${s.query}`}
+                rows={rows}
+                columns={searchColumns(!s.ticker)}
+                rowKey={(h) => `${h.accession}:${h.fileName}`}
+                initialSort={{ key: "filed", dir: "desc" }}
+                onRowClick={onSelect}
+                activeKey={selected}
+            />
             {(s.from > 0 || s.total > s.from + s.hits.length) && (
                 <div className="research-toggle" role="group" aria-label="Page">
                     <button type="button" disabled={s.from === 0} onClick={() => onPage(Math.max(0, s.from - 100))}>
@@ -921,7 +922,8 @@ export function SearchView({
             {s.hits.length > 0 && (
                 <p className="research-dim">
                     EDGAR's own full-text search over every filing since 2001. Each row is a document
-                    whose text matches; click it to read that document. Quotes search for an exact phrase.
+                    whose text matches; click it to read that document. Sort by # for the order EDGAR
+                    ranks by relevance. Quotes search for an exact phrase.
                 </p>
             )}
             <Notes notes={s.notes} />
@@ -972,7 +974,6 @@ export default function Research({
     // FTS: the search as typed, and how it is narrowed.
     const [searchText, setSearchText] = useState("");
     const [searchRange, setSearchRange] = useState<SearchRange>("year");
-    const [searchOrder, setSearchOrder] = useState<"newest" | "relevance">("newest");
     const [searchForm, setSearchForm] = useState("");
     const [searchFrom, setSearchFrom] = useState(0);
     // Which search hit the reader shows: accession:file.
@@ -1206,8 +1207,6 @@ export default function Research({
                             setSearchRange(r);
                             setSearchFrom(0);
                         }}
-                        order={searchOrder}
-                        onOrder={setSearchOrder}
                         onForm={(f) => {
                             setSearchForm(f);
                             setSearchFrom(0);

@@ -2617,10 +2617,10 @@ a company* does the same):
 | `AAPL` or `AAPL DES` | what the company is: name, industry (SIC), exchange, state of incorporation, former names, SEC CIK with a link to its filings on EDGAR; S&P 500 membership spans; last close and 52-week closing range; the data-quality verdict on its price series | `company_profile`, `index_membership`, `stock_data_optimized`, `data_quality` |
 | `AAPL FA` | reported financials — revenue through shares outstanding — for the last 5 fiscal years, or 8 quarters with *Quarterly*. Each figure **as first filed**: hover a cell for the filing date and form. Later restatements are not shown, so this is what the market could know at the time | `sec_financials` |
 | `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it, drawn as a bar; above the table, the next report with a countdown and the average move with how many went up and down | `earnings_calendar`, `stock_data_optimized` |
-| `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — timed to the minute EDGAR accepted it. Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
+| `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — as a sortable table by filing date (form, what, period covered). Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
 | `ECO` | the **economy**, no ticker needed: the latest official reading of CPI, core CPI, nonfarm payrolls, unemployment, real GDP growth, industrial production, M2 and the fed funds rate — each with the period it describes, its change from the previous reading and over a year, when it was published and when the next release comes out — and the FOMC's last three and next four meetings, with links to each statement and its minutes | FRED (keyless CSV; release dates need `FRED_API_KEY`), federalreserve.gov, live |
 | `MY` | **your watchlist**, no ticker needed, as three sortable tables over the last 90 days of every company on it: *Upcoming earnings* (date, time, timing, countdown), *Recent earnings* (with ERN's price move and bar) and *Filings* (filing date, form, what — events, reports and proxies as CN labels them). Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR, `earnings_calendar` |
-| `"going concern"` or `"share repurchase" AAPL` | **full-text search** of every SEC filing since 2001: words in quotes are an exact phrase, a ticker narrows to that company. Each row is a document whose text matches — an 8-K's press release says *in EX-99.1* — and opens in the reader. Past year by default (or past 30 days, or since 2001), narrowed by form, newest first or by relevance | EDGAR full-text search, live (keyless) |
+| `"going concern"` or `"share repurchase" AAPL` | **full-text search** of every SEC filing since 2001: words in quotes are an exact phrase, a ticker narrows to that company. Each row is a document whose text matches — an 8-K's press release says *in EX-99.1* — and opens in the reader. Past year by default (or past 30 days, or since 2001), narrowed by form; a sortable table, newest first, whose `#` column is EDGAR's relevance rank | EDGAR full-text search, live (keyless) |
 
 The function may come first (`FA AAPL`), case does not matter, and a name
 resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
@@ -2653,6 +2653,9 @@ skips the rewrite, the adverts and the spin.
 - **Filters.** *Events & reports* is the default and leaves out insider forms
   (3/4/5/144), which for a large company are most of what it files and bury
   the events; *Insiders* and *All* bring them back.
+- **Dates, not times, for now.** The list and the reader show each filing's
+  filing date. EDGAR's acceptance times are four hours off for some filers
+  (below, and T143); the time comes back once that is settled.
 - **The reader** fetches the document and strips it to text — no scripts,
   styles, trackers or the hidden inline-XBRL header — with *On sec.gov ↗* for
   the original. It fetches only documents under `www.sec.gov/Archives/`, so a
@@ -2733,8 +2736,9 @@ because an economic number is only knowable from the day it is published:
 efts.sec.gov, over the text of every filing since 2001:
 
 - **Relevance is EDGAR's, dates are yours.** EDGAR returns matches ranked by
-  relevance, 100 at a time. *Newest first* (the default) re-orders the page
-  shown, not all of EDGAR, which is why the default range is the past year —
+  relevance, 100 at a time; the `#` column keeps that rank. The table opens
+  newest first, which re-orders the page shown, not all of EDGAR, which is
+  why the default range is the past year —
   inside a year, the 100 most relevant are usually all of them. *Since 2001*
   and *Next 100* reach the rest; the form chips (with EDGAR's counts) narrow it.
 - **A row is a document, not a filing.** A press release matching inside an

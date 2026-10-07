@@ -92,7 +92,6 @@ import {
     formatFigure,
     formatMove,
     holdingsToAdd,
-    orderHits,
     parseResearchCommand,
     resolveQuery,
     searchSince,
@@ -2531,11 +2530,13 @@ check("CN leaves insider paperwork out by default", () => {
 
     const html = renderToString(<FilingsView c={c} filter="news" onFilter={noop}
         selected="0000320193-26-000018" onSelect={noop} />).replace(/<!-- -->/g, "");
-    for (const want of ["Apple Inc.", "AAPL CN", "Earnings results", "2026-07-30 16:30 ET",
-        "Directors or officers changed", "Annual report", "Events &amp; reports",
-        "filing-row active", "Straight from SEC EDGAR"]) {
+    for (const want of ["Apple Inc.", "AAPL CN", "Earnings results", "Jul 30, 2026",
+        "Directors or officers changed", "Annual report", "Events &amp; reports", "Period",
+        "rt-click active", 'aria-sort="descending"', "Straight from SEC EDGAR"]) {
         if (!html.includes(want)) throw new Error(`CN lacks ${want}`);
     }
+    // Filing dates only, while EDGAR's times are unreliable (T143).
+    if (html.includes("16:30") || html.includes(" ET<")) throw new Error("CN shows an EDGAR time");
     if (html.includes("Insider transaction")) throw new Error("the default list shows Form 4s");
 });
 
@@ -2550,7 +2551,7 @@ check("an earnings 8-K opens on its press release, read as clean text", () => {
     const doc = fixture<main.ReaderDoc>("research-reader");
     const html = renderToString(<ReaderView filing={filing} docs={docs} doc={doc}
         loading={false} onOpen={noop} />).replace(/<!-- -->/g, "");
-    for (const want of ["Earnings results", "accepted 2026-07-30 16:30 ET", "On sec.gov",
+    for (const want of ["Earnings results", "filed Jul 30, 2026", "On sec.gov",
         "EX-99.1", "Apple reports third quarter results", "reader-text"]) {
         if (!html.includes(want)) throw new Error(`reader lacks ${want}`);
     }
@@ -2657,29 +2658,27 @@ check("quotes make a full-text search, the rest names the company", () => {
     eq("empty quotes are not a search", parseResearchCommand('"" AAPL')?.fn, "DES");
     eq("year", searchSince("year", new Date(2026, 9, 7)), "2025-10-07");
     eq("all", searchSince("all", new Date(2026, 9, 7)), "");
-    const hits = [{ filed: "2014-01-23" }, { filed: "2018-05-01" }, { filed: "2015-01-28" }];
-    eq("newest", orderHits(hits, "newest").map((h) => h.filed), ["2018-05-01", "2015-01-28", "2014-01-23"]);
-    eq("relevance keeps EDGAR's order", orderHits(hits, "relevance"), hits);
 });
 
 check("a search lists matching documents and opens the one that matched", () => {
     const s = fixture<main.FilingSearch>("research-search");
-    const render = (order: "newest" | "relevance") =>
-        renderToString(<SearchView s={s} range="all" onRange={noop} order={order} onOrder={noop}
-            onForm={noop} onPage={noop} selected="0000320193-18-000067:a8-kexhibit991q220183312018.htm"
-            onSelect={noop} />).replace(/<!-- -->/g, "").replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
-    const html = render("newest");
+    const html = renderToString(<SearchView s={s} range="all" onRange={noop}
+        onForm={noop} onPage={noop} selected="0000320193-18-000067:a8-kexhibit991q220183312018.htm"
+        onSelect={noop} />).replace(/<!-- -->/g, "").replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
     for (const want of ['"share repurchase"', "Apple Inc.", "FTS", "82 matching documents", "1–12 shown",
-        "Earnings results", "in EX-99.1", "with ICAHN CARL C", "10-Q", "Since 2001", "Most relevant",
-        "filing-row active", "Next 100", "every filing since 2001"]) {
+        "Earnings results", "EX-99.1", "Matched in", "with ICAHN CARL C", "10-Q", "Since 2001",
+        "rt-click active", "Next 100", "every filing since 2001", "Sort by # for the order EDGAR"]) {
         if (!html.includes(want)) throw new Error(`search lacks ${want}`);
     }
-    if (html.indexOf("2024-02-02") > html.indexOf("2014-01-23")) throw new Error("newest first is not");
-    const rel = render("relevance");
-    if (rel.indexOf("2014-01-23") > rel.indexOf("2024-02-02")) throw new Error("relevance is not EDGAR's order");
+    // Newest first by default; # keeps EDGAR's relevance rank to sort back by.
+    if (html.indexOf("Feb 2, 2024") > html.indexOf("Jan 23, 2014")) throw new Error("newest first is not");
+    if (html.includes(">Company<")) throw new Error("a one-company search repeats the company in a column");
+    const every = renderToString(<SearchView s={{ ...s, ticker: "", company: "" } as main.FilingSearch}
+        range="all" onRange={noop} onForm={noop} onPage={noop} selected="" onSelect={noop} />);
+    if (!every.includes(">Company<")) throw new Error("a search of every filer must name each company");
     const none = renderToString(<SearchView s={main.FilingSearch.createFrom({ query: '"zzqx"', ticker: "",
         company: "", since: "", total: 0, atLeast: false, from: 0, hits: [], forms: [],
-        notes: ["No filing's text matches."] })} range="year" onRange={noop} order="newest" onOrder={noop}
+        notes: ["No filing's text matches."] })} range="year" onRange={noop}
         onForm={noop} onPage={noop} selected="" onSelect={noop} />).replace(/&#x27;/g, "'");
     if (!none.includes("No filing's text matches") || none.includes("Next 100")) {
         throw new Error("an empty search must say so, with nothing to page");

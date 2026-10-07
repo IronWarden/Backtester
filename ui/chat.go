@@ -1397,7 +1397,8 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   "AAPL CN": the company's own news — its SEC filings live from EDGAR, newest
   first, in plain words (8-K items: Earnings results, Directors or officers
   changed, Material agreement, Bankruptcy…; 10-K/10-Q; 13D/13G; proxies),
-  timed when EDGAR accepted them (US Eastern). Default filter "Events &
+  shown by FILING DATE (no time: EDGAR's acceptance times are unreliable for
+  some filers), in a sortable table. Default filter "Events &
   reports" hides insider Forms 3/4/5/144 ("Insiders" shows them). Clicking one
   opens a reader with the document as clean text (an earnings 8-K opens on
   its EX-99.1 press release) and a link to sec.gov. No media headlines or
@@ -1426,8 +1427,8 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   Words in QUOTES search the text of every SEC filing since 2001 (EDGAR's own
   full-text search): '"going concern"' across all filers, '"share repurchase"
   AAPL' within one company (CIK from company_profile). Past year by default,
-  or past 30 days / since 2001; narrow by form; newest first or EDGAR's
-  relevance order; 100 documents a page. Each hit is the DOCUMENT that
+  or past 30 days / since 2001; narrow by form; a sortable table, newest
+  first, its "#" column EDGAR's relevance rank; 100 documents a page. Each hit is the DOCUMENT that
   matched (a press release inside an 8-K says "in EX-99.1") and opens in the
   CN reader. Send a user there for "which companies mention X" or "has AAPL
   ever said Y in a filing". You cannot run it yourself yet.
