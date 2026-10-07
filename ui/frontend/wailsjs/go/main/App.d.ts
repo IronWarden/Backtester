@@ -75,6 +75,8 @@ export function SaveClaudeKey(arg1:string):Promise<void>;
 
 export function SaveWatchlist(arg1:Array<string>):Promise<main.Watchlist>;
 
+export function SearchFilings(arg1:string,arg2:string,arg3:string,arg4:Array<string>,arg5:string,arg6:number):Promise<main.FilingSearch>;
+
 export function TickerDateRanges(arg1:string):Promise<Record<string, Array<string>>>;
 
 export function TickerNames(arg1:string):Promise<Record<string, string>>;

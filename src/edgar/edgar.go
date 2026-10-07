@@ -35,8 +35,9 @@ import (
 
 // Hosts. Variables so tests can point the client at a recorded server.
 var (
-	DataHost = "https://data.sec.gov"
-	WWWHost  = "https://www.sec.gov"
+	DataHost   = "https://data.sec.gov"
+	WWWHost    = "https://www.sec.gov"
+	SearchHost = "https://efts.sec.gov"
 )
 
 // Client is a polite EDGAR reader. The zero value is not usable; use New.

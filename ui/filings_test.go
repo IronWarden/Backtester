@@ -25,6 +25,10 @@ func recordedSEC(t *testing.T) *edgar.Client {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.URL.Path == "/LATEST/search-index" && r.URL.Query().Get("ciks") == "0000320193":
+			w.Write(read("search-aapl-share-repurchase.json"))
+		case r.URL.Path == "/LATEST/search-index" && r.URL.Query().Get("forms") == "8-K":
+			w.Write(read("search-going-concern-8k.json"))
 		case strings.HasSuffix(r.URL.Path, "/submissions/CIK0000320193.json"):
 			w.Write(read("submissions-aapl.json"))
 		case strings.HasSuffix(r.URL.Path, "-index.htm"):
@@ -36,9 +40,9 @@ func recordedSEC(t *testing.T) *edgar.Client {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	oldData, oldWWW := edgar.DataHost, edgar.WWWHost
-	edgar.DataHost, edgar.WWWHost = srv.URL, srv.URL
-	t.Cleanup(func() { edgar.DataHost, edgar.WWWHost = oldData, oldWWW })
+	oldData, oldWWW, oldSearch := edgar.DataHost, edgar.WWWHost, edgar.SearchHost
+	edgar.DataHost, edgar.WWWHost, edgar.SearchHost = srv.URL, srv.URL, srv.URL
+	t.Cleanup(func() { edgar.DataHost, edgar.WWWHost, edgar.SearchHost = oldData, oldWWW, oldSearch })
 	return edgar.New("test@example.com")
 }
 

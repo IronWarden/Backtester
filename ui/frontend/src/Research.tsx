@@ -8,6 +8,7 @@
 //   CN   the company's own SEC filings, in a clean reader
 //   ECO  the economy's official readings and the FOMC's meetings (no ticker)
 //   MY   the watchlist: its companies' filings and earnings, newest first
+//   "…"  full-text search of every filing since 2001, optionally one company's
 //
 // Nothing here is a live quote or a headline: every number says where it came
 // from and as of when. The three views are exported and take plain data, so
@@ -26,6 +27,7 @@ import {
     LoadWatchlist,
     ReadFiling,
     SaveWatchlist,
+    SearchFilings,
     TickerNames,
     WatchlistFeed,
 } from "../wailsjs/go/main/App";
@@ -35,6 +37,7 @@ import { searchTickers } from "./tickerSearch";
 import {
     FILING_FILTERS,
     RESEARCH_FUNCTIONS,
+    SEARCH_RANGES,
     filterFilings,
     firstDocument,
     isMarketFunction,
@@ -44,10 +47,13 @@ import {
     formatMove,
     formatPrice,
     holdingsToAdd,
+    orderHits,
     parseResearchCommand,
     resolveQuery,
+    searchSince,
     type FilingFilter,
     type ResearchFn,
+    type SearchRange,
 } from "./researchCommand";
 
 function Notes({ notes }: { notes: string[] }) {
@@ -681,13 +687,146 @@ export function MyView({
     );
 }
 
+export function SearchView({
+    s,
+    range,
+    onRange,
+    order,
+    onOrder,
+    onForm,
+    onPage,
+    selected,
+    onSelect,
+}: {
+    s: main.FilingSearch;
+    range: SearchRange;
+    onRange: (r: SearchRange) => void;
+    order: "newest" | "relevance";
+    onOrder: (o: "newest" | "relevance") => void;
+    // One form to narrow to, or "" for all.
+    onForm: (form: string) => void;
+    onPage: (from: number) => void;
+    selected: string;
+    onSelect: (hit: main.SearchHitRow) => void;
+}) {
+    const hits = orderHits(s.hits, order);
+    const narrowed = s.forms.length === 1 && s.hits.every((h) => h.form.replace("/A", "") === s.forms[0].form);
+    return (
+        <div className="research-view">
+            <h2 className="research-title">
+                {s.query}{" "}
+                <span className="research-dim">in {s.company || s.ticker || "every filer's text"}</span>{" "}
+                <span className="research-ticker">FTS</span>
+            </h2>
+            <div className="research-toggle" role="group" aria-label="When">
+                {SEARCH_RANGES.map((r) => (
+                    <button
+                        key={r.id}
+                        type="button"
+                        className={range === r.id ? "active" : ""}
+                        onClick={() => onRange(r.id)}
+                    >
+                        {r.label}
+                    </button>
+                ))}
+            </div>
+            {s.hits.length > 1 && (
+                <div className="research-toggle" role="group" aria-label="Order">
+                    <button type="button" className={order === "newest" ? "active" : ""} onClick={() => onOrder("newest")}>
+                        Newest first
+                    </button>
+                    <button
+                        type="button"
+                        className={order === "relevance" ? "active" : ""}
+                        onClick={() => onOrder("relevance")}
+                    >
+                        Most relevant
+                    </button>
+                </div>
+            )}
+            {s.forms.length > 1 && (
+                <div className="research-toggle" role="group" aria-label="Form">
+                    {s.forms.slice(0, 8).map((f) => (
+                        <button key={f.form} type="button" onClick={() => onForm(f.form)} title={`Only ${f.form}`}>
+                            {f.form} <span className="research-dim">{f.count.toLocaleString("en-US")}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+            {narrowed && (
+                <button type="button" className="link-button" onClick={() => onForm("")}>
+                    All forms
+                </button>
+            )}
+            {s.total > 0 && (
+                <p className="research-dim">
+                    {s.total.toLocaleString("en-US")}
+                    {s.atLeast ? "+" : ""} matching documents
+                    {s.total > s.hits.length
+                        ? `; ${s.from + 1}–${s.from + s.hits.length} shown`
+                        : ""}
+                    .
+                </p>
+            )}
+            {hits.length > 0 && (
+                <ul className="filing-list search-list">
+                    {hits.map((h) => (
+                        <li key={`${h.accession}:${h.fileName}`}>
+                            <button
+                                type="button"
+                                className={`filing-row${selected === `${h.accession}:${h.fileName}` ? " active" : ""}`}
+                                onClick={() => onSelect(h)}
+                            >
+                                <span className="filing-when">{h.filed}</span>
+                                <span className={`filing-form kind-${h.kind}`}>{h.form}</span>
+                                <span className="filing-title">
+                                    {!s.ticker && <strong>{h.company} · </strong>}
+                                    {h.title}
+                                    {h.docType && h.docType !== h.form && (
+                                        <span className="research-dim"> · in {h.docType}</span>
+                                    )}
+                                    {h.others.length > 0 && (
+                                        <span className="research-dim"> · with {h.others.join(", ")}</span>
+                                    )}
+                                </span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {(s.from > 0 || s.total > s.from + s.hits.length) && (
+                <div className="research-toggle" role="group" aria-label="Page">
+                    <button type="button" disabled={s.from === 0} onClick={() => onPage(Math.max(0, s.from - 100))}>
+                        Previous 100
+                    </button>
+                    <button
+                        type="button"
+                        disabled={s.total <= s.from + s.hits.length}
+                        onClick={() => onPage(s.from + 100)}
+                    >
+                        Next 100
+                    </button>
+                </div>
+            )}
+            {s.hits.length > 0 && (
+                <p className="research-dim">
+                    EDGAR's own full-text search over every filing since 2001. Each row is a document
+                    whose text matches; click it to read that document. Quotes search for an exact phrase.
+                </p>
+            )}
+            <Notes notes={s.notes} />
+        </div>
+    );
+}
+
 type Result =
     | { fn: "DES"; data: main.CompanyOverview }
     | { fn: "FA"; data: main.CompanyFinancials }
     | { fn: "ERN"; data: main.CompanyEarnings }
     | { fn: "CN"; data: main.CompanyFilings }
     | { fn: "ECO"; data: main.EconomicCalendar }
-    | { fn: "MY"; data: main.WatchFeed };
+    | { fn: "MY"; data: main.WatchFeed }
+    | { fn: "FTS"; data: main.FilingSearch };
 
 export default function Research({
     dbPath,
@@ -720,6 +859,14 @@ export default function Research({
     const readSeq = useRef(0);
     // MY: bumped after the watchlist is saved, to read the feed again.
     const [watchVersion, setWatchVersion] = useState(0);
+    // FTS: the search as typed, and how it is narrowed.
+    const [searchText, setSearchText] = useState("");
+    const [searchRange, setSearchRange] = useState<SearchRange>("year");
+    const [searchOrder, setSearchOrder] = useState<"newest" | "relevance">("newest");
+    const [searchForm, setSearchForm] = useState("");
+    const [searchFrom, setSearchFrom] = useState(0);
+    // Which search hit the reader shows: accession:file.
+    const [hitKey, setHitKey] = useState("");
     // The holdings as of the first MY, for seeding; a ref so editing the form
     // does not refetch the feed.
     const holdingsRef = useRef(holdings);
@@ -755,7 +902,12 @@ export default function Research({
             }
         };
         const fail = () => !cancelled && setLoading(false);
-        if (fn === "MY") {
+        if (fn === "FTS") {
+            SearchFilings(dbPath, searchText, ticker, searchForm ? [searchForm] : [],
+                searchSince(searchRange, new Date()), searchFrom)
+                .then((data) => done({ fn: "FTS", data }))
+                .catch(fail);
+        } else if (fn === "MY") {
             // A user with no saved watchlist starts from the form's holdings.
             LoadWatchlist()
                 .then((w) =>
@@ -780,14 +932,14 @@ export default function Research({
         return () => {
             cancelled = true;
         };
-    }, [ticker, fn, freq, dbPath, watchVersion]);
+    }, [ticker, fn, freq, dbPath, watchVersion, searchText, searchRange, searchForm, searchFrom]);
 
     // A new company or view closes the reader.
     useEffect(() => {
         setFiling(null);
         setDocs([]);
         setDoc(null);
-    }, [ticker, fn]);
+    }, [ticker, fn, searchText]);
 
     function saveWatchlist(tickers: string[]) {
         SaveWatchlist(tickers)
@@ -813,7 +965,9 @@ export default function Research({
             });
     }
 
-    function selectFiling(row: main.FilingRow, cik: string) {
+    // open, when given, is the document to show instead of the filing's
+    // first: a search opens the document that matched.
+    function selectFiling(row: main.FilingRow, cik: string, open = "") {
         const seq = ++readSeq.current;
         setFiling(row);
         setDocs([]);
@@ -825,7 +979,9 @@ export default function Research({
                 const ds = list.documents ?? [];
                 setDocs(ds);
                 const first = firstDocument(ds, row.form);
-                if (first) {
+                if (open) {
+                    openDocument(open);
+                } else if (first) {
                     openDocument(first.url);
                 } else if (row.primaryUrl) {
                     openDocument(row.primaryUrl);
@@ -847,6 +1003,17 @@ export default function Research({
     function submit() {
         const cmd = parseResearchCommand(input);
         if (!cmd) return;
+        if (cmd.fn === "FTS") {
+            const sym = cmd.query ? resolveQuery(cmd.query, pool, (q) => searchTickers(pool, names, q, 1)) : "";
+            setTicker(sym);
+            setFn("FTS");
+            setSearchText(cmd.text ?? "");
+            setSearchForm("");
+            setSearchFrom(0);
+            setHitKey("");
+            setInput(sym ? `${cmd.text} ${sym}` : cmd.text ?? "");
+            return;
+        }
         if (isMarketFunction(cmd.fn)) {
             setFn(cmd.fn);
             setInput(cmd.fn);
@@ -873,7 +1040,7 @@ export default function Research({
                     ref={inputRef}
                     className="research-input"
                     data-shortcut="research"
-                    placeholder="A ticker or company name, then DES, FA, ERN or CN — e.g. AAPL CN — or ECO, or MY for your watchlist"
+                    placeholder='A ticker or name, then DES, FA, ERN or CN (e.g. AAPL CN) · ECO · MY · "a phrase" to search every filing'
                     value={input}
                     spellCheck={false}
                     onChange={(e) => setInput(e.target.value)}
@@ -904,7 +1071,7 @@ export default function Research({
             {!dbPath && <p className="research-empty">Choose a database first (the database chip in the top bar).</p>}
             {dbPath && !ticker && !isMarketFunction(fn) && (
                 <div className="research-empty">
-                    <p>Look a company up by ticker or name, type ECO for the economy, or MY for your watchlist. Everything shown comes from primary data — SEC filings, official statistics and the database's own prices — and says where it came from.</p>
+                    <p>Look a company up by ticker or name, type ECO for the economy, MY for your watchlist, or put words in quotes to search the text of every SEC filing since 2001 (add a ticker to search one company's). Everything shown comes from primary data — SEC filings, official statistics and the database's own prices — and says where it came from.</p>
                     <ul>
                         {RESEARCH_FUNCTIONS.map((f) => (
                             <li key={f.code}>
@@ -920,6 +1087,39 @@ export default function Research({
             {!loading && !error && result?.fn === "FA" && <FaView f={result.data} onFrequency={setFreq} />}
             {!loading && !error && result?.fn === "ERN" && <ErnView e={result.data} />}
             {!loading && !error && result?.fn === "ECO" && <EcoView e={result.data} />}
+            {!loading && !error && result?.fn === "FTS" && (
+                <div className={filing ? "cn-split" : ""}>
+                    <SearchView
+                        s={result.data}
+                        range={searchRange}
+                        onRange={(r) => {
+                            setSearchRange(r);
+                            setSearchFrom(0);
+                        }}
+                        order={searchOrder}
+                        onOrder={setSearchOrder}
+                        onForm={(f) => {
+                            setSearchForm(f);
+                            setSearchFrom(0);
+                        }}
+                        onPage={setSearchFrom}
+                        selected={filing ? hitKey : ""}
+                        onSelect={(h) => {
+                            setHitKey(`${h.accession}:${h.fileName}`);
+                            selectFiling(h.filing, h.cik, h.url);
+                        }}
+                    />
+                    {filing && (
+                        <ReaderView
+                            filing={filing}
+                            docs={docs}
+                            doc={doc}
+                            loading={reading}
+                            onOpen={openDocument}
+                        />
+                    )}
+                </div>
+            )}
             {!loading && !error && result?.fn === "MY" && (
                 <div className={filing ? "cn-split" : ""}>
                     <MyView

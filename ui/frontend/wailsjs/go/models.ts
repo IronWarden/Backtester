@@ -1161,6 +1161,122 @@ export namespace main {
 		}
 	}
 	
+	export class SearchFormCount {
+	    form: string;
+	    count: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchFormCount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.form = source["form"];
+	        this.count = source["count"];
+	    }
+	}
+	export class SearchHitRow {
+	    accession: string;
+	    form: string;
+	    kind: string;
+	    title: string;
+	    docType: string;
+	    fileName: string;
+	    filed: string;
+	    company: string;
+	    others: string[];
+	    cik: string;
+	    url: string;
+	    filing: FilingRow;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchHitRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accession = source["accession"];
+	        this.form = source["form"];
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.docType = source["docType"];
+	        this.fileName = source["fileName"];
+	        this.filed = source["filed"];
+	        this.company = source["company"];
+	        this.others = source["others"];
+	        this.cik = source["cik"];
+	        this.url = source["url"];
+	        this.filing = this.convertValues(source["filing"], FilingRow);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class FilingSearch {
+	    query: string;
+	    ticker: string;
+	    company: string;
+	    since: string;
+	    total: number;
+	    atLeast: boolean;
+	    from: number;
+	    hits: SearchHitRow[];
+	    forms: SearchFormCount[];
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilingSearch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.query = source["query"];
+	        this.ticker = source["ticker"];
+	        this.company = source["company"];
+	        this.since = source["since"];
+	        this.total = source["total"];
+	        this.atLeast = source["atLeast"];
+	        this.from = source["from"];
+	        this.hits = this.convertValues(source["hits"], SearchHitRow);
+	        this.forms = this.convertValues(source["forms"], SearchFormCount);
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	
 	export class HoldingMapping {
@@ -1491,6 +1607,8 @@ export namespace main {
 		    return a;
 		}
 	}
+	
+	
 	
 	
 	export class WatchItem {

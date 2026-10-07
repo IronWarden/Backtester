@@ -1421,6 +1421,14 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   earnings reports with ERN's price move, newest first, plus upcoming earnings
   dates; a filing opens in the same reader. Send a user there for "what has
   happened with the stocks I follow". Up to 50 tickers.
+  Words in QUOTES search the text of every SEC filing since 2001 (EDGAR's own
+  full-text search): '"going concern"' across all filers, '"share repurchase"
+  AAPL' within one company (CIK from company_profile). Past year by default,
+  or past 30 days / since 2001; narrow by form; newest first or EDGAR's
+  relevance order; 100 documents a page. Each hit is the DOCUMENT that
+  matched (a press release inside an 8-K says "in EX-99.1") and opens in the
+  CN reader. Send a user there for "which companies mention X" or "has AAPL
+  ever said Y in a filing". You cannot run it yourself yet.
 
 - MONTHLY RETURNS IN THE APP. A "Monthly returns" panel renders a year-by-month
   matrix per portfolio, with a Year column at the right. The calendar-year table
@@ -2296,7 +2304,7 @@ total US market.
   leaving an "in its own window" stub. The bar above minimises (▁) or
   maximises (□) the results; a vanished form means they are maximised.
 - Tabs: Backtest (form), Config (TOML+Lua), Data (SQL), Research (Ctrl+4:
-  "AAPL DES|FA|ERN|CN", ECO economy, MY watchlist; dated data); "simple mode" = Backtest.
+  "AAPL DES|FA|ERN|CN", ECO, MY watchlist, "words" = search); "simple mode" = Backtest.
 - The Backtest tab can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

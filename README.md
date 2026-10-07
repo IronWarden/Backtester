@@ -2620,12 +2620,14 @@ a company* does the same):
 | `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — timed to the minute EDGAR accepted it. Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
 | `ECO` | the **economy**, no ticker needed: the latest official reading of CPI, core CPI, nonfarm payrolls, unemployment, real GDP growth, industrial production, M2 and the fed funds rate — each with the period it describes, its change from the previous reading and over a year, when it was published and when the next release comes out — and the FOMC's last three and next four meetings, with links to each statement and its minutes | FRED (keyless CSV; release dates need `FRED_API_KEY`), federalreserve.gov, live |
 | `MY` | **your watchlist**, no ticker needed: the last 90 days of every company on it, merged and newest first — its SEC filings as CN labels them (events, reports and proxies) and its earnings reports with ERN's price move — plus the earnings dates still to come. Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR, `earnings_calendar` |
+| `"going concern"` or `"share repurchase" AAPL` | **full-text search** of every SEC filing since 2001: words in quotes are an exact phrase, a ticker narrows to that company. Each row is a document whose text matches — an 8-K's press release says *in EX-99.1* — and opens in the reader. Past year by default (or past 30 days, or since 2001), narrowed by form, newest first or by relevance | EDGAR full-text search, live (keyless) |
 
 The function may come first (`FA AAPL`), case does not matter, and a name
 resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
 Backtest tab's ticker search does. The function buttons under the box switch
 view without retyping the ticker. A lone `ECO` or `MY` is that view; the
-tickers ECO and MY themselves are still `ECO DES` and `MY DES`.
+tickers ECO and MY themselves are still `ECO DES` and `MY DES`. Anything in
+quotes is a search, wherever the ticker goes (`AAPL "buyback"` works too).
 
 Honest edges, each said in the view rather than discovered:
 
@@ -2722,6 +2724,23 @@ because an economic number is only knowable from the day it is published:
   not answer for is named in a note; the rest of the feed still shows. Each
   company is one EDGAR request, paced like CN's.
 
+**Search is EDGAR's own full-text search**, the service behind
+efts.sec.gov, over the text of every filing since 2001:
+
+- **Relevance is EDGAR's, dates are yours.** EDGAR returns matches ranked by
+  relevance, 100 at a time. *Newest first* (the default) re-orders the page
+  shown, not all of EDGAR, which is why the default range is the past year —
+  inside a year, the 100 most relevant are usually all of them. *Since 2001*
+  and *Next 100* reach the rest; the form chips (with EDGAR's counts) narrow it.
+- **A row is a document, not a filing.** A press release matching inside an
+  8-K is listed as the 8-K, labelled as CN labels it, *in EX-99.1*; clicking
+  opens that document, not the cover page. A holder's filing about a company
+  names both (*with ICAHN CARL C*).
+- A ticker needs `company_profile` for the CIK, which EDGAR's index matches
+  only as ten digits. Without a ticker no database is needed at all.
+- No snippets: EDGAR's search returns which documents match, never the
+  sentence, so the reader is where you see it.
+
 Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
 `EarningsReactions`, `SummarizePrices` — plus thin readers), `ui/research.go`
 (the `CompanyOverview` / `CompanyFinancials` / `CompanyEarnings` bindings), and
@@ -2729,7 +2748,8 @@ Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
 text reader, tested against SEC responses recorded in `src/edgar/testdata`) and
 `ui/filings.go`; ECO is `src/econ` (FRED CSV, release calendar and the Fed's
 meeting page, tested against responses recorded in `src/econ/testdata`) and
-`ui/eco.go`; MY is `ui/watchlist.go`. Full-text search is T142e.
+`ui/eco.go`; MY is `ui/watchlist.go`; search is `src/edgar/search.go` and
+`ui/search.go`.
 
 ## The Backtest tab (UI)
 

@@ -81,7 +81,7 @@ import {
 } from "./luaApi";
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
-import Research, { DesView, EcoView, ErnView, FaView, FilingsView, MyView, ReaderView, edgarURL } from "./Research";
+import Research, { DesView, EcoView, ErnView, FaView, FilingsView, MyView, ReaderView, SearchView, edgarURL } from "./Research";
 import {
     filterFilings,
     firstDocument,
@@ -90,8 +90,10 @@ import {
     formatFigure,
     formatMove,
     holdingsToAdd,
+    orderHits,
     parseResearchCommand,
     resolveQuery,
+    searchSince,
 } from "./researchCommand";
 import {
     DEFAULT_RULES,
@@ -2571,6 +2573,48 @@ check("MY merges a watchlist's filings and earnings, newest first", () => {
         onSelect={noop} />);
     if (!empty.includes("The watchlist is empty") || empty.includes("Add the form")) {
         throw new Error("an empty watchlist must explain itself, with nothing to offer");
+    }
+});
+
+// Full-text search (T142e): EDGAR's search for "share repurchase" in Apple's
+// filings, recorded 2026-10-07 and passed through the binding by
+// ui/search_test.go (first twelve hits).
+
+check("quotes make a full-text search, the rest names the company", () => {
+    eq("phrase", parseResearchCommand('"going concern"'), { query: "", fn: "FTS", text: '"going concern"' });
+    eq("in a company", parseResearchCommand('"buyback" aapl'), { query: "aapl", fn: "FTS", text: '"buyback"' });
+    eq("company first", parseResearchCommand('AAPL "share repurchase" "tender offer"'),
+        { query: "AAPL", fn: "FTS", text: '"share repurchase" "tender offer"' });
+    eq("unclosed", parseResearchCommand('"going concern'), { query: "", fn: "FTS", text: '"going concern"' });
+    eq("empty quotes are not a search", parseResearchCommand('"" AAPL')?.fn, "DES");
+    eq("year", searchSince("year", new Date(2026, 9, 7)), "2025-10-07");
+    eq("all", searchSince("all", new Date(2026, 9, 7)), "");
+    const hits = [{ filed: "2014-01-23" }, { filed: "2018-05-01" }, { filed: "2015-01-28" }];
+    eq("newest", orderHits(hits, "newest").map((h) => h.filed), ["2018-05-01", "2015-01-28", "2014-01-23"]);
+    eq("relevance keeps EDGAR's order", orderHits(hits, "relevance"), hits);
+});
+
+check("a search lists matching documents and opens the one that matched", () => {
+    const s = fixture<main.FilingSearch>("research-search");
+    const render = (order: "newest" | "relevance") =>
+        renderToString(<SearchView s={s} range="all" onRange={noop} order={order} onOrder={noop}
+            onForm={noop} onPage={noop} selected="0000320193-18-000067:a8-kexhibit991q220183312018.htm"
+            onSelect={noop} />).replace(/<!-- -->/g, "").replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
+    const html = render("newest");
+    for (const want of ['"share repurchase"', "Apple Inc.", "FTS", "82 matching documents", "1–12 shown",
+        "Earnings results", "in EX-99.1", "with ICAHN CARL C", "10-Q", "Since 2001", "Most relevant",
+        "filing-row active", "Next 100", "every filing since 2001"]) {
+        if (!html.includes(want)) throw new Error(`search lacks ${want}`);
+    }
+    if (html.indexOf("2024-02-02") > html.indexOf("2014-01-23")) throw new Error("newest first is not");
+    const rel = render("relevance");
+    if (rel.indexOf("2014-01-23") > rel.indexOf("2024-02-02")) throw new Error("relevance is not EDGAR's order");
+    const none = renderToString(<SearchView s={main.FilingSearch.createFrom({ query: '"zzqx"', ticker: "",
+        company: "", since: "", total: 0, atLeast: false, from: 0, hits: [], forms: [],
+        notes: ["No filing's text matches."] })} range="year" onRange={noop} order="newest" onOrder={noop}
+        onForm={noop} onPage={noop} selected="" onSelect={noop} />).replace(/&#x27;/g, "'");
+    if (!none.includes("No filing's text matches") || none.includes("Next 100")) {
+        throw new Error("an empty search must say so, with nothing to page");
     }
 });
 

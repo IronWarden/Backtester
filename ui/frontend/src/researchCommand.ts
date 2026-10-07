@@ -8,6 +8,8 @@
 //   apple fa     -> a name: resolved to the best-matching symbol
 //   ECO          -> the economy: needs no company (T142c)
 //   MY           -> the watchlist's filings and earnings (T142d)
+//   "going concern"        -> full-text search of every filing (T142e)
+//   "buyback" AAPL         -> the same, within one company
 // The function may come first ("FA AAPL"); case never matters.
 
 // market: the function is not about one company -- the economy, or the
@@ -21,22 +23,36 @@ export const RESEARCH_FUNCTIONS = [
   { code: "MY", label: "Watchlist", hint: "Filings and earnings across the companies you follow", market: true },
 ] as const;
 
-export type ResearchFn = (typeof RESEARCH_FUNCTIONS)[number]["code"];
+// FTS is the full-text search: started by quotes, never by a button, so it
+// is not in the list above.
+export type ResearchFn = (typeof RESEARCH_FUNCTIONS)[number]["code"] | "FTS";
 
 export type ResearchCommand = {
   // What to look up: a symbol, or words to resolve to one by name.
   query: string;
   fn: ResearchFn;
+  // FTS only: the search as EDGAR takes it, quotes kept.
+  text?: string;
 };
 
 const CODES = new Set<string>(RESEARCH_FUNCTIONS.map((f) => f.code));
 const MARKET_CODES = new Set<string>(RESEARCH_FUNCTIONS.filter((f) => f.market).map((f) => f.code));
 
+// Whether a function runs without a ticker: ECO, MY, and a search, which
+// may or may not name one.
 export function isMarketFunction(fn: ResearchFn): boolean {
-  return MARKET_CODES.has(fn);
+  return MARKET_CODES.has(fn) || fn === "FTS";
 }
 
 export function parseResearchCommand(input: string): ResearchCommand | null {
+  // Quotes make it a full-text search; what is left over, if anything, is
+  // the company to search within. An unclosed quote is closed.
+  const phrases = (input.match(/"[^"]*"?/g) ?? []).filter((q) => q.replace(/"/g, "").trim());
+  if (phrases.length > 0) {
+    const text = phrases.map((q) => (q.length > 1 && q.endsWith('"') ? q : `${q}"`)).join(" ");
+    const rest = input.replace(/"[^"]*"?/g, " ").trim().split(/\s+/).filter(Boolean);
+    return { query: rest.join(" "), fn: "FTS", text };
+  }
   const words = input.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return null;
   const isCode = (w: string | undefined) => !!w && CODES.has(w.toUpperCase());
@@ -167,4 +183,27 @@ export function holdingsToAdd(holdings: string[], watchlist: string[]): string[]
     }
   }
   return out;
+}
+
+// The search's date ranges, as the first day they cover ("" = since 2001).
+export const SEARCH_RANGES = [
+  { id: "month", label: "Past 30 days", days: 30 },
+  { id: "year", label: "Past year", days: 365 },
+  { id: "all", label: "Since 2001", days: 0 },
+] as const;
+
+export type SearchRange = (typeof SEARCH_RANGES)[number]["id"];
+
+export function searchSince(range: SearchRange, today: Date): string {
+  const r = SEARCH_RANGES.find((x) => x.id === range);
+  if (!r || r.days === 0) return "";
+  const d = new Date(today.getTime() - r.days * 86400000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// EDGAR returns a page by relevance; "newest" re-orders that page by date.
+export function orderHits<T extends { filed: string }>(hits: T[], order: "newest" | "relevance"): T[] {
+  if (order === "relevance") return hits;
+  return [...hits].sort((a, b) => (a.filed < b.filed ? 1 : a.filed > b.filed ? -1 : 0));
 }

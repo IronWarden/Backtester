@@ -146,6 +146,10 @@ export function SaveWatchlist(arg1) {
   return window['go']['main']['App']['SaveWatchlist'](arg1);
 }
 
+export function SearchFilings(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['SearchFilings'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function TickerDateRanges(arg1) {
   return window['go']['main']['App']['TickerDateRanges'](arg1);
 }
