@@ -45,8 +45,8 @@ func TestWatchlistIsKeptInTheConfigDirectory(t *testing.T) {
 }
 
 // MY over the recorded Apple filings, a scratch database with Apple's
-// earnings, ACME (a CIK EDGAR has no record for) and ZZZZ (no filer).
-func TestWatchFeedMergesFilingsAndEarnings(t *testing.T) {
+// profile, ACME (a CIK EDGAR has no record for) and ZZZZ (no filer).
+func TestWatchFeedListsTheFilings(t *testing.T) {
 	c := recordedSEC(t)
 	path := researchDB(t)
 	db, err := data.InitDB(path)
@@ -56,13 +56,6 @@ func TestWatchFeedMergesFilingsAndEarnings(t *testing.T) {
 	for _, q := range []string{
 		`INSERT INTO company_profile VALUES ('AAPL', '0000320193', 'Apple Inc.', '3571',
 			'Electronic Computers', 'Manufacturing', 'Nasdaq', '', 'CA', '2026-01-01')`,
-		`INSERT INTO stock_data_optimized VALUES
-			('2026-07-30', 'AAPL', 0, 0, 0, 200, 1),
-			('2026-07-31', 'AAPL', 0, 0, 0, 210, 1)`,
-		`INSERT INTO earnings_calendar VALUES
-			('AAPL', '2026-07-30 16:30:00', 'Earnings'),
-			('AAPL', '2026-10-29 16:30:00', 'Earnings'),
-			('AAPL', '2025-10-30 16:30:00', 'Earnings')`,
 	} {
 		if _, err := db.Exec(q); err != nil {
 			t.Fatalf("%v\n%s", err, q)
@@ -80,22 +73,15 @@ func TestWatchFeedMergesFilingsAndEarnings(t *testing.T) {
 	}
 	want := []string{
 		"2026-07-31 06:01 AAPL Quarterly report",
-		"2026-07-30 16:30 AAPL Earnings report",
 		"2026-07-30 16:30 AAPL Earnings results",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("newest first, insider forms and anything before the window left out:\n got %s\nwant %s",
 			strings.Join(got, "\n     "), strings.Join(want, "\n     "))
 	}
-	if e := v.Recent[1]; e.Kind != "earnings" || !e.HasMove || e.Move < 0.0499 || e.Move > 0.0501 {
-		t.Errorf("the earnings item carries ERN's move: %+v", e)
-	}
-	if f := v.Recent[2]; f.Kind != "filing" || f.Filing == nil || f.CIK != "0000320193" ||
+	if f := v.Recent[1]; f.Filing == nil || f.CIK != "0000320193" ||
 		f.Filing.Accession != "0000320193-26-000018" {
 		t.Errorf("the filing item carries what the reader needs: %+v", f)
-	}
-	if len(v.Upcoming) != 1 || v.Upcoming[0].When != "2026-10-29 16:30" {
-		t.Errorf("upcoming: %+v", v.Upcoming)
 	}
 	notes := strings.Join(v.Notes, "\n")
 	for _, want := range []string{"ACME: Could not read filings", "No SEC filer under ZZZZ"} {
@@ -134,7 +120,36 @@ func TestWatchFeedMergesFilingsAndEarnings(t *testing.T) {
 
 func TestWatchFeedOfNothingAsksForNothing(t *testing.T) {
 	v := watchFeed("", nil, nil, time.Now())
-	if v.Error != "" || len(v.Recent) != 0 || len(v.Upcoming) != 0 {
+	if v.Error != "" || len(v.Recent) != 0 {
 		t.Errorf("an empty watchlist is an empty feed, not an error: %+v", v)
 	}
+}
+
+// researchDB builds a scratch database with a price series and a company
+// profile for ACME.
+func researchDB(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "research.db")
+	db, err := data.InitDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE stock_data_optimized (Date TIMESTAMP, Ticker VARCHAR, Open DOUBLE,
+			High DOUBLE, Low DOUBLE, Close DOUBLE, Volume BIGINT)`,
+		`INSERT INTO stock_data_optimized VALUES
+			('2025-01-27', 'ACME', 0, 0, 0, 100, 1),
+			('2025-01-28', 'ACME', 0, 0, 0, 110, 1),
+			('2025-01-29', 'ACME', 0, 0, 0, 121, 1)`,
+		`CREATE TABLE company_profile (ticker VARCHAR, cik VARCHAR, name VARCHAR, sic VARCHAR,
+			sic_description VARCHAR, sector VARCHAR, exchange VARCHAR, former_names VARCHAR,
+			state_of_incorporation VARCHAR, fetched_at TIMESTAMP)`,
+		`INSERT INTO company_profile VALUES ('ACME', '0000123', 'Acme Corp', '3571',
+			'Electronic Computers', 'Manufacturing', 'Nasdaq', '', 'DE', '2026-01-01')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%v\n%s", err, q)
+		}
+	}
+	return path
 }

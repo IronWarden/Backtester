@@ -1,27 +1,17 @@
-// The Research tab (T142a): look a company up the way a terminal does --
-// a ticker, then a function -- and read facts from primary data only.
+// The Research tab: a company's SEC filings, read the way sec.gov shows them.
 //
-//   DES  what the company is (SEC EDGAR profile, index membership, the
-//        database's own price history and its quality audit)
-//   FA   reported financials, each figure as first FILED, with the date
-//   ERN  report dates and how the price met each one
-//   CN   the company's own SEC filings, in a clean reader
-//   ECO  the economy's official readings and the FOMC's meetings (no ticker)
-//   MY   the watchlist: its companies' filings and earnings, newest first
+//   CN   the company's own SEC filings, in a reader (the default for a ticker)
+//   MY   the watchlist: its companies' filings, newest first
 //   "…"  full-text search of every filing since 2001, optionally one company's
 //
-// Nothing here is a live quote or a headline: every number says where it came
-// from and as of when. The three views are exported and take plain data, so
-// the smoke render exercises them without a backend; the default export owns
-// the command line and the fetching.
+// Nothing here is a live quote or a headline: everything is a primary source
+// with its filing date. The views are exported and take plain data, so the
+// smoke render exercises them without a backend; the default export owns the
+// command line and the fetching.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import {
-    CompanyEarnings,
     CompanyFilings,
-    CompanyFinancials,
-    CompanyOverview,
-    EconomicReleases,
     FilingDocuments,
     ListTickers,
     LoadWatchlist,
@@ -34,16 +24,10 @@ import {
 import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 import type { main } from "../wailsjs/go/models";
 import { searchTickers } from "./tickerSearch";
+import { readStoredNumber, writeStored } from "./storage";
+import { trackDrag } from "./frame";
 import { ResearchTable, type Column } from "./ResearchTable";
-import {
-    barWidth,
-    countdown,
-    fmtDate,
-    fmtShortDate,
-    fmtTime,
-    moveSummary,
-    timingTag,
-} from "./researchFormat";
+import { fmtDate } from "./researchFormat";
 import {
     FILING_FILTERS,
     RESEARCH_FUNCTIONS,
@@ -51,11 +35,6 @@ import {
     filterFilings,
     firstDocument,
     isMarketFunction,
-    formatEcoChange,
-    formatEcoValue,
-    formatFigure,
-    formatMove,
-    formatPrice,
     holdingsToAdd,
     parseResearchCommand,
     resolveQuery,
@@ -76,11 +55,6 @@ function Notes({ notes }: { notes: string[] }) {
     );
 }
 
-// EDGAR's own page for a filer: the primary source behind DES and FA.
-export function edgarURL(cik: string): string {
-    return `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(cik)}`;
-}
-
 function openExternal(url: string) {
     try {
         BrowserOpenURL(url);
@@ -89,292 +63,8 @@ function openExternal(url: string) {
     }
 }
 
-export function DesView({ d }: { d: main.CompanyOverview }) {
-    const current = d.index.find((s) => !s.end);
-    return (
-        <div className="research-view">
-            <h2 className="research-title">
-                {d.name || d.ticker} <span className="research-ticker">{d.ticker}</span>
-            </h2>
-            {(d.sector || d.exchange) && (
-                <dl className="research-facts">
-                    {d.sicDescription && (
-                        <>
-                            <dt>Industry</dt>
-                            <dd>
-                                {d.sicDescription}
-                                {d.sector && <span className="research-dim"> · {d.sector} (SIC division)</span>}
-                            </dd>
-                        </>
-                    )}
-                    {d.exchange && (
-                        <>
-                            <dt>Exchange</dt>
-                            <dd>{d.exchange}</dd>
-                        </>
-                    )}
-                    {d.incorporated && (
-                        <>
-                            <dt>Incorporated</dt>
-                            <dd>{d.incorporated}</dd>
-                        </>
-                    )}
-                    {d.cik && (
-                        <>
-                            <dt>SEC CIK</dt>
-                            <dd>
-                                {d.cik}{" "}
-                                <button
-                                    type="button"
-                                    className="link-button"
-                                    onClick={() => openExternal(edgarURL(d.cik))}
-                                    title="Open the company's filings on sec.gov in your browser"
-                                >
-                                    Filings on EDGAR ↗
-                                </button>
-                            </dd>
-                        </>
-                    )}
-                    {d.formerNames.length > 0 && (
-                        <>
-                            <dt>Formerly</dt>
-                            <dd>{d.formerNames.join(" · ")}</dd>
-                        </>
-                    )}
-                </dl>
-            )}
-
-            {d.price && (
-                <section className="research-section">
-                    <h3>Price history in this database</h3>
-                    <div className="rt-stats">
-                        <div>
-                            <span className="research-dim">Last close · {fmtDate(d.price.lastDate)}</span>
-                            <strong>{formatPrice(d.price.lastClose)}</strong>
-                        </div>
-                        <div>
-                            <span className="research-dim">52-week low (close)</span>
-                            <strong>{formatPrice(d.price.low52)}</strong>
-                        </div>
-                        <div>
-                            <span className="research-dim">52-week high (close)</span>
-                            <strong>{formatPrice(d.price.high52)}</strong>
-                        </div>
-                        <div>
-                            <span className="research-dim">Sessions since {fmtDate(d.price.firstDate)}</span>
-                            <strong>{d.price.bars.toLocaleString("en-US")}</strong>
-                        </div>
-                    </div>
-                    <p className="research-dim">
-                        From the database&rsquo;s own bars, not a live quote.
-                    </p>
-                </section>
-            )}
-
-            {d.index.length > 0 && (
-                <section className="research-section">
-                    <h3>S&amp;P 500</h3>
-                    <p>
-                        {current
-                            ? `A member ${current.atLeastSince ? "at least since" : "since"} ${current.start}.`
-                            : "Not a member today."}
-                    </p>
-                    {d.index.length > (current ? 1 : 0) && (
-                        <ul className="research-list">
-                            {d.index
-                                .filter((s) => s !== current)
-                                .map((s) => (
-                                    <li key={s.start}>
-                                        {s.atLeastSince ? "At least " : ""}
-                                        {s.start} to {s.end}
-                                    </li>
-                                ))}
-                        </ul>
-                    )}
-                    <p className="research-dim">
-                        Reconstructed from the index&rsquo;s published changes
-                        {current?.confidence ? `; ${current.confidence} confidence for that year` : ""}.
-                    </p>
-                </section>
-            )}
-
-            {d.quality && (
-                <section className="research-section">
-                    <h3>Data quality</h3>
-                    <p>
-                        The price series audits as <strong>{d.quality}</strong>
-                        {d.qualityReason ? ` — ${d.qualityReason}` : "."}
-                    </p>
-                </section>
-            )}
-            <Notes notes={d.notes} />
-        </div>
-    );
-}
-
-// FA is a pivot: one row per figure, one column per period. Sorting by a
-// period ranks the figures by their value then.
-function faColumns(periods: string[]): Column<main.FinancialsRow>[] {
-    return [
-        { key: "metric", label: "Period ending", sortValue: (r) => r.metric, render: (r) => r.metric },
-        ...periods.map((p, i): Column<main.FinancialsRow> => ({
-            key: `p${i}`, label: fmtDate(p), numeric: true, firstDir: "desc",
-            sortValue: (r) => r.cells[i]?.value ?? null,
-            title: (r) => {
-                const c = r.cells[i];
-                return c ? `Filed ${fmtDate(c.filed)}${c.form ? ` in a ${c.form}` : ""}` : "";
-            },
-            render: (r) => {
-                const c = r.cells[i];
-                return c ? formatFigure(r.metric, c.value) : <span className="research-dim">—</span>;
-            },
-        })),
-    ];
-}
-
-export function FaView({
-    f,
-    onFrequency,
-}: {
-    f: main.CompanyFinancials;
-    onFrequency: (freq: "annual" | "quarterly") => void;
-}) {
-    return (
-        <div className="research-view">
-            <h2 className="research-title">
-                {f.company || f.ticker} <span className="research-ticker">{f.ticker} FA</span>
-            </h2>
-            <div className="research-toggle" role="group" aria-label="Period">
-                {(["annual", "quarterly"] as const).map((freq) => (
-                    <button
-                        key={freq}
-                        type="button"
-                        className={f.frequency === freq ? "active" : ""}
-                        onClick={() => onFrequency(freq)}
-                    >
-                        {freq === "annual" ? "Annual" : "Quarterly"}
-                    </button>
-                ))}
-            </div>
-            <ResearchTable
-                label={`${f.ticker} reported financials`}
-                rows={f.rows}
-                columns={faColumns(f.periods)}
-                rowKey={(r) => r.metric}
-            />
-            {f.periods.length > 0 && (
-                <p className="research-dim">
-                    Each figure as first filed with the SEC (hover for the filing date and form);
-                    later restatements are not shown. Click a period to rank the figures. CIK {f.cik}.
-                </p>
-            )}
-            <Notes notes={f.notes} />
-        </div>
-    );
-}
-
-export function TimingTag({ timing }: { timing: string }) {
-    if (!timing) return null;
-    const tag = timingTag(timing);
-    return <span className={`rt-tag ${tag.cls}`}>{tag.label}</span>;
-}
-
-// A price move: signed and coloured, with a bar scaled to the largest move
-// in the same table.
-export function MoveCell({ move, has, largest }: { move: number; has: boolean; largest: number }) {
-    if (!has) return <span className="research-dim">—</span>;
-    return (
-        <span className={`rt-move ${move >= 0 ? "pos" : "neg"}`}>
-            <span className="rt-bar" aria-hidden="true">
-                <span style={{ width: `${barWidth(move, largest)}%` }} />
-            </span>
-            {formatMove(move)}
-        </span>
-    );
-}
-
 export function FormChip({ form, kind }: { form: string; kind: string }) {
     return <span className={`filing-form kind-${kind}`}>{form}</span>;
-}
-
-const ernColumns: Column<main.EarningsRow>[] = [
-    {
-        key: "date", label: "Reported", sortValue: (r) => r.reported, firstDir: "desc",
-        render: (r) => fmtDate(r.reported),
-    },
-    { key: "time", label: "Time (ET)", render: (r) => fmtTime(r.reported) },
-    { key: "timing", label: "Timing", sortValue: (r) => r.timing, render: (r) => <TimingTag timing={r.timing} /> },
-    {
-        key: "move", label: "Price move", numeric: true, firstDir: "desc",
-        sortValue: (r) => (r.hasMove ? r.move : null),
-        render: () => null, // replaced per table, to know the largest move
-    },
-    {
-        key: "measured", label: "Measured",
-        render: (r) => (r.hasMove ? `${fmtShortDate(r.from)} close → ${fmtShortDate(r.to)} close` : ""),
-    },
-];
-
-export function ErnView({ e, today = new Date() }: { e: main.CompanyEarnings; today?: Date }) {
-    const past = e.reports.filter((r) => !r.upcoming);
-    const next = e.reports.filter((r) => r.upcoming).sort((a, b) => (a.reported < b.reported ? -1 : 1));
-    const moves = past.filter((r) => r.hasMove).map((r) => r.move);
-    const largest = Math.max(0, ...moves.map(Math.abs));
-    const summary = moveSummary(moves);
-    const columns = ernColumns.map((c) =>
-        c.key === "move"
-            ? { ...c, render: (r: main.EarningsRow) => <MoveCell move={r.move} has={r.hasMove} largest={largest} /> }
-            : c,
-    );
-    return (
-        <div className="research-view">
-            <h2 className="research-title">
-                <span className="research-ticker">{e.ticker} ERN</span>
-            </h2>
-            {next.length > 0 && (
-                <div className="rt-next">
-                    <span className="research-dim">Next report</span>
-                    <strong>{fmtDate(next[0].reported)}</strong>
-                    {fmtTime(next[0].reported) && <span>{fmtTime(next[0].reported)} ET</span>}
-                    <TimingTag timing={next[0].timing} />
-                    <span className="research-dim">{countdown(next[0].reported, today)}</span>
-                </div>
-            )}
-            {summary && (
-                <div className="rt-stats">
-                    <div>
-                        <span className="research-dim">Reports measured</span>
-                        <strong>{moves.length}</strong>
-                    </div>
-                    <div>
-                        <span className="research-dim">Average move (either way)</span>
-                        <strong>{(summary.avgAbs * 100).toFixed(2)}%</strong>
-                    </div>
-                    <div>
-                        <span className="research-dim">Up / down</span>
-                        <strong>
-                            <span className="pos">{summary.up}</span> / <span className="neg">{summary.down}</span>
-                        </strong>
-                    </div>
-                </div>
-            )}
-            <ResearchTable
-                label={`${e.ticker} earnings reports`}
-                rows={past}
-                columns={columns}
-                rowKey={(r) => r.reported}
-                initialSort={{ key: "date", dir: "desc" }}
-            />
-            {past.length > 0 && (
-                <p className="research-dim">
-                    The move runs from the last close before the report to the first close after
-                    it, from this database&rsquo;s bars. A report during the session mixes in that
-                    morning&rsquo;s trading. Click a column to sort.
-                </p>
-            )}
-            <Notes notes={e.notes} />
-        </div>
-    );
 }
 
 // Filings carry their filing date, not EDGAR's acceptance time, which is
@@ -448,6 +138,85 @@ export function FilingsView({
     );
 }
 
+// A pane width the user drags, in em so it follows the app's text size,
+// remembered across launches. Double-clicking the handle restores the default.
+function usePaneWidth(key: string, initial: number, min: number, max: number) {
+    const [width, setWidth] = useState(() =>
+        readStoredNumber(key, initial, (n) => n >= min && n <= max),
+    );
+    useEffect(() => {
+        writeStored(key, String(Math.round(width * 10) / 10));
+    }, [key, width]);
+    // sign is +1 when dragging right widens the pane, -1 when it narrows it.
+    function startDrag(e: PointerEvent<HTMLElement>, sign: 1 | -1) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const em = parseFloat(getComputedStyle(e.currentTarget).fontSize) || 16;
+        const start = width;
+        trackDrag(e, "ew-resize", (dx) => {
+            setWidth(Math.min(max, Math.max(min, start + (sign * dx) / em)));
+        });
+    }
+    return { width, startDrag, reset: () => setWidth(initial) };
+}
+
+// The bar between two panes: drag to move it, double-click to reset.
+function Splitter({
+    label,
+    onDrag,
+    onReset,
+}: {
+    label: string;
+    onDrag: (e: PointerEvent<HTMLElement>) => void;
+    onReset: () => void;
+}) {
+    return (
+        <div
+            className="vresize-handle research-splitter"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={label}
+            onPointerDown={onDrag}
+            onDoubleClick={onReset}
+            title={`Drag to resize the ${label.toLowerCase()} · double-click to reset`}
+        />
+    );
+}
+
+const LIST_WIDTH_KEY = "backtester-research-list-width";
+const CONTENTS_WIDTH_KEY = "backtester-reader-contents-width";
+
+// A list of filings and, once one is open, the reader beside it: each in its
+// own pane that scrolls by itself, with a bar between them to drag.
+export function ResearchPanes({ list, reader }: { list: ReactNode; reader: ReactNode }) {
+    const pane = usePaneWidth(LIST_WIDTH_KEY, 30, 14, 70);
+    // One shape whether or not a filing is open, so opening one does not
+    // remount the list and lose its sort and scroll.
+    return (
+        <div
+            className={reader ? "research-stage split" : "research-stage"}
+            style={{ "--list-w": `${pane.width}em` } as CSSProperties}
+        >
+            <div className="research-list-pane">{list}</div>
+            {reader && (
+                <Splitter label="Filings list" onDrag={(e) => pane.startDrag(e, 1)} onReset={pane.reset} />
+            )}
+            {reader}
+        </div>
+    );
+}
+
+// The reader's text size: a CSS zoom of the filing's own pt sizes.
+const READER_ZOOM_KEY = "backtester-reader-zoom";
+const READER_ZOOM_DEFAULT = 1.3;
+const READER_ZOOM_MIN = 0.7;
+const READER_ZOOM_MAX = 2.5;
+
+// A document the reader could not open: the error, and nothing to show.
+function failedRead(url: string, error: string): main.ReaderDoc {
+    return { url, html: "", text: "", contents: [], truncated: false, error } as unknown as main.ReaderDoc;
+}
+
 export function ReaderView({
     filing,
     docs,
@@ -461,9 +230,74 @@ export function ReaderView({
     loading: boolean;
     onOpen: (url: string) => void;
 }) {
+    const paper = useRef<HTMLDivElement>(null);
+    const hasContents = (doc?.contents?.length ?? 0) > 0;
+    // Maximised, the reader fills the window the way a maximised results
+    // window does: double-click its bar, or the button; Esc restores.
+    const [max, setMax] = useState(false);
+    // Filings print at 8-10pt; the reader enlarges them, remembered.
+    const [zoom, setZoom] = useState(() =>
+        readStoredNumber(READER_ZOOM_KEY, READER_ZOOM_DEFAULT, (n) => n >= READER_ZOOM_MIN && n <= READER_ZOOM_MAX),
+    );
+    // The contents column: as wide as the user drags it, or hidden.
+    const contentsPane = usePaneWidth(CONTENTS_WIDTH_KEY, 15, 8, 40);
+    const [showContents, setShowContents] = useState(true);
+
+    useEffect(() => {
+        if (!max) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setMax(false);
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [max]);
+
+    function zoomBy(step: number) {
+        const next = Math.round(Math.min(READER_ZOOM_MAX, Math.max(READER_ZOOM_MIN, zoom + step)) * 10) / 10;
+        setZoom(next);
+        writeStored(READER_ZOOM_KEY, String(next));
+    }
+
+    // Scroll the page, not the app, to a section: target is a prefixed id
+    // (or name, in older filings); "" is the top.
+    function jump(target: string) {
+        const box = paper.current;
+        if (!box) return;
+        if (!target) {
+            box.scrollTo({ top: 0 });
+            return;
+        }
+        const esc = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(target) : target;
+        const el = box.querySelector(`[id="${esc}"], [name="${esc}"]`);
+        if (!el) return;
+        const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+        box.scrollTo({ top: Math.max(0, top - 8) });
+    }
+
+    // The filing's own links: within the document they jump, outside it they
+    // open in the browser. Never a navigation of the app itself.
+    function onPaperClick(e: MouseEvent<HTMLDivElement>) {
+        const a = (e.target as HTMLElement).closest("a");
+        if (!a) return;
+        const href = a.getAttribute("href");
+        if (!href) return;
+        e.preventDefault();
+        if (href.startsWith("#")) jump(href.slice(1));
+        else if (a.dataset.external) openExternal(href);
+    }
+
     return (
-        <div className="reader">
-            <div className="reader-head">
+        <div className={max ? "reader max" : "reader"}>
+            <div
+                className="reader-head"
+                // The bar, not its controls: a double-click on a button means
+                // that button.
+                onDoubleClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    setMax((m) => !m);
+                }}
+                title={max ? "Double-click to restore (Esc)" : "Double-click to maximise"}
+            >
                 <strong>{filing.title}</strong>
                 <span className="research-dim">
                     {filing.form} · filed {fmtDate(filing.filed)}
@@ -475,6 +309,50 @@ export function ReaderView({
                     title="Open this filing on sec.gov in your browser"
                 >
                     On sec.gov ↗
+                </button>
+                <span className="reader-head-spacer" />
+                {doc?.html && hasContents && (
+                    <button
+                        type="button"
+                        className={showContents ? "active" : ""}
+                        aria-pressed={showContents}
+                        onClick={() => setShowContents((v) => !v)}
+                        title={showContents ? "Hide the table of contents" : "Show the table of contents"}
+                    >
+                        Contents
+                    </button>
+                )}
+                {doc?.html && (
+                    <span className="reader-zoom" role="group" aria-label="Text size">
+                        <button
+                            type="button"
+                            onClick={() => zoomBy(-0.1)}
+                            disabled={zoom <= READER_ZOOM_MIN}
+                            title="Smaller text"
+                            aria-label="Smaller text"
+                        >
+                            A−
+                        </button>
+                        <span className="research-dim">{Math.round(zoom * 100)}%</span>
+                        <button
+                            type="button"
+                            onClick={() => zoomBy(0.1)}
+                            disabled={zoom >= READER_ZOOM_MAX}
+                            title="Larger text"
+                            aria-label="Larger text"
+                        >
+                            A+
+                        </button>
+                    </span>
+                )}
+                <button
+                    type="button"
+                    className="panel-icon"
+                    onClick={() => setMax((m) => !m)}
+                    title={max ? "Restore (Esc)" : "Maximise"}
+                    aria-label={max ? "Restore reader" : "Maximise reader"}
+                >
+                    {max ? "❐" : "□"}
                 </button>
             </div>
             {docs.length > 1 && (
@@ -497,210 +375,54 @@ export function ReaderView({
             {!loading && doc?.error && <div className="coverage-msg err">{doc.error}</div>}
             {!loading && doc && !doc.error && (
                 <>
-                    <pre className="reader-text">{doc.text}</pre>
-                    {doc.truncated && (
-                        <p className="research-dim">
-                            Long document: the rest is on sec.gov.
-                        </p>
+                    {doc.html ? (
+                        <div
+                            className="reader-body"
+                            style={{ "--contents-w": `${contentsPane.width}em` } as CSSProperties}
+                        >
+                            {hasContents && showContents && (
+                                <nav className="reader-contents" aria-label="Table of contents">
+                                    <div className="reader-contents-head">Contents</div>
+                                    <button type="button" onClick={() => jump("")}>
+                                        Top of document
+                                    </button>
+                                    {doc.contents.map((s) => (
+                                        <button
+                                            key={s.target}
+                                            type="button"
+                                            className={/^part\b/i.test(s.label) ? "part" : ""}
+                                            onClick={() => jump(s.target)}
+                                        >
+                                            {s.label}
+                                        </button>
+                                    ))}
+                                </nav>
+                            )}
+                            {hasContents && showContents && (
+                                <Splitter
+                                    label="Contents"
+                                    onDrag={(e) => contentsPane.startDrag(e, 1)}
+                                    onReset={contentsPane.reset}
+                                />
+                            )}
+                            <div ref={paper} className="reader-paper" onClick={onPaperClick}>
+                                <div
+                                    className="reader-page"
+                                    style={{ zoom }}
+                                    dangerouslySetInnerHTML={{ __html: doc.html }}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <pre className="reader-text">{doc.text}</pre>
                     )}
-                </>
-            )}
-        </div>
-    );
-}
-
-// Which way a reading moved. Neutral on purpose: rising unemployment and
-// rising output are both "up", and only one of them is good news.
-function Direction({ v }: { v: number }) {
-    if (Math.abs(v) < 1e-12) return null;
-    return <span className="rt-dir">{v > 0 ? "▲" : "▼"} </span>;
-}
-
-function ecoColumns(today: Date): Column<main.EconReading>[] {
-    return [
-        {
-            key: "name", label: "Indicator", sortValue: (r) => r.name,
-            render: (r) => (
-                <>
-                    <button
-                        type="button"
-                        className="link-button"
-                        onClick={() => openExternal(r.url)}
-                        title={`${r.id} on FRED, from the ${r.releaseName} release`}
-                    >
-                        {r.name}
-                    </button>
-                    <span className={`eco-badge${r.source === "database" ? " stale" : ""}`}>
-                        {r.source === "database" ? "Database copy" : "Official statistic"}
-                    </span>
-                </>
-            ),
-        },
-        {
-            key: "latest", label: "Latest", numeric: true, firstDir: "desc", sortValue: (r) => r.periodEnd,
-            render: (r) => (
-                <>
-                    <strong>{formatEcoValue(r.kind, r.units, r.value)}</strong>{" "}
-                    <span className="research-dim">{r.period}</span>
-                </>
-            ),
-        },
-        {
-            key: "change", label: "Change", numeric: true, firstDir: "desc",
-            sortValue: (r) => (r.hasPrior ? r.change : null),
-            title: (r) => (r.hasPrior ? `From ${formatEcoValue(r.kind, r.units, r.prior)} in ${r.priorPeriod}` : ""),
-            render: (r) =>
-                r.hasPrior ? (
-                    <>
-                        <Direction v={r.change} />
-                        {formatEcoChange(r.kind, r.units, r.change)}
-                        <span className="research-dim"> vs {r.priorPeriod}</span>
-                    </>
-                ) : (
-                    <span className="research-dim">—</span>
-                ),
-        },
-        {
-            key: "year", label: "Over a year", numeric: true, firstDir: "desc",
-            sortValue: (r) => (r.hasYearChange ? r.yearChange : null),
-            render: (r) =>
-                r.hasYearChange ? (
-                    <>
-                        <Direction v={r.yearChange} />
-                        {formatEcoChange(r.kind, r.units, r.yearChange)}
-                    </>
-                ) : (
-                    <span className="research-dim">—</span>
-                ),
-        },
-        {
-            key: "published", label: "Published", firstDir: "desc", sortValue: (r) => r.published,
-            title: (r) => (r.publishedExact ? "From FRED's release calendar" : "Estimated from the release's usual timing"),
-            render: (r) => (r.publishedExact ? fmtDate(r.published) : `≈ ${fmtDate(r.published)}`),
-        },
-        {
-            key: "next", label: "Next release", sortValue: (r) => r.nextRelease,
-            render: (r) =>
-                r.nextRelease ? (
-                    <>
-                        {fmtDate(r.nextRelease)} <span className="research-dim">{countdown(r.nextRelease, today)}</span>
-                    </>
-                ) : (
-                    <span className="research-dim">—</span>
-                ),
-        },
-    ];
-}
-
-function meetingColumns(today: Date, nextStart: string): Column<main.FOMCMeeting>[] {
-    return [
-        {
-            key: "dates", label: "Meeting", sortValue: (m) => m.start,
-            render: (m) => (
-                <>
-                    <strong>{m.dates}</strong>
-                    {m.note && <span className="research-dim"> · {m.note}</span>}
-                </>
-            ),
-        },
-        {
-            key: "status", label: "Status", sortValue: (m) => m.start,
-            render: (m) =>
-                !m.upcoming ? (
-                    <span className="research-dim">held</span>
-                ) : (
-                    <span className={m.start === nextStart ? "rt-tag tag-after" : ""}>
-                        {m.start === nextStart ? "next · " : ""}
-                        {countdown(m.start, today)}
-                    </span>
-                ),
-        },
-        {
-            key: "sep", label: "Projections", sortValue: (m) => (m.projections ? 1 : 0), firstDir: "desc",
-            render: (m) => (m.projections ? "✓ dot plot" : ""),
-        },
-        {
-            key: "statement", label: "Statement",
-            render: (m) =>
-                m.statementUrl ? (
-                    <button
-                        type="button"
-                        className="link-button"
-                        onClick={() => openExternal(m.statementUrl)}
-                        title="The FOMC statement on federalreserve.gov"
-                    >
-                        Statement ↗
-                    </button>
-                ) : null,
-        },
-        {
-            key: "minutes", label: "Minutes", sortValue: (m) => m.minutesReleased,
-            render: (m) =>
-                m.minutesUrl ? (
-                    <>
-                        <button
-                            type="button"
-                            className="link-button"
-                            onClick={() => openExternal(m.minutesUrl)}
-                            title="The minutes on federalreserve.gov"
-                        >
-                            Minutes ↗
-                        </button>
-                        {m.minutesReleased && (
-                            <span className="research-dim"> {fmtDate(m.minutesReleased)}</span>
-                        )}
-                    </>
-                ) : null,
-        },
-    ];
-}
-
-export function EcoView({ e, today = new Date() }: { e: main.EconomicCalendar; today?: Date }) {
-    const nextStart = e.meetings.find((m) => m.upcoming)?.start ?? "";
-    return (
-        <div className="research-view">
-            <h2 className="research-title">
-                The economy <span className="research-ticker">ECO</span>
-            </h2>
-            <ResearchTable
-                label="Economic readings"
-                rows={e.readings}
-                columns={ecoColumns(today)}
-                rowKey={(r) => r.id}
-            />
-            {e.readings.length > 0 && (
-                <p className="research-dim">
-                    Official statistics from the agencies that produce them, as republished unchanged
-                    by FRED (St. Louis Fed). Each reading names the period it describes and when it
-                    came out — a number is only knowable from the day it is published. Click a
-                    column to sort.
-                </p>
-            )}
-
-            {e.meetings.length > 0 && (
-                <section className="research-section">
-                    <h3>FOMC meetings</h3>
-                    <ResearchTable
-                        label="FOMC meetings"
-                        rows={e.meetings}
-                        columns={meetingColumns(today, nextStart)}
-                        rowKey={(m) => m.start}
-                        initialSort={{ key: "dates", dir: "asc" }}
-                    />
-                    <p className="research-dim">
-                        From the Federal Reserve&rsquo;s own calendar; a date ahead is tentative until
-                        the meeting before it confirms it.{" "}
-                        <button
-                            type="button"
-                            className="link-button"
-                            onClick={() => openExternal(e.calendarUrl)}
-                        >
-                            Calendar on federalreserve.gov ↗
-                        </button>
+                    <p className="research-dim reader-foot">
+                        {doc.truncated ? "Long document: the rest is on sec.gov. " : ""}
+                        The filing as SEC EDGAR publishes it{doc.html ? ", its own layout and tables" : ""}
+                        {hasContents ? "; the contents link to each part" : ""}.
                     </p>
-                </section>
+                </>
             )}
-            <Notes notes={e.notes} />
         </div>
     );
 }
@@ -709,30 +431,6 @@ const tickerColumn = <T extends { ticker: string }>(): Column<T> => ({
     key: "ticker", label: "Ticker", sortValue: (r) => r.ticker,
     render: (r) => <span className="watch-ticker">{r.ticker}</span>,
 });
-
-function upcomingColumns(today: Date): Column<main.WatchItem>[] {
-    return [
-        tickerColumn<main.WatchItem>(),
-        { key: "date", label: "Date", sortValue: (u) => u.when, render: (u) => fmtDate(u.when) },
-        { key: "time", label: "Time (ET)", render: (u) => fmtTime(u.when) },
-        { key: "timing", label: "Timing", sortValue: (u) => u.timing, render: (u) => <TimingTag timing={u.timing} /> },
-        { key: "in", label: "When", sortValue: (u) => u.when, render: (u) => countdown(u.when, today) },
-    ];
-}
-
-function recentEarningsColumns(largest: number): Column<main.WatchItem>[] {
-    return [
-        tickerColumn<main.WatchItem>(),
-        { key: "date", label: "Reported", sortValue: (it) => it.when, firstDir: "desc", render: (it) => fmtDate(it.when) },
-        { key: "time", label: "Time (ET)", render: (it) => fmtTime(it.when) },
-        { key: "timing", label: "Timing", sortValue: (it) => it.timing, render: (it) => <TimingTag timing={it.timing} /> },
-        {
-            key: "move", label: "Price move", numeric: true, firstDir: "desc",
-            sortValue: (it) => (it.hasMove ? it.move : null),
-            render: (it) => <MoveCell move={it.move} has={it.hasMove} largest={largest} />,
-        },
-    ];
-}
 
 // Filings show their filing date only: EDGAR's acceptance times are wrong
 // by four hours for some filers (T143).
@@ -755,7 +453,6 @@ export function MyView({
     onChange,
     selected,
     onSelect,
-    today = new Date(),
 }: {
     feed: main.WatchFeed;
     // The Backtest form's tickers, offered for the list.
@@ -763,13 +460,10 @@ export function MyView({
     onChange: (tickers: string[]) => void;
     selected: string;
     onSelect: (row: main.FilingRow, cik: string) => void;
-    today?: Date;
 }) {
     const [adding, setAdding] = useState("");
     const offer = holdingsToAdd(holdings, feed.tickers);
-    const earnings = feed.recent.filter((it) => !it.filing);
     const filings = feed.recent.filter((it) => !!it.filing);
-    const largest = Math.max(0, ...earnings.filter((it) => it.hasMove).map((it) => Math.abs(it.move)));
     const activeFiling = filings.find((it) => it.filing!.accession === selected);
     const add = () => {
         const more = adding.split(/[\s,]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
@@ -823,34 +517,8 @@ export function MyView({
             {feed.tickers.length === 0 && (
                 <p className="research-dim">
                     The watchlist is empty. Add the companies you follow, and MY gathers what they
-                    have filed and reported in one list.
+                    have filed in one list.
                 </p>
-            )}
-
-            {feed.upcoming.length > 0 && (
-                <section className="research-section">
-                    <h3>Upcoming earnings</h3>
-                    <ResearchTable
-                        label="Upcoming earnings"
-                        rows={feed.upcoming}
-                        columns={upcomingColumns(today)}
-                        rowKey={(u) => `${u.ticker} ${u.when}`}
-                        initialSort={{ key: "date", dir: "asc" }}
-                    />
-                </section>
-            )}
-
-            {earnings.length > 0 && (
-                <section className="research-section">
-                    <h3>Recent earnings</h3>
-                    <ResearchTable
-                        label="Recent earnings"
-                        rows={earnings}
-                        columns={recentEarningsColumns(largest)}
-                        rowKey={(it) => `${it.ticker} ${it.when}`}
-                        initialSort={{ key: "date", dir: "desc" }}
-                    />
-                </section>
             )}
 
             {filings.length > 0 && (
@@ -870,9 +538,7 @@ export function MyView({
             {feed.tickers.length > 0 && (
                 <p className="research-dim">
                     Since {fmtDate(feed.since)}: each company&rsquo;s SEC events, reports and proxy
-                    statements, and its earnings reports with the price&rsquo;s answer. Times are US
-                    Eastern; filings show their filing date. Click a filing to read it, a column to
-                    sort.
+                    statements, by filing date. Click a filing to read it, a column to sort.
                 </p>
             )}
             <Notes notes={feed.notes} />
@@ -1009,11 +675,7 @@ export function SearchView({
 }
 
 type Result =
-    | { fn: "DES"; data: main.CompanyOverview }
-    | { fn: "FA"; data: main.CompanyFinancials }
-    | { fn: "ERN"; data: main.CompanyEarnings }
     | { fn: "CN"; data: main.CompanyFilings }
-    | { fn: "ECO"; data: main.EconomicCalendar }
     | { fn: "MY"; data: main.WatchFeed }
     | { fn: "FTS"; data: main.FilingSearch };
 
@@ -1030,8 +692,7 @@ export default function Research({
 }) {
     const [input, setInput] = useState("");
     const [ticker, setTicker] = useState("");
-    const [fn, setFn] = useState<ResearchFn>("DES");
-    const [freq, setFreq] = useState<"annual" | "quarterly">("annual");
+    const [fn, setFn] = useState<ResearchFn>("CN");
     const [result, setResult] = useState<Result | null>(null);
     const [loading, setLoading] = useState(false);
     const [pool, setPool] = useState<string[]>([]);
@@ -1106,21 +767,13 @@ export default function Research({
                 .then((w) => WatchlistFeed(dbPath, w.tickers ?? []))
                 .then((data) => done({ fn: "MY", data }))
                 .catch(fail);
-        } else if (fn === "ECO") {
-            EconomicReleases(dbPath).then((data) => done({ fn, data })).catch(fail);
-        } else if (fn === "DES") {
-            CompanyOverview(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
-        } else if (fn === "FA") {
-            CompanyFinancials(dbPath, ticker, freq).then((data) => done({ fn, data })).catch(fail);
-        } else if (fn === "CN") {
-            CompanyFilings(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
         } else {
-            CompanyEarnings(dbPath, ticker).then((data) => done({ fn, data })).catch(fail);
+            CompanyFilings(dbPath, ticker).then((data) => done({ fn: "CN", data })).catch(fail);
         }
         return () => {
             cancelled = true;
         };
-    }, [ticker, fn, freq, dbPath, watchVersion, searchText, searchRange, searchForm, searchFrom]);
+    }, [ticker, fn, dbPath, watchVersion, searchText, searchRange, searchForm, searchFrom]);
 
     // A new company or view closes the reader.
     useEffect(() => {
@@ -1147,7 +800,7 @@ export default function Research({
             })
             .catch((e) => {
                 if (seq === readSeq.current) {
-                    setDoc({ url, text: "", truncated: false, error: String(e) });
+                    setDoc(failedRead(url, String(e)));
                     setReading(false);
                 }
             });
@@ -1174,14 +827,14 @@ export default function Research({
                 } else if (row.primaryUrl) {
                     openDocument(row.primaryUrl);
                 } else {
-                    setDoc({ url: row.indexUrl, text: "", truncated: false,
-                        error: list.error || "This filing has no readable document." });
+                    setDoc(failedRead(row.indexUrl,
+                        list.error || "This filing has no readable document."));
                     setReading(false);
                 }
             })
             .catch((e) => {
                 if (seq !== readSeq.current) return;
-                setDoc({ url: row.indexUrl, text: "", truncated: false, error: String(e) });
+                setDoc(failedRead(row.indexUrl, String(e)));
                 setReading(false);
             });
     }
@@ -1220,15 +873,18 @@ export default function Research({
     }
 
     const error = result?.data.error ?? "";
+    const readerPane = filing ? (
+        <ReaderView filing={filing} docs={docs} doc={doc} loading={reading} onOpen={openDocument} />
+    ) : null;
 
     return (
-        <div className="research">
+        <div className={filing ? "research reading" : "research"}>
             <div className="research-bar">
                 <input
                     ref={inputRef}
                     className="research-input"
                     data-shortcut="research"
-                    placeholder='A ticker or name, then DES, FA, ERN or CN (e.g. AAPL CN) · ECO · MY · "a phrase" to search every filing'
+                    placeholder='A ticker or name for its filings (e.g. AAPL) · MY for your watchlist · "a phrase" to search every filing'
                     value={input}
                     spellCheck={false}
                     onChange={(e) => setInput(e.target.value)}
@@ -1259,7 +915,7 @@ export default function Research({
             {!dbPath && <p className="research-empty">Choose a database first (the database chip in the top bar).</p>}
             {dbPath && !ticker && !isMarketFunction(fn) && (
                 <div className="research-empty">
-                    <p>Look a company up by ticker or name, type ECO for the economy, MY for your watchlist, or put words in quotes to search the text of every SEC filing since 2001 (add a ticker to search one company&rsquo;s). Everything shown comes from primary data — SEC filings, official statistics and the database&rsquo;s own prices — and says where it came from.</p>
+                    <p>Look a company up by ticker or name to read its SEC filings, type MY for your watchlist&rsquo;s filings, or put words in quotes to search the text of every SEC filing since 2001 (add a ticker to search one company&rsquo;s). Everything shown comes straight from SEC EDGAR.</p>
                     <ul>
                         {RESEARCH_FUNCTIONS.map((f) => (
                             <li key={f.code}>
@@ -1271,80 +927,58 @@ export default function Research({
             )}
             {loading && <p className="research-dim">Reading…</p>}
             {error && <div className="coverage-msg err">{error}</div>}
-            {!loading && !error && result?.fn === "DES" && <DesView d={result.data} />}
-            {!loading && !error && result?.fn === "FA" && <FaView f={result.data} onFrequency={setFreq} />}
-            {!loading && !error && result?.fn === "ERN" && <ErnView e={result.data} />}
-            {!loading && !error && result?.fn === "ECO" && <EcoView e={result.data} />}
             {!loading && !error && result?.fn === "FTS" && (
-                <div className={filing ? "cn-split" : ""}>
-                    <SearchView
-                        s={result.data}
-                        range={searchRange}
-                        onRange={(r) => {
-                            setSearchRange(r);
-                            setSearchFrom(0);
-                        }}
-                        onForm={(f) => {
-                            setSearchForm(f);
-                            setSearchFrom(0);
-                        }}
-                        onPage={setSearchFrom}
-                        selected={filing ? hitKey : ""}
-                        onSelect={(h) => {
-                            setHitKey(`${h.accession}:${h.fileName}`);
-                            selectFiling(h.filing, h.cik, h.url);
-                        }}
-                    />
-                    {filing && (
-                        <ReaderView
-                            filing={filing}
-                            docs={docs}
-                            doc={doc}
-                            loading={reading}
-                            onOpen={openDocument}
+                <ResearchPanes
+                    list={
+                        <SearchView
+                            s={result.data}
+                            range={searchRange}
+                            onRange={(r) => {
+                                setSearchRange(r);
+                                setSearchFrom(0);
+                            }}
+                            onForm={(f) => {
+                                setSearchForm(f);
+                                setSearchFrom(0);
+                            }}
+                            onPage={setSearchFrom}
+                            selected={filing ? hitKey : ""}
+                            onSelect={(h) => {
+                                setHitKey(`${h.accession}:${h.fileName}`);
+                                selectFiling(h.filing, h.cik, h.url);
+                            }}
                         />
-                    )}
-                </div>
+                    }
+                    reader={readerPane}
+                />
             )}
             {!loading && !error && result?.fn === "MY" && (
-                <div className={filing ? "cn-split" : ""}>
-                    <MyView
-                        feed={result.data}
-                        holdings={holdings}
-                        onChange={saveWatchlist}
-                        selected={filing?.accession ?? ""}
-                        onSelect={selectFiling}
-                    />
-                    {filing && (
-                        <ReaderView
-                            filing={filing}
-                            docs={docs}
-                            doc={doc}
-                            loading={reading}
-                            onOpen={openDocument}
+                <ResearchPanes
+                    list={
+                        <MyView
+                            feed={result.data}
+                            holdings={holdings}
+                            onChange={saveWatchlist}
+                            selected={filing?.accession ?? ""}
+                            onSelect={selectFiling}
                         />
-                    )}
-                </div>
+                    }
+                    reader={readerPane}
+                />
             )}
             {!loading && !error && result?.fn === "CN" && (
-                <div className={filing ? "cn-split" : ""}>
-                    <FilingsView
-                        c={result.data}
-                        filter={filter}
-                        onFilter={setFilter}
-                        selected={filing?.accession ?? ""}
-                        onSelect={(row) => selectFiling(row, result.data.cik)}
-                    />
-                    {filing && (
-                        <ReaderView
-                            filing={filing}
-                            docs={docs}
-                            doc={doc}
-                            loading={reading}
-                            onOpen={openDocument}
+                <ResearchPanes
+                    list={
+                        <FilingsView
+                            c={result.data}
+                            filter={filter}
+                            onFilter={setFilter}
+                            selected={filing?.accession ?? ""}
+                            onSelect={(row) => selectFiling(row, result.data.cik)}
                         />
-                    )}
-                </div>
+                    }
+                    reader={readerPane}
+                />
             )}
         </div>
     );

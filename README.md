@@ -2603,47 +2603,27 @@ bounds.
 
 ## The Research tab (UI)
 
-A company lookup that works like a terminal's command line, in limited scope
-and on purpose without noise: **no headlines, no adverts, no live quotes**.
-Everything it shows is primary data — SEC filings, official statistics and the
-database's own prices — and says where it came from and as of when.
+A reader for **SEC filings**, and nothing else: a company's filings, your
+watchlist's, and a full-text search of every filing since 2001. It shows no
+quotes, financials, earnings dates or economic data — the views that did
+(DES, FA, ERN and ECO) were removed to keep the tab on filings. Everything it
+shows comes straight from SEC EDGAR, with its filing date.
 
-Type a ticker or a company name, then a function, and press Enter
-(`Ctrl+4` jumps here with the cursor in the box; the command palette's *Look up
-a company* does the same):
+Type a ticker or a company name and press Enter (`Ctrl+4` jumps here with the
+cursor in the box):
 
 | command | shows | from |
 |---|---|---|
-| `AAPL` or `AAPL DES` | what the company is: name, industry (SIC), exchange, state of incorporation, former names, SEC CIK with a link to its filings on EDGAR; S&P 500 membership spans; last close and 52-week closing range; the data-quality verdict on its price series | `company_profile`, `index_membership`, `stock_data_optimized`, `data_quality` |
-| `AAPL FA` | reported financials — revenue through shares outstanding — for the last 5 fiscal years, or 8 quarters with *Quarterly*. Each figure **as first filed**: hover a cell for the filing date and form. Later restatements are not shown, so this is what the market could know at the time | `sec_financials` |
-| `AAPL ERN` | every report date (US Eastern) with whether it came before the open or after the close, and the price move from the last close before it to the first close after it, drawn as a bar; above the table, the next report with a countdown and the average move with how many went up and down | `earnings_calendar`, `stock_data_optimized` |
-| `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — as a sortable table by filing date (form, what, period covered). Click one to read it in the app as clean text; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
-| `ECO` | the **economy**, no ticker needed: the latest official reading of CPI, core CPI, nonfarm payrolls, unemployment, real GDP growth, industrial production, M2 and the fed funds rate — each with the period it describes, its change from the previous reading and over a year, when it was published and when the next release comes out — and the FOMC's last three and next four meetings, with links to each statement and its minutes | FRED (keyless CSV; release dates need `FRED_API_KEY`), federalreserve.gov, live |
-| `MY` | **your watchlist**, no ticker needed, as three sortable tables over the last 90 days of every company on it: *Upcoming earnings* (date, time, timing, countdown), *Recent earnings* (with ERN's price move and bar) and *Filings* (filing date, form, what — events, reports and proxies as CN labels them). Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR, `earnings_calendar` |
+| `AAPL` or `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — as a sortable table by filing date (form, what, period covered). Click one to read it in the app laid out as sec.gov shows it, with the document's own table of contents beside it; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
+| `MY` | **your watchlist's filings**, no ticker needed: one sortable table over the last 90 days of every company on it (filing date, ticker, form, what — events, reports and proxies as CN labels them). Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR |
 | `"going concern"` or `"share repurchase" AAPL` | **full-text search** of every SEC filing since 2001: words in quotes are an exact phrase, a ticker narrows to that company. Each row is a document whose text matches — an 8-K's press release says *in EX-99.1* — and opens in the reader. Past year by default (or past 30 days, or since 2001), narrowed by form; a sortable table, newest first, whose `#` column is EDGAR's relevance rank | EDGAR full-text search, live (keyless) |
 
-The function may come first (`FA AAPL`), case does not matter, and a name
-resolves to the best-matching symbol (`apple fa` → `AAPL FA`) the same way the
-Backtest tab's ticker search does. The function buttons under the box switch
-view without retyping the ticker. **Every table sorts**: click a column header,
-click again to reverse (dates and moves start newest/largest first). A lone
-`ECO` or `MY` is that view; the
-tickers ECO and MY themselves are still `ECO DES` and `MY DES`. Anything in
-quotes is a search, wherever the ticker goes (`AAPL "buyback"` works too).
-
-Honest edges, each said in the view rather than discovered:
-
-- The price line is **history, not a quote**: it names the session its close
-  comes from. A 52-week range is of daily closes, not intraday highs and lows.
-- A table the database lacks is named together with the loader that fills it
-  (`add_company_info.py`, `add_index_membership.py`, `add_data_quality.py`,
-  `add_sec_financials.py`); the rest of the view still renders.
-- SEC EDGAR lists only current tickers, so a delisted symbol has prices but no
-  profile. `company_profile` pads CIKs to ten digits and `sec_financials` does
-  not; FA matches them either way.
-- `earnings_calendar` covers about 1,000 tickers. A report during the session
-  is measured from the prior close, so it includes that morning's trading, and
-  the view says so.
+Case does not matter, and a name resolves to the best-matching symbol
+(`apple` → `AAPL`) the same way the Backtest tab's ticker search does.
+**Every table sorts**: click a column header, click again to reverse (dates
+start newest first). A lone `MY` is the watchlist; the ticker MY itself is
+`MY CN`. Anything in quotes is a search, wherever the ticker goes
+(`AAPL "buyback"` works too).
 
 **CN reads SEC EDGAR live**, because filings are where company news starts: an
 earnings headline is a rewrite of the 8-K's exhibit 99.1, an executive
@@ -2656,11 +2636,27 @@ skips the rewrite, the adverts and the spin.
 - **Dates, not times, for now.** The list and the reader show each filing's
   filing date. EDGAR's acceptance times are four hours off for some filers
   (below, and T143); the time comes back once that is settled.
-- **The reader** fetches the document and strips it to text — no scripts,
-  styles, trackers or the hidden inline-XBRL header — with *On sec.gov ↗* for
-  the original. It fetches only documents under `www.sec.gov/Archives/`, so a
-  link cannot point it anywhere else. Very long documents (a 10-K) are cut at
-  400,000 characters and say so.
+- **The reader** shows the document as sec.gov does: its own HTML, tables,
+  fonts and page breaks, on white paper in either theme. A 10-Q or 10-K
+  gets its own table of contents (Part I, Item 1. Financial Statements, Item
+  1A. Risk Factors, …) as a sidebar, read from the document's internal links;
+  clicking an entry, or a link in the document's contents page, jumps within
+  the reader, and a link out of the filing opens in the browser. Opening a
+  filing makes it the focus: the view widens to the full window, with the
+  list, the contents and the document each in a pane of its own that fills
+  the window's height and scrolls by itself. The bars between them drag to
+  resize (double-click one to reset; the widths are remembered), *Contents*
+  hides or shows the contents column, and a narrow window stacks the list
+  over the reader. *A− / A+* sets the text size (130% of print by default,
+  remembered), and double-clicking the reader's bar — or its □ button —
+  maximises it to fill the window; Esc or another double-click restores. The HTML is
+  sanitized first (`src/edgar/render.go`): no scripts, event handlers, forms,
+  frames, stylesheets or CSS that loads anything, and the hidden inline-XBRL
+  header is dropped while the tagged figures stay as plain text. Plain-text
+  and XML documents (pre-2001 `.txt` filings, raw Form 4 XML) are shown as
+  text. *On sec.gov ↗* opens the original. It fetches only documents under
+  `www.sec.gov/Archives/`, so a link cannot point it anywhere else. Very long
+  documents are cut at 8 MB of markup (400,000 characters of text) and say so.
 - **Polite by construction.** Every request carries `SEC_CONTACT` in its
   User-Agent (from the environment or `.env`, else the same default as the
   Python loaders), the whole app stays under ~8 requests a second, 429s and
@@ -2677,39 +2673,7 @@ skips the rewrite, the adverts and the spin.
   table, and works for current filers only (delisted symbols have no profile).
 - Wire-service press releases and media headlines are deliberately absent.
 
-**ECO reads FRED and the Federal Reserve live**, and is honest about time,
-because an economic number is only knowable from the day it is published:
-
-- **Period and publication are separate columns.** *Sep 2026* is the month the
-  unemployment rate describes; *Published* is when it came out. With a
-  `FRED_API_KEY` (environment or `.env`, the key `update_treasury_yields.py`
-  already uses) both *Published* and *Next release* come from FRED's release
-  calendar. Without one, *Published* is an estimate from the release's usual
-  timing, marked `≈`, and *Next release* is blank — the view says so rather
-  than guess. *Next release* is when the **next reading** is due — the first
-  release after the next period ends — so the fed funds average, which rides
-  on the daily H.15, shows the day after the month closes rather than tomorrow.
-- **Changes read the way each series is quoted**: an index (CPI, production,
-  M2) by percent, a rate (unemployment, GDP growth, fed funds) by points,
-  payrolls by jobs. Direction is a neutral ▲/▼, never green or red:
-  rising unemployment and rising output are both "up", and only one of them
-  is good news. *Change* is against the previous reading and names its
-  month, because FRED leaves a period it never collected blank — October 2025's
-  CPI and unemployment, cancelled by the shutdown — and the previous reading
-  then is two months back, not one.
-- **One source failing never blanks the view.** A series FRED does not answer
-  for falls back to the database's `economic_indicators` copy, badged
-  *Database copy* and noted with where that copy ends (it is months behind
-  unless the loader was re-run). A failed meeting calendar is a note beside
-  readings that still show.
-- **FOMC meetings** are read off the Fed's own calendar page: the last three
-  and next four, *with economic projections* where the Fed marks one, notation
-  votes as such, and links to each statement and its minutes once published.
-  A date ahead is tentative until the meeting before it confirms it.
-- Nothing is written to the database; responses are cached in memory, a
-  reading for an hour and a calendar for twelve.
-
-**MY is CN and ERN across a watchlist.**
+**MY is CN across a watchlist.**
 
 - **The list is yours, not the database's**: `watchlist.json` in the per-user
   config directory (`~/.config/backtester` on Linux), beside the API key — a
@@ -2718,18 +2682,16 @@ because an economic number is only knowable from the day it is published:
   Backtest form's holdings; after that, *Add the form's holdings* offers any
   you have added since. Emptying the list is kept as a choice — it does not
   re-seed. Up to 50 tickers, upper-cased, repeats dropped.
-- **One quarter, newest first**: 90 days, so every company's latest earnings
-  and quarterly report are in it, at most 300 items. Only events, reports and
+- **One quarter, newest first**: 90 days, so every company's latest quarterly
+  report is in it, at most 300 filings. Only events, reports and
   proxies are shown. Insider forms and securities offerings would bury the
   rest (JPMorgan alone files thousands of structured-note prospectuses a
   quarter). Ownership stakes (13D/13G) are left out because a company's EDGAR
   list mixes stakes in it with stakes it holds elsewhere — most of
-  JPMorgan's are the latter — and the record does not say which. An
-  earnings report appears twice on purpose: once from `earnings_calendar`
-  with the price's answer, once as the 8-K that carries the release.
+  JPMorgan's are the latter — and the record does not say which.
 - **Filings show their filing date, not a time**, until T143 is settled:
   EDGAR's API is four hours off for some filers (Microsoft and NVIDIA) and
-  not others (Apple). Earnings times come from your database and are shown.
+  not others (Apple).
 - A ticker with no SEC filer (a fund, a delisted symbol) or that EDGAR does
   not answer for is named in a note; the rest of the feed still shows. Each
   company is one EDGAR request, paced like CN's.
@@ -2752,22 +2714,17 @@ efts.sec.gov, over the text of every filing since 2001:
 - No snippets: EDGAR's search returns which documents match, never the
   sentence, so the reader is where you see it.
 
-Code: `src/data/research.go` (the pure shaping — `FinancialsTable`,
-`EarningsReactions`, `SummarizePrices` — plus thin readers), `ui/research.go`
-(the `CompanyOverview` / `CompanyFinancials` / `CompanyEarnings` bindings), and
-`ui/frontend/src/Research.tsx`; CN is `src/edgar` (the client, parsing and the
-text reader, tested against SEC responses recorded in `src/edgar/testdata`) and
-`ui/filings.go`; ECO is `src/econ` (FRED CSV, release calendar and the Fed's
-meeting page, tested against responses recorded in `src/econ/testdata`) and
-`ui/eco.go`; MY is `ui/watchlist.go`; search is `src/edgar/search.go` and
-`ui/search.go`.
+Code: `ui/frontend/src/Research.tsx`; CN is `src/edgar` (the client, parsing
+and the reader's sanitizer, tested against SEC responses recorded in
+`src/edgar/testdata`) and `ui/filings.go`; MY is `ui/watchlist.go`; search is
+`src/edgar/search.go` and `ui/search.go`.
 
 ## The Backtest tab (UI)
 
 The topbar has four tabs, named for what they operate on rather than for how
 advanced they are: **Backtest** (the form below), **Config** (the raw TOML and
 Lua editors), **Data** (a SQL console over the database) and **Research**
-(look a company up — see [The Research tab](#the-research-tab-ui)).
+(read SEC filings — see [The Research tab](#the-research-tab-ui)).
 
 The desktop app opens on the **Backtest** tab: a form for the things every
 backtest needs — name, starting capital, a date window with `Max`/`YTD`/`1Y`/`5Y`

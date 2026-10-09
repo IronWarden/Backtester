@@ -73,9 +73,12 @@ func TestFilingsViewReadsEDGAR(t *testing.T) {
 	if err != nil || len(docs) != 2 {
 		t.Fatalf("%v %+v", err, docs)
 	}
-	text, _, err := c.Read(docs[1].URL)
+	rendered, err := c.Render(docs[1].URL)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if rendered.HTML == "" || !strings.Contains(rendered.HTML, "<table") {
+		t.Errorf("the press release must render as HTML, tables kept: %.300s", rendered.HTML)
 	}
 
 	// The fixtures the CN view and the reader are smoke-rendered against.
@@ -91,10 +94,23 @@ func TestFilingsViewReadsEDGAR(t *testing.T) {
 		fd.Documents = append(fd.Documents, FilingDocument{Name: d.Name, Type: d.Type,
 			Description: d.Description, URL: fix(d.URL)})
 	}
+	// A 10-Q, the case the reader exists for: its table of contents and its
+	// statements, cut from Apple's real filing in src/edgar/testdata.
+	tenQ, err := os.ReadFile(filepath.Join("..", "src", "edgar", "testdata", "doc-10q.htm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const tenQURL = "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/aapl-20260627.htm"
+	tenQDoc := readerDoc(tenQURL, edgar.RenderDocument(string(tenQ), tenQURL))
+	if len(tenQDoc.Contents) < 10 {
+		t.Errorf("the 10-Q's contents: %+v", tenQDoc.Contents)
+	}
 	for name, val := range map[string]any{
-		"research-cn":     v,
-		"research-docs":   fd,
-		"research-reader": ReaderDoc{URL: fix(docs[1].URL), Text: text},
+		"research-reader-10q": tenQDoc,
+		"research-cn":         v,
+		"research-docs":       fd,
+		"research-reader": readerDoc(fix(docs[1].URL), edgar.Rendered{HTML: fix(rendered.HTML),
+			Contents: rendered.Contents}),
 	} {
 		want, err := json.MarshalIndent(val, "", "  ")
 		if err != nil {

@@ -1380,50 +1380,35 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   results, Ctrl+Shift+M maximise results, Ctrl+S save (Config), Esc restore,
   Ctrl+= / Ctrl+- / Ctrl+0 zoom (also Ctrl+Up/Down, Ctrl+scroll).
 
-- THE RESEARCH TAB (Ctrl+4, or "Look up a company" in the palette) looks a
-  company up like a terminal: a ticker or company name, then a function.
-  "AAPL" or "AAPL DES": SEC EDGAR profile (industry, exchange, former names,
-  CIK with a link to its EDGAR filings), S&P 500 membership spans, last close
-  and 52-week closing range FROM THE DATABASE'S OWN BARS (dated — never a
-  live quote), and the data-quality verdict. "AAPL FA": reported financials
-  from sec_financials, annual (5 years) or quarterly (8), each figure AS FIRST
-  FILED with its filing date and form on hover; restatements are not shown.
-  "AAPL ERN": earnings_calendar report times (US Eastern) and the price move
-  from the last close before each report to the first close after it, with
-  the next report and a countdown, and the average absolute move and up/down
-  count above the table. Every Research table sorts by clicking a column. All of
-  it is primary data with its date; there are no headlines, ads or live
-  quotes, by design. Missing tables are named with the loader that fills them.
+- THE RESEARCH TAB (Ctrl+4) is for SEC FILINGS ONLY: a company's filings, a
+  watchlist's, and full-text search. It shows no quotes, financials, earnings
+  dates or economic data (those views were removed on purpose); for prices or
+  fundamentals use lookup_quote, screen_stocks or the Data tab's SQL.
+  Type a ticker or company name ("AAPL", "apple") to open its filings (CN).
+  Every Research table sorts by clicking a column.
   "AAPL CN": the company's own news — its SEC filings live from EDGAR, newest
   first, in plain words (8-K items: Earnings results, Directors or officers
   changed, Material agreement, Bankruptcy…; 10-K/10-Q; 13D/13G; proxies),
   shown by FILING DATE (no time: EDGAR's acceptance times are unreliable for
   some filers), in a sortable table. Default filter "Events &
   reports" hides insider Forms 3/4/5/144 ("Insiders" shows them). Clicking one
-  opens a reader with the document as clean text (an earnings 8-K opens on
-  its EX-99.1 press release) and a link to sec.gov. No media headlines or
+  opens a reader showing the document as sec.gov does (its own tables and
+  layout, on white paper) with the filing's own table of contents as a
+  clickable sidebar for 10-Qs/10-Ks (an earnings 8-K opens on its EX-99.1
+  press release) and a link to sec.gov. No media headlines or
   wire stories, by design. Needs company_profile for the CIK and a network.
-  Send a user there for "what does X do / what did it earn / how did it react
-  to earnings / what has X announced" before reaching for screen_stocks or
-  lookup_quote. You cannot read filings yourself yet — point at CN.
-  "ECO" (no ticker; the ticker ECO is "ECO DES"): the economy's latest
-  official readings from FRED — CPI, core CPI, nonfarm payrolls, unemployment,
-  real GDP growth, industrial production, M2, fed funds — each with the
-  PERIOD it describes, its change from the previous reading and over a year,
-  when it was PUBLISHED and the next release date; and the FOMC's last three
-  and next four meetings from federalreserve.gov, with statement and minutes
-  links. Release dates need FRED_API_KEY; without it "Published" is an
-  estimate marked ≈ and the next release is blank. A series FRED cannot serve
-  falls back to the database's economic_indicators copy, badged "Database
-  copy". Send a user there for "what was the last CPI / jobs number / when is
-  the next Fed meeting". You cannot fetch these yourself yet — point at ECO.
+  Opening a filing widens the view to the full window; list, contents and
+  document are side-by-side panes the user resizes by dragging the bars
+  between them (double-click resets), "Contents" hides the sidebar, A−/A+
+  sets the text size and double-clicking the reader's bar maximises it.
+  Send a user there for "what has X announced / what did its 10-Q say". You
+  cannot read filings yourself yet — point at CN.
   "MY" (no ticker): the user's watchlist, saved in their config directory
   (not the database) and seeded from the Backtest form's holdings the first
-  time; tickers are added or removed in the view. Three sortable tables over
-  the last 90 days: upcoming earnings (with a countdown), recent earnings
-  with ERN's price move, and each company's SEC filings (events, reports,
-  proxies only; filing DATE shown, no time); a filing opens in the reader. Send a user there for "what has
-  happened with the stocks I follow". Up to 50 tickers.
+  time; tickers are added or removed in the view. One sortable table of each
+  company's SEC filings over the last 90 days (events, reports, proxies only;
+  filing DATE shown, no time); a filing opens in the reader. Send a user there
+  for "what have the companies I follow filed". Up to 50 tickers.
   Words in QUOTES search the text of every SEC filing since 2001 (EDGAR's own
   full-text search): '"going concern"' across all filers, '"share repurchase"
   AAPL' within one company (CIK from company_profile). Past year by default,
@@ -2307,7 +2292,7 @@ total US market.
   leaving an "in its own window" stub. The bar above minimises (▁) or
   maximises (□) the results; a vanished form means they are maximised.
 - Tabs: Backtest (form), Config (TOML+Lua), Data (SQL), Research (Ctrl+4:
-  "AAPL DES|FA|ERN|CN", ECO, MY watchlist, "words" = search); "simple mode" = Backtest.
+  SEC filings only; "AAPL", MY watchlist, "words" = search); "simple mode" = Backtest.
 - The Backtest tab can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

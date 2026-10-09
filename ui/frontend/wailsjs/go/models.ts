@@ -670,66 +670,6 @@ export namespace main {
 	        this.content = source["content"];
 	    }
 	}
-	export class EarningsRow {
-	    reported: string;
-	    timing: string;
-	    from: string;
-	    to: string;
-	    move: number;
-	    hasMove: boolean;
-	    upcoming: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new EarningsRow(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.reported = source["reported"];
-	        this.timing = source["timing"];
-	        this.from = source["from"];
-	        this.to = source["to"];
-	        this.move = source["move"];
-	        this.hasMove = source["hasMove"];
-	        this.upcoming = source["upcoming"];
-	    }
-	}
-	export class CompanyEarnings {
-	    ticker: string;
-	    reports: EarningsRow[];
-	    notes: string[];
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new CompanyEarnings(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ticker = source["ticker"];
-	        this.reports = this.convertValues(source["reports"], EarningsRow);
-	        this.notes = source["notes"];
-	        this.error = source["error"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class FilingRow {
 	    accession: string;
 	    form: string;
@@ -800,316 +740,6 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class FinancialsCell {
-	    value: number;
-	    filed: string;
-	    form: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FinancialsCell(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.value = source["value"];
-	        this.filed = source["filed"];
-	        this.form = source["form"];
-	    }
-	}
-	export class FinancialsRow {
-	    metric: string;
-	    cells: FinancialsCell[];
-	
-	    static createFrom(source: any = {}) {
-	        return new FinancialsRow(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.metric = source["metric"];
-	        this.cells = this.convertValues(source["cells"], FinancialsCell);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class CompanyFinancials {
-	    ticker: string;
-	    cik: string;
-	    company: string;
-	    frequency: string;
-	    periods: string[];
-	    rows: FinancialsRow[];
-	    notes: string[];
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new CompanyFinancials(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ticker = source["ticker"];
-	        this.cik = source["cik"];
-	        this.company = source["company"];
-	        this.frequency = source["frequency"];
-	        this.periods = source["periods"];
-	        this.rows = this.convertValues(source["rows"], FinancialsRow);
-	        this.notes = source["notes"];
-	        this.error = source["error"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class IndexSpan {
-	    index: string;
-	    start: string;
-	    end: string;
-	    atLeastSince: boolean;
-	    confidence: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new IndexSpan(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.index = source["index"];
-	        this.start = source["start"];
-	        this.end = source["end"];
-	        this.atLeastSince = source["atLeastSince"];
-	        this.confidence = source["confidence"];
-	    }
-	}
-	export class PriceLine {
-	    firstDate: string;
-	    lastDate: string;
-	    bars: number;
-	    lastClose: number;
-	    high52: number;
-	    low52: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new PriceLine(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.firstDate = source["firstDate"];
-	        this.lastDate = source["lastDate"];
-	        this.bars = source["bars"];
-	        this.lastClose = source["lastClose"];
-	        this.high52 = source["high52"];
-	        this.low52 = source["low52"];
-	    }
-	}
-	export class CompanyOverview {
-	    ticker: string;
-	    name: string;
-	    cik: string;
-	    sector: string;
-	    sicDescription: string;
-	    exchange: string;
-	    incorporated: string;
-	    formerNames: string[];
-	    price?: PriceLine;
-	    index: IndexSpan[];
-	    quality: string;
-	    qualityReason: string;
-	    notes: string[];
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new CompanyOverview(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ticker = source["ticker"];
-	        this.name = source["name"];
-	        this.cik = source["cik"];
-	        this.sector = source["sector"];
-	        this.sicDescription = source["sicDescription"];
-	        this.exchange = source["exchange"];
-	        this.incorporated = source["incorporated"];
-	        this.formerNames = source["formerNames"];
-	        this.price = this.convertValues(source["price"], PriceLine);
-	        this.index = this.convertValues(source["index"], IndexSpan);
-	        this.quality = source["quality"];
-	        this.qualityReason = source["qualityReason"];
-	        this.notes = source["notes"];
-	        this.error = source["error"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
-	export class EconReading {
-	    id: string;
-	    name: string;
-	    units: string;
-	    kind: string;
-	    period: string;
-	    periodEnd: string;
-	    value: number;
-	    prior: number;
-	    priorPeriod: string;
-	    hasPrior: boolean;
-	    change: number;
-	    yearChange: number;
-	    hasYearChange: boolean;
-	    published: string;
-	    publishedExact: boolean;
-	    nextRelease: string;
-	    releaseName: string;
-	    source: string;
-	    url: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new EconReading(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.units = source["units"];
-	        this.kind = source["kind"];
-	        this.period = source["period"];
-	        this.periodEnd = source["periodEnd"];
-	        this.value = source["value"];
-	        this.prior = source["prior"];
-	        this.priorPeriod = source["priorPeriod"];
-	        this.hasPrior = source["hasPrior"];
-	        this.change = source["change"];
-	        this.yearChange = source["yearChange"];
-	        this.hasYearChange = source["hasYearChange"];
-	        this.published = source["published"];
-	        this.publishedExact = source["publishedExact"];
-	        this.nextRelease = source["nextRelease"];
-	        this.releaseName = source["releaseName"];
-	        this.source = source["source"];
-	        this.url = source["url"];
-	    }
-	}
-	export class FOMCMeeting {
-	    dates: string;
-	    start: string;
-	    end: string;
-	    projections: boolean;
-	    note: string;
-	    upcoming: boolean;
-	    statementUrl: string;
-	    minutesUrl: string;
-	    minutesReleased: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FOMCMeeting(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.dates = source["dates"];
-	        this.start = source["start"];
-	        this.end = source["end"];
-	        this.projections = source["projections"];
-	        this.note = source["note"];
-	        this.upcoming = source["upcoming"];
-	        this.statementUrl = source["statementUrl"];
-	        this.minutesUrl = source["minutesUrl"];
-	        this.minutesReleased = source["minutesReleased"];
-	    }
-	}
-	export class EconomicCalendar {
-	    asOf: string;
-	    readings: EconReading[];
-	    meetings: FOMCMeeting[];
-	    hasReleaseKey: boolean;
-	    calendarUrl: string;
-	    notes: string[];
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new EconomicCalendar(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.asOf = source["asOf"];
-	        this.readings = this.convertValues(source["readings"], EconReading);
-	        this.meetings = this.convertValues(source["meetings"], FOMCMeeting);
-	        this.hasReleaseKey = source["hasReleaseKey"];
-	        this.calendarUrl = source["calendarUrl"];
-	        this.notes = source["notes"];
-	        this.error = source["error"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
 	export class FilingDocument {
 	    name: string;
 	    type: string;
@@ -1277,8 +907,6 @@ export namespace main {
 		    return a;
 		}
 	}
-	
-	
 	export class HoldingMapping {
 	    from: string;
 	    to: string;
@@ -1355,7 +983,6 @@ export namespace main {
 		    return a;
 		}
 	}
-	
 	export class LibraryTwin {
 	    file: string;
 	    rules: backtest.RulesConfig;
@@ -1404,7 +1031,6 @@ export namespace main {
 	        this.label = source["label"];
 	    }
 	}
-	
 	export class QueryResult {
 	    columns: string[];
 	    rows: string[][];
@@ -1423,9 +1049,25 @@ export namespace main {
 	        this.elapsedMs = source["elapsedMs"];
 	    }
 	}
+	export class ReaderSection {
+	    label: string;
+	    target: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReaderSection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.target = source["target"];
+	    }
+	}
 	export class ReaderDoc {
 	    url: string;
+	    html: string;
 	    text: string;
+	    contents: ReaderSection[];
 	    truncated: boolean;
 	    error: string;
 	
@@ -1436,11 +1078,32 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.url = source["url"];
+	        this.html = source["html"];
 	        this.text = source["text"];
+	        this.contents = this.convertValues(source["contents"], ReaderSection);
 	        this.truncated = source["truncated"];
 	        this.error = source["error"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+	
 	export class RulesReading {
 	    sentence: string;
 	    headline: string;
@@ -1614,13 +1277,9 @@ export namespace main {
 	export class WatchItem {
 	    ticker: string;
 	    when: string;
-	    kind: string;
 	    title: string;
 	    filing?: FilingRow;
 	    cik: string;
-	    timing: string;
-	    move: number;
-	    hasMove: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new WatchItem(source);
@@ -1630,13 +1289,9 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ticker = source["ticker"];
 	        this.when = source["when"];
-	        this.kind = source["kind"];
 	        this.title = source["title"];
 	        this.filing = this.convertValues(source["filing"], FilingRow);
 	        this.cik = source["cik"];
-	        this.timing = source["timing"];
-	        this.move = source["move"];
-	        this.hasMove = source["hasMove"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1659,7 +1314,6 @@ export namespace main {
 	}
 	export class WatchFeed {
 	    tickers: string[];
-	    upcoming: WatchItem[];
 	    recent: WatchItem[];
 	    since: string;
 	    notes: string[];
@@ -1672,7 +1326,6 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tickers = source["tickers"];
-	        this.upcoming = this.convertValues(source["upcoming"], WatchItem);
 	        this.recent = this.convertValues(source["recent"], WatchItem);
 	        this.since = source["since"];
 	        this.notes = source["notes"];

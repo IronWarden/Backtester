@@ -2,11 +2,10 @@ package main
 
 // The Research tab's watchlist and MY view (T142d): the companies a user
 // follows, kept in the per-user config directory (never the database, which
-// may be a shipped read-only file), and one feed of what they have filed and
-// reported, newest first.
+// may be a shipped read-only file), and one feed of what they have filed,
+// newest first.
 //
-// MY is CN and ERN run across the list: the same filings, labelled the same
-// way, and the same report dates with the same price move. Only events,
+// MY is CN run across the list: the same filings, labelled the same way. Only events,
 // reports and proxies are kept. Insider paperwork and securities offerings
 // bury everything else across a watchlist -- JPMorgan files structured-note
 // prospectuses by the hundred a day, and a live check found 6,500 of them in
@@ -44,7 +43,7 @@ var myKinds = map[string]bool{"event": true, "report": true, "proxy": true}
 const maxFeed = 300
 
 // myWindowDays is how far back MY looks: one quarter, so every company's
-// latest earnings and quarterly report are in it.
+// latest quarterly report is in it.
 const myWindowDays = 90
 
 type Watchlist struct {
@@ -132,30 +131,23 @@ func (a *App) SaveWatchlist(tickers []string) Watchlist {
 type WatchItem struct {
 	Ticker string `json:"ticker"`
 	// When sorts the feed: "2026-07-30 16:30", US Eastern.
-	When string `json:"when"`
-	// Kind is "filing" or "earnings".
-	Kind  string `json:"kind"`
+	When  string `json:"when"`
 	Title string `json:"title"`
 	// A filing's own fields, as CN has them, so the reader can open it.
 	Filing *FilingRow `json:"filing"`
 	CIK    string     `json:"cik"`
-	// An earnings report's move, as ERN measures it.
-	Timing  string  `json:"timing"`
-	Move    float64 `json:"move"`
-	HasMove bool    `json:"hasMove"`
 }
 
 type WatchFeed struct {
-	Tickers  []string    `json:"tickers"`
-	Upcoming []WatchItem `json:"upcoming"`
-	Recent   []WatchItem `json:"recent"`
-	Since    string      `json:"since"`
-	Notes    []string    `json:"notes"`
-	Error    string      `json:"error"`
+	Tickers []string    `json:"tickers"`
+	Recent  []WatchItem `json:"recent"`
+	Since   string      `json:"since"`
+	Notes   []string    `json:"notes"`
+	Error   string      `json:"error"`
 }
 
-// WatchlistFeed is MY: the last quarter's filings and earnings across the
-// tickers, newest first, and the earnings dates still to come.
+// WatchlistFeed is MY: the last quarter's filings across the tickers, newest
+// first.
 func (a *App) WatchlistFeed(dbPath string, tickers []string) WatchFeed {
 	return watchFeed(dbPath, tickers, secClient(), time.Now())
 }
@@ -163,8 +155,7 @@ func (a *App) WatchlistFeed(dbPath string, tickers []string) WatchFeed {
 func watchFeed(dbPath string, tickers []string, c *edgar.Client, now time.Time) WatchFeed {
 	tickers = normalizeWatchlist(tickers)
 	since := now.AddDate(0, 0, -myWindowDays)
-	out := WatchFeed{Tickers: tickers, Upcoming: []WatchItem{}, Recent: []WatchItem{},
-		Since: fmtDay(since), Notes: []string{}}
+	out := WatchFeed{Tickers: tickers, Recent: []WatchItem{}, Since: fmtDay(since), Notes: []string{}}
 	if len(tickers) == 0 {
 		return out
 	}
@@ -174,33 +165,7 @@ func watchFeed(dbPath string, tickers []string, c *edgar.Client, now time.Time) 
 	}
 	sinceKey := since.Format("2006-01-02")
 
-	// The database first, one ticker at a time: earnings, and each company's
-	// CIK for EDGAR.
-	for _, t := range tickers {
-		dates, err := data.LoadEarningsDates(t)
-		if err != nil {
-			out.Notes = append(out.Notes, t+": earnings dates could not be read: "+err.Error())
-			continue
-		}
-		if dates == nil {
-			continue
-		}
-		closes, err := data.LoadCloses(t)
-		if err != nil {
-			out.Notes = append(out.Notes, t+": prices could not be read: "+err.Error())
-			continue
-		}
-		for _, r := range data.EarningsReactions(dates, closes, now) {
-			item := WatchItem{Ticker: t, When: r.Reported.Format("2006-01-02 15:04"), Kind: "earnings",
-				Title: "Earnings report", Timing: r.Timing, Move: r.Move, HasMove: !r.ToDate.IsZero()}
-			switch {
-			case r.Upcoming:
-				out.Upcoming = append(out.Upcoming, item)
-			case item.When >= sinceKey:
-				out.Recent = append(out.Recent, item)
-			}
-		}
-	}
+	// Each company's CIK, from the database, finds it on EDGAR.
 	profiles, err := data.LoadCompanyProfiles(tickers)
 	switch {
 	case err != nil:
@@ -255,7 +220,7 @@ func watchFeed(dbPath string, tickers []string, c *edgar.Client, now time.Time) 
 			if when < sinceKey {
 				continue
 			}
-			out.Recent = append(out.Recent, WatchItem{Ticker: r.ticker, When: when, Kind: "filing",
+			out.Recent = append(out.Recent, WatchItem{Ticker: r.ticker, When: when,
 				Title: f.Title, Filing: &r.view.Filings[i], CIK: r.view.CIK})
 		}
 	}
@@ -269,6 +234,5 @@ func watchFeed(dbPath string, tickers []string, c *edgar.Client, now time.Time) 
 		out.Recent = out.Recent[:maxFeed]
 		out.Notes = append(out.Notes, fmt.Sprintf("Showing the newest %d items; open a company's CN for the rest.", maxFeed))
 	}
-	sort.SliceStable(out.Upcoming, func(i, j int) bool { return out.Upcoming[i].When < out.Upcoming[j].When })
 	return out
 }

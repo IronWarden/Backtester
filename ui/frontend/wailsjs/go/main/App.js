@@ -14,20 +14,8 @@ export function CheckLuaScript(arg1, arg2, arg3) {
   return window['go']['main']['App']['CheckLuaScript'](arg1, arg2, arg3);
 }
 
-export function CompanyEarnings(arg1, arg2) {
-  return window['go']['main']['App']['CompanyEarnings'](arg1, arg2);
-}
-
 export function CompanyFilings(arg1, arg2) {
   return window['go']['main']['App']['CompanyFilings'](arg1, arg2);
-}
-
-export function CompanyFinancials(arg1, arg2, arg3) {
-  return window['go']['main']['App']['CompanyFinancials'](arg1, arg2, arg3);
-}
-
-export function CompanyOverview(arg1, arg2) {
-  return window['go']['main']['App']['CompanyOverview'](arg1, arg2);
 }
 
 export function CriterionMetrics() {
@@ -40,10 +28,6 @@ export function DatabaseNotice(arg1) {
 
 export function DefaultDBPath() {
   return window['go']['main']['App']['DefaultDBPath']();
-}
-
-export function EconomicReleases(arg1) {
-  return window['go']['main']['App']['EconomicReleases'](arg1);
 }
 
 export function FileExists(arg1) {

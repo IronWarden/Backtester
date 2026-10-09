@@ -5,9 +5,11 @@ package main
 // text. See src/edgar for the client and the rules it keeps.
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"my-backtester/src/data"
 	"my-backtester/src/edgar"
@@ -155,21 +157,62 @@ func (a *App) FilingDocuments(cik, accession string) FilingDocuments {
 }
 
 type ReaderDoc struct {
-	URL       string `json:"url"`
-	Text      string `json:"text"`
-	Truncated bool   `json:"truncated"`
-	Error     string `json:"error"`
+	URL string `json:"url"`
+	// HTML is the filing as sec.gov shows it, sanitized (edgar.RenderHTML);
+	// Text is set instead for plain-text and XML documents.
+	HTML      string          `json:"html"`
+	Text      string          `json:"text"`
+	Contents  []ReaderSection `json:"contents"`
+	Truncated bool            `json:"truncated"`
+	Error     string          `json:"error"`
 }
 
-// ReadFiling fetches one SEC filing document and returns it as clean text.
-// Only www.sec.gov/Archives/ URLs are fetched.
+// ReaderSection is one entry of the document's own table of contents.
+type ReaderSection struct {
+	Label  string `json:"label"`
+	Target string `json:"target"`
+}
+
+// ReadFiling fetches one SEC filing document and returns it ready to show:
+// its own HTML, tables and table of contents intact, for a web page; clean
+// text for anything else. Only www.sec.gov/Archives/ URLs are fetched.
 func (a *App) ReadFiling(url string) ReaderDoc {
-	out := ReaderDoc{URL: url}
-	text, truncated, err := secClient().Read(url)
+	r, err := secClient().Render(url)
 	if err != nil {
-		out.Error = err.Error()
-		return out
+		return ReaderDoc{URL: url, Contents: []ReaderSection{}, Error: err.Error()}
 	}
-	out.Text, out.Truncated = text, truncated
+	return readerDoc(url, r)
+}
+
+func readerDoc(url string, r edgar.Rendered) ReaderDoc {
+	out := ReaderDoc{URL: url, HTML: r.HTML, Text: r.Text, Truncated: r.Truncated,
+		Contents: []ReaderSection{}}
+	for _, s := range r.Contents {
+		out.Contents = append(out.Contents, ReaderSection{Label: s.Label, Target: s.Target})
+	}
 	return out
+}
+
+const dayFmt = "2006-01-02"
+
+// Dates cross the wire as strings, not time.Time (see T96): a filing date has
+// no use for a time zone the frontend would have to guess at.
+func fmtDay(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(dayFmt)
+}
+
+// normTicker is how the Research tab reads a typed symbol.
+func normTicker(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
+
+func openForResearch(dbPath string) string {
+	if dbPath == "" {
+		return "Choose a database first (the database chip in the top bar)."
+	}
+	if _, err := data.InitDB(dbPath); err != nil {
+		return fmt.Sprintf("Could not open %s: %v", dbPath, err)
+	}
+	return ""
 }

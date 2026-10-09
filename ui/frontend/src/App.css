@@ -32,6 +32,12 @@
   --neg-line: rgba(228, 104, 118, 0.32);
   --warn-soft: rgba(255, 158, 59, 0.12);
   --tool: #7aa89f;
+  /* A filing is printed matter: its own markup sets black text in inline
+     styles, so the reader shows it on white paper in every theme, as sec.gov
+     does. The only place these are used. */
+  --paper: #ffffff;
+  --paper-ink: #000000;
+  --paper-link: #0000ee;
 
   /* Type scale. Every size in the app is one of these, in em, so Ctrl+scroll
      scales all of it — the invariant this file's header claims and which the
@@ -2906,15 +2912,97 @@ td.num.dim {
   font-variant-numeric: tabular-nums;
 }
 
-/* Research tab (T142a). A command line on top, a plain reading view under it:
-   the content is facts with their dates, so the layout stays out of the way. */
+/* Research tab (T142a). A command line on top and, filling the rest of the
+   window, the panes under it: each scrolls by itself, so the command line,
+   the list and the open filing all stay in view. */
+.research-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-page);
+}
+
 .research {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   max-width: 68em;
   margin: 0 auto;
-  padding: 1.25em 1.25em 2em;
+  padding: 1.25em 1.25em 1em;
   display: flex;
   flex-direction: column;
   gap: 0.8em;
+}
+
+.research > * {
+  flex: none;
+}
+
+.research > .research-empty {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* The panes: the list alone, or the list and the reader with a bar between
+   them to drag. */
+.research > .research-stage {
+  /* The list's width; the pane sets the dragged one inline. */
+  --list-w: 30em;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.research-list-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.research-stage.split .research-list-pane {
+  flex: none;
+  width: var(--list-w);
+  max-width: 60%;
+}
+
+/* Inside a pane the view fills it, and its table takes what the title,
+   filters and caption leave, scrolling under its own header. */
+.research-list-pane > .research-view {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.research-list-pane .research-view > *,
+.research-list-pane .research-section > * {
+  flex: none;
+}
+
+.research-list-pane .research-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+.research-list-pane .rt-wrap {
+  flex: 0 1 auto;
+  min-height: 6em;
+  max-height: none;
+}
+
+/* Between two panes: the assistant panel's handle, on the page. */
+.research-splitter {
+  width: 9px;
+  margin: 0 0.25em;
+  background: transparent;
+  border-left: none;
+  border-radius: var(--radius-xs);
 }
 
 .research-bar {
@@ -2967,22 +3055,6 @@ td.num.dim {
   margin-left: 0.4em;
 }
 
-.research-facts {
-  margin: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.35em 1em;
-  font-size: var(--fs-m);
-}
-
-.research-facts dt {
-  color: var(--text-3);
-}
-
-.research-facts dd {
-  margin: 0;
-}
-
 .research-section h3 {
   margin: 0 0 0.3em;
   font-size: var(--fs-m);
@@ -3000,7 +3072,6 @@ td.num.dim {
   font-size: var(--fs-s);
 }
 
-.research-list,
 .research-notes {
   margin: 0;
   padding-left: 1.2em;
@@ -3050,17 +3121,27 @@ td.num.dim {
   text-align: left;
 }
 
-/* CN: the filings list and, once one is open, the reader beside it. */
-.cn-split {
-  display: grid;
-  grid-template-columns: minmax(18em, 2fr) 3fr;
-  gap: 1em;
-  align-items: start;
+/* A filing open is the focus: the view takes the window's full width and
+   the reader the space the list leaves it. */
+.research.reading {
+  max-width: none;
 }
 
-@media (max-width: 900px) {
-  .cn-split {
-    grid-template-columns: 1fr;
+/* A narrow window stacks the panes: the list on top, the reader under it. */
+@media (max-width: 800px) {
+  .research-stage.split {
+    flex-direction: column;
+  }
+  .research-stage.split .research-list-pane {
+    width: auto;
+    max-width: none;
+    flex: 0 0 38%;
+  }
+  .research-stage.split > .research-splitter {
+    display: none;
+  }
+  .research-stage.split > .reader {
+    padding-top: 0.6em;
   }
 }
 
@@ -3079,13 +3160,69 @@ td.num.dim {
   flex-direction: column;
   gap: 0.6em;
   min-width: 0;
+  min-height: 0;
+}
+
+.research-stage > .reader {
+  flex: 1;
+}
+
+.reader > * {
+  flex: none;
+}
+
+/* A filing with many exhibits keeps its document picker to a few rows. */
+.reader > .research-toggle {
+  max-height: 5.5em;
+  overflow-y: auto;
+}
+
+.reader-foot {
+  margin: 0;
 }
 
 .reader-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.6em;
+  cursor: default;
+  user-select: none;
+}
+
+.reader-head-spacer {
+  flex: 1;
+}
+
+.reader-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.reader-zoom .research-dim {
+  min-width: 3.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Maximised: the reader fills the window like a maximised results window,
+   between the top bar and the status bar. */
+.reader.max {
+  position: fixed;
+  inset: 3.6em 1em 2.4em 1em;
+  z-index: 50;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  padding: 0.8em 1em;
+}
+
+.reader > .reader-text,
+.reader > .reader-body {
+  flex: 1;
+  min-height: 0;
 }
 
 .reader-text {
@@ -3095,7 +3232,6 @@ td.num.dim {
   font-family: inherit;
   font-size: var(--fs-m);
   line-height: 1.55;
-  max-height: 40em;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
@@ -3103,17 +3239,102 @@ td.num.dim {
   color: var(--text-1);
 }
 
-/* ECO (T142c) */
-
-.eco-badge {
-  display: inline-block;
-  margin-left: 0.5em;
-  font-size: var(--fs-s);
-  color: var(--text-2);
+/* The filing as sec.gov shows it: its own HTML on paper, with the document's
+   table of contents beside it, as wide as the user drags it. */
+.reader-body {
+  /* The contents column's width; the reader sets the dragged one inline. */
+  --contents-w: 15em;
+  display: flex;
 }
 
-.eco-badge.stale {
-  color: var(--accent-strong);
+@media (max-width: 800px) {
+  .reader-body {
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  .reader-body > .reader-contents {
+    width: auto;
+    max-width: none;
+    max-height: 10em;
+  }
+  .reader-body > .research-splitter {
+    display: none;
+  }
+}
+
+.reader-contents {
+  flex: none;
+  width: var(--contents-w);
+  max-width: 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 0.5em;
+  background: var(--bg-inset);
+}
+
+.reader-contents-head {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  padding: 0.2em 0.4em 0.4em;
+}
+
+.reader-contents button {
+  all: unset;
+  cursor: pointer;
+  font-size: var(--fs-s);
+  line-height: 1.35;
+  color: var(--text-2);
+  padding: 0.3em 0.4em;
+  border-radius: var(--radius-xs);
+}
+
+.reader-contents button.part {
+  color: var(--text-1);
+  font-weight: 600;
+  margin-top: 0.4em;
+}
+
+.reader-contents button:hover,
+.reader-contents button:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.reader-paper {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-1);
+  padding: 2.5em 3em;
+  /* Filings set their own fonts and sizes inline; these are the defaults
+     sec.gov's own pages fall back to. */
+  font-family: "Times New Roman", Times, serif;
+  font-size: 10pt;
+  line-height: normal;
+  text-align: left;
+}
+
+.reader-paper table {
+  border-collapse: collapse;
+}
+
+.reader-paper a {
+  color: var(--paper-link);
+  text-decoration: underline;
+}
+
+.reader-paper img {
+  max-width: 100%;
 }
 
 /* MY (T142d) */
@@ -3215,87 +3436,3 @@ th[aria-sort="descending"] .rt-arrow {
   color: var(--accent-strong);
 }
 
-.rt-tag {
-  display: inline-block;
-  padding: 0.05em 0.5em;
-  border-radius: 999px;
-  font-size: var(--fs-s);
-  background: var(--bg-raised);
-  color: var(--text-2);
-}
-
-.rt-tag.tag-after {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-}
-
-.rt-tag.tag-before {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.rt-move {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5em;
-  min-width: 9em;
-}
-
-.rt-bar {
-  display: inline-block;
-  width: 4em;
-  height: 0.45em;
-  border-radius: 999px;
-  background: var(--bg-raised);
-  overflow: hidden;
-}
-
-.rt-bar > span {
-  display: block;
-  height: 100%;
-  background: currentColor;
-  opacity: 0.7;
-}
-
-.rt-next {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.7em;
-  padding: 0.6em 0.9em;
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius-s);
-  background: var(--accent-soft);
-}
-
-.rt-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6em;
-}
-
-.rt-stats > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15em;
-  padding: 0.5em 0.9em;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: var(--bg-card);
-  min-width: 9em;
-}
-
-.rt-stats > div > span {
-  font-size: var(--fs-s);
-}
-
-.rt-stats strong {
-  font-size: var(--fs-l);
-  font-variant-numeric: tabular-nums;
-}
-
-.rt-dir {
-  font-size: var(--fs-xs);
-  color: var(--text-3);
-}

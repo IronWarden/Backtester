@@ -9,21 +9,13 @@ export function CheckConfig(arg1:string,arg2:string):Promise<main.RunOutput>;
 
 export function CheckLuaScript(arg1:string,arg2:string,arg3:string):Promise<main.RunOutput>;
 
-export function CompanyEarnings(arg1:string,arg2:string):Promise<main.CompanyEarnings>;
-
 export function CompanyFilings(arg1:string,arg2:string):Promise<main.CompanyFilings>;
-
-export function CompanyFinancials(arg1:string,arg2:string,arg3:string):Promise<main.CompanyFinancials>;
-
-export function CompanyOverview(arg1:string,arg2:string):Promise<main.CompanyOverview>;
 
 export function CriterionMetrics():Promise<Array<string>>;
 
 export function DatabaseNotice(arg1:string):Promise<string>;
 
 export function DefaultDBPath():Promise<string>;
-
-export function EconomicReleases(arg1:string):Promise<main.EconomicCalendar>;
 
 export function FileExists(arg1:string):Promise<boolean>;
 

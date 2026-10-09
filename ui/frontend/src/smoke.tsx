@@ -82,15 +82,11 @@ import {
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
 import { ResearchTable, nextSort, sortRows, type Column, type Sort } from "./ResearchTable";
-import { barWidth, countdown, fmtDate, fmtShortDate, fmtTime, moveSummary, timingTag } from "./researchFormat";
-import Research, { DesView, EcoView, ErnView, FaView, FilingsView, MyView, ReaderView, SearchView, edgarURL } from "./Research";
+import { fmtDate } from "./researchFormat";
+import Research, { FilingsView, MyView, ReaderView, ResearchPanes, SearchView } from "./Research";
 import {
     filterFilings,
     firstDocument,
-    formatEcoChange,
-    formatEcoValue,
-    formatFigure,
-    formatMove,
     holdingsToAdd,
     parseResearchCommand,
     resolveQuery,
@@ -2370,19 +2366,22 @@ check("a library card offers its twin as rules", () => {
 
 
 // ---------------------------------------------------------------------------
-// The Research tab (T142a). Fixtures are the bindings' real output on a
-// scratch database (ui/research_test.go).
+// The Research tab (T142a): filings only. Fixtures are the bindings' real
+// output (ui/filings_test.go, ui/watchlist_test.go, ui/search_test.go).
 
 const fixture = <T,>(name: string): T =>
     JSON.parse(readFileSync(join(testdata, `${name}.json`), "utf8")) as T;
 
 check("research commands read like a terminal's", () => {
-    eq("bare ticker", parseResearchCommand("aapl"), { query: "aapl", fn: "DES" });
-    eq("ticker then fn", parseResearchCommand("  AAPL   fa "), { query: "AAPL", fn: "FA" });
-    eq("fn first", parseResearchCommand("ern MSFT"), { query: "MSFT", fn: "ERN" });
-    eq("a name", parseResearchCommand("apple inc fa"), { query: "apple inc", fn: "FA" });
+    eq("bare ticker", parseResearchCommand("aapl"), { query: "aapl", fn: "CN" });
+    eq("ticker then fn", parseResearchCommand("  AAPL   cn "), { query: "AAPL", fn: "CN" });
+    eq("fn first", parseResearchCommand("cn MSFT"), { query: "MSFT", fn: "CN" });
+    eq("a name", parseResearchCommand("apple inc"), { query: "apple inc", fn: "CN" });
     // A lone code is a symbol, not a function with nothing to look up.
-    eq("lone code", parseResearchCommand("FA"), { query: "FA", fn: "DES" });
+    eq("lone code", parseResearchCommand("CN"), { query: "CN", fn: "CN" });
+    // The removed functions are words of a name now, not functions.
+    eq("no FA", parseResearchCommand("AAPL FA"), { query: "AAPL FA", fn: "CN" });
+    eq("no ECO", parseResearchCommand("ECO"), { query: "ECO", fn: "CN" });
     eq("empty", parseResearchCommand("   "), null);
     const pool = ["AAPL", "MSFT"];
     const names = { AAPL: "Apple Inc.", MSFT: "Microsoft Corp" };
@@ -2390,68 +2389,6 @@ check("research commands read like a terminal's", () => {
     eq("listed symbol", resolveQuery("msft", pool, search), "MSFT");
     eq("by name", resolveQuery("apple", pool, search), "AAPL");
     eq("no pool yet", resolveQuery("zzz", [], search), "ZZZ");
-});
-
-check("figures read as money, per-share and share counts", () => {
-    eq("revenue", formatFigure("Total Revenue", 416161000000), "$416.16B");
-    eq("loss", formatFigure("Net Income", -1.5e9), "−$1.50B");
-    eq("eps", formatFigure("Diluted EPS", 6.42), "$6.42");
-    eq("shares", formatFigure("Diluted Average Shares", 15.4e9), "15.40B");
-    eq("move up", formatMove(0.0324), "+3.24%");
-    eq("move down", formatMove(-0.025), "−2.50%");
-});
-
-check("DES shows what the company is, with every date", () => {
-    const d = fixture<main.CompanyOverview>("research-des");
-    const html = renderToString(<DesView d={d} />).replace(/<!-- -->/g, "").replace(/&amp;/g, "&");
-    for (const want of ["Acme Corp", "ACME", "Electronic Computers", "Nasdaq", "121.00",
-        "Last close · Jan 29, 2025", "52-week high (close)", "Sessions since Jan 27, 2025", "not a live quote", "A member at least since 2011-01-03",
-        "Filings on EDGAR", "add_data_quality.py"]) {
-        if (!html.includes(want)) throw new Error(`DES lacks ${want}:\n${html}`);
-    }
-    if (!edgarURL("0000320193").startsWith("https://www.sec.gov/")) {
-        throw new Error("the EDGAR link is not to sec.gov");
-    }
-    // A ticker the database knows nothing about still renders.
-    renderToString(<DesView d={main.CompanyOverview.createFrom({ ticker: "ZZZ", formerNames: [],
-        index: [], notes: ["ZZZ has no price history in this database."] })} />);
-});
-
-check("FA shows first-filed figures, gaps as a dash, filing dates on hover", () => {
-    const f = fixture<main.CompanyFinancials>("research-fa");
-    const html = renderToString(<FaView f={f} onFrequency={noop} />).replace(/<!-- -->/g, "");
-    for (const want of ["ACME CORP", "Dec 31, 2024", "$420.00B", "−$1.50B", "$6.42",
-        "Filed Feb 14, 2025 in a 10-K", "as first filed", "Quarterly", "rt-sort"]) {
-        if (!html.includes(want)) throw new Error(`FA lacks ${want}:\n${html}`);
-    }
-    if (!html.includes(">—<")) throw new Error("a missing figure is not shown as a dash");
-    const none = renderToString(<FaView f={main.CompanyFinancials.createFrom({ ticker: "ACME",
-        frequency: "annual", periods: [], rows: [], notes: ["No SEC financials in this database."] })}
-        onFrequency={noop} />);
-    if (none.includes("<table") || !none.includes("No SEC financials")) {
-        throw new Error("an empty FA must say why, without an empty table");
-    }
-});
-
-check("ERN shows each report and the move across it, as a sortable table", () => {
-    const e = fixture<main.CompanyEarnings>("research-ern");
-    const html = renderToString(<ErnView e={e} />).replace(/<!-- -->/g, "");
-    for (const want of ["Jan 28, 2025", "4:00 pm", "After close", "+10.00%",
-        "Jan 28 close → Jan 29 close", "Average move", "10.00%", 'aria-sort="descending"', "rt-bar"]) {
-        if (!html.includes(want)) throw new Error(`ERN lacks ${want}:\n${html}`);
-    }
-    const upcoming = renderToString(<ErnView today={new Date(2099, 0, 6)} e={main.CompanyEarnings.createFrom({
-        ticker: "ACME", notes: [], reports: [
-            { reported: "2099-01-28 16:00", timing: "after close", from: "", to: "", move: 0,
-                hasMove: false, upcoming: true },
-            { reported: "2098-10-28 08:00", timing: "before open", from: "2098-10-27", to: "2098-10-28",
-                move: -0.04, hasMove: true, upcoming: false },
-        ] })} />).replace(/<!-- -->/g, "");
-    for (const want of ["Next report", "Jan 28, 2099", "in 22 days", "Before open", "−4.00%"]) {
-        if (!upcoming.includes(want)) throw new Error(`ERN lacks ${want}:\n${upcoming}`);
-    }
-    // The upcoming report is the panel, not a row with no move.
-    if ((upcoming.match(/Jan 28, 2099/g) ?? []).length !== 1) throw new Error("upcoming report listed twice");
 });
 
 check("research tables sort by any column, blanks last, ties stable", () => {
@@ -2482,31 +2419,19 @@ check("research tables sort by any column, blanks last, ties stable", () => {
     }
 });
 
-check("research dates, times and countdowns read as words", () => {
+check("research dates read as words", () => {
     eq("date", fmtDate("2026-07-30"), "Jul 30, 2026");
     eq("date of a time", fmtDate("2026-07-30 16:30"), "Jul 30, 2026");
-    eq("short", fmtShortDate("2026-01-05"), "Jan 5");
-    eq("pm", fmtTime("2026-07-30 16:30"), "4:30 pm");
-    eq("am", fmtTime("2026-07-30 08:05"), "8:05 am");
-    eq("noon", fmtTime("2026-07-30 12:00"), "12:00 pm");
-    eq("midnight", fmtTime("2026-07-30 00:15"), "12:15 am");
-    eq("no time", fmtTime("2026-07-30"), "");
     eq("not a date", fmtDate("soon"), "soon");
-    const today = new Date(2026, 9, 7, 23, 30);
-    eq("today", countdown("2026-10-07", today), "today");
-    eq("tomorrow", countdown("2026-10-08 06:00", today), "tomorrow");
-    eq("ahead", countdown("2026-10-29", today), "in 22 days");
-    eq("behind", countdown("2026-10-01", today), "6 days ago");
-    eq("across a month", countdown("2026-11-01", new Date(2026, 9, 31)), "tomorrow");
-    eq("tag", timingTag("before open").label, "Before open");
-    eq("bar", barWidth(-0.05, 0.1), 50);
-    eq("summary", moveSummary([0.5, -0.25, 0.75]), { avgAbs: 0.5, up: 2, down: 1 });
 });
 
 check("the Research tab explains itself before the first lookup", () => {
     const html = renderToString(<Research dbPath="x.db" />).replace(/<!-- -->/g, "");
-    for (const want of ["DES", "FA", "ERN", "CN", "primary data", "e.g. AAPL CN"]) {
+    for (const want of ["CN", "MY", "SEC filings", "e.g. AAPL", "straight from SEC EDGAR"]) {
         if (!html.includes(want)) throw new Error(`empty Research lacks ${want}`);
+    }
+    for (const gone of ["DES", "ERN", "ECO", "Financials", "Economy", "earnings"]) {
+        if (html.includes(gone)) throw new Error(`Research still offers ${gone}`);
     }
     if (!renderToString(<Research dbPath="" />).includes("Choose a database first")) {
         throw new Error("no database must say so");
@@ -2540,7 +2465,7 @@ check("CN leaves insider paperwork out by default", () => {
     if (html.includes("Insider transaction")) throw new Error("the default list shows Form 4s");
 });
 
-check("an earnings 8-K opens on its press release, read as clean text", () => {
+check("an earnings 8-K opens on its press release, laid out as sec.gov shows it", () => {
     const docs = fixture<main.FilingDocuments>("research-docs").documents;
     eq("8-K opens EX-99.1", firstDocument(docs, "8-K")?.type, "EX-99.1");
     eq("10-K opens itself", firstDocument([{ type: "EX-21" }, { type: "10-K" }], "10-K")?.type, "10-K");
@@ -2551,86 +2476,87 @@ check("an earnings 8-K opens on its press release, read as clean text", () => {
     const doc = fixture<main.ReaderDoc>("research-reader");
     const html = renderToString(<ReaderView filing={filing} docs={docs} doc={doc}
         loading={false} onOpen={noop} />).replace(/<!-- -->/g, "");
+    // The filing's own markup, tables and inline styles included, on paper.
     for (const want of ["Earnings results", "filed Jul 30, 2026", "On sec.gov",
-        "EX-99.1", "Apple reports third quarter results", "reader-text"]) {
+        "EX-99.1", "Apple reports third quarter results", "reader-paper", "<table",
+        "its own layout and tables"]) {
         if (!html.includes(want)) throw new Error(`reader lacks ${want}`);
     }
-    for (const never of ["<script", "font-family:", "&amp;nbsp;"]) {
+    for (const never of ["<script", "<ix:", "&amp;nbsp;", "reader-text", "reader-contents"]) {
         if (html.includes(never)) throw new Error(`reader carries ${never}`);
     }
     const failed = renderToString(<ReaderView filing={filing} docs={[]} loading={false}
-        onOpen={noop} doc={main.ReaderDoc.createFrom({ url: "x", text: "", truncated: false,
-            error: "EDGAR did not answer" })} />);
+        onOpen={noop} doc={main.ReaderDoc.createFrom({ url: "x", html: "", text: "", contents: [],
+            truncated: false, error: "EDGAR did not answer" })} />);
     if (!failed.includes("EDGAR did not answer")) throw new Error("a failed read is not explained");
+    if (failed.includes("reader-paper")) throw new Error("a failed read shows an empty page");
 });
 
-// ECO (T142c): FRED's CSVs and the Fed's meeting calendar, recorded
-// 2026-10-07 in src/econ/testdata and passed through the binding by
-// ui/eco_test.go, with no FRED API key.
-
-check("ECO needs no ticker, and a lone ECO is the function", () => {
-    eq("lone", parseResearchCommand("eco"), { query: "", fn: "ECO" });
-    eq("the ticker ECO", parseResearchCommand("ECO DES"), { query: "ECO", fn: "DES" });
-    eq("rate", formatEcoValue("rate", "%", 3.75), "3.75%");
-    eq("rate change", formatEcoChange("rate", "%", 0.1000000001), "+0.1 pt");
-    eq("rate fall", formatEcoChange("rate", "%", -0.25), "−0.25 pt");
-    eq("index change", formatEcoChange("index", "index", 0.00396), "+0.40%");
-    eq("payrolls", formatEcoValue("count", "thousands of jobs", 159044), "159.0M");
-    eq("payrolls change", formatEcoChange("count", "thousands of jobs", 29), "+29.0K");
-    eq("payrolls loss", formatEcoChange("count", "thousands of jobs", -1250), "−1.3M");
-    eq("money", formatEcoValue("index", "billions of dollars", 23342.8), "$23.34T");
-    eq("flat", formatEcoChange("rate", "%", 0), "unchanged");
+check("a 10-Q opens with its own table of contents beside it", () => {
+    const c = fixture<main.CompanyFilings>("research-cn");
+    const filing = c.filings[0];
+    const doc = fixture<main.ReaderDoc>("research-reader-10q");
+    const html = renderToString(<ReaderView filing={filing} docs={[]} doc={doc}
+        loading={false} onOpen={noop} />).replace(/<!-- -->/g, "");
+    for (const want of ['aria-label="Table of contents"', "Top of document",
+        'class="part"', "Item 1A. Risk Factors", "Item 6. Exhibits",
+        "Net sales", 'href="#sec-', "the contents link to each part",
+        // Larger than print by default, adjustable; the bar maximises.
+        'aria-label="Text size"', "130%", "zoom:1.3", 'aria-label="Maximise reader"',
+        "Double-click to maximise",
+        // The contents column is as wide as it is dragged, and can be hidden.
+        'role="separator"', 'aria-label="Contents"', "--contents-w:15em", 'aria-pressed="true"']) {
+        if (!html.includes(want)) throw new Error(`10-Q reader lacks ${want}`);
+    }
+    // Plain-text filings (pre-2001 .txt) keep the text reader.
+    const txt = renderToString(<ReaderView filing={filing} docs={[]} loading={false}
+        onOpen={noop} doc={main.ReaderDoc.createFrom({ url: "x", html: "", text: "QUARTERLY REPORT",
+            contents: [], truncated: false, error: "" })} />);
+    if (!txt.includes("reader-text") || txt.includes("reader-paper")) {
+        throw new Error("a text filing is not shown as text");
+    }
+    if (txt.includes("Text size")) throw new Error("a text filing offers a zoom it does not apply");
 });
 
-check("ECO shows each reading with its period, publication and source", () => {
-    const e = fixture<main.EconomicCalendar>("research-eco");
-    const html = renderToString(<EcoView e={e} today={new Date(2026, 9, 7)} />).replace(/<!-- -->/g, "")
-        .replace(/&amp;/g, "&").replace(/&#x27;/g, "'");
-    for (const want of ["The economy", "Unemployment rate", "4.2%", "Sep 2026", "vs Aug 2026", "▲ ",
-        "Consumer prices (CPI)", "Real GDP growth (annualized)", "Q2 2026", "Official statistic",
-        "≈ Oct 5, 2026", "Estimated from the release's usual timing", "FRED_API_KEY",
-        "FOMC meetings", "Sep 15–16, 2026", "✓ dot plot", "Statement ↗", "held",
-        "Oct 27–28, 2026", "next · in 20 days", "in 62 days", "Calendar on federalreserve.gov"]) {
-        if (!html.includes(want)) throw new Error(`ECO lacks ${want}`);
+check("research panes fit side by side, the bar between them draggable", () => {
+    const list = <p>the list</p>;
+    const alone = renderToString(<ResearchPanes list={list} reader={null} />);
+    if (!alone.includes("research-list-pane") || alone.includes("split") || alone.includes("separator")) {
+        throw new Error("the list alone has a bar to drag");
     }
-    // Two sortable tables; meetings in date order.
-    eq("tables", (html.match(/<table/g) ?? []).length, 2);
-    if (html.indexOf("Jun 16–17, 2026") > html.indexOf("Mar 16–17, 2027")) throw new Error("meetings out of order");
-    // FRED unreachable for one series, and no calendar: the rest still shows.
-    const partial = main.EconomicCalendar.createFrom({ ...e, meetings: [],
-        readings: [{ ...e.readings[0], source: "database", publishedExact: true,
-            published: "2026-03-11", nextRelease: "2026-10-15" }],
-        notes: ["FOMC meetings could not be read: The Federal Reserve answered 403 Forbidden."] });
-    const p = renderToString(<EcoView e={partial} />).replace(/<!-- -->/g, "");
-    for (const want of ["Database copy", "Mar 11, 2026", "Oct 15, 2026", "could not be read"]) {
-        if (!p.includes(want)) throw new Error(`partial ECO lacks ${want}`);
+    const both = renderToString(<ResearchPanes list={list} reader={<div className="reader">r</div>} />);
+    for (const want of ['class="research-stage split"', "--list-w:30em", "research-list-pane",
+        'role="separator"', 'aria-label="Filings list"', "double-click to reset", 'class="reader"']) {
+        if (!both.includes(want)) throw new Error(`split panes lack ${want}`);
     }
-    if (p.includes("FOMC meetings</h3>") || p.includes("≈ Mar 11, 2026")) {
-        throw new Error("partial ECO shows a section it has no data for, or estimates an exact date");
-    }
+    // The list sits in the same place either way, so opening a filing keeps
+    // its sort and scroll.
+    if (both.indexOf("research-list-pane") > both.indexOf("separator")) throw new Error("the list moved");
 });
 
-// MY (T142d): the recorded Apple filings and a scratch database's earnings,
-// passed through the binding by ui/watchlist_test.go.
+// MY (T142d): the recorded Apple filings, passed through the binding by
+// ui/watchlist_test.go.
 
-check("MY merges a watchlist's filings and earnings, newest first", () => {
+check("MY lists a watchlist's filings, newest first", () => {
     eq("lone", parseResearchCommand("my"), { query: "", fn: "MY" });
-    eq("the ticker MY", parseResearchCommand("MY DES"), { query: "MY", fn: "DES" });
+    eq("the ticker MY", parseResearchCommand("MY CN"), { query: "MY", fn: "CN" });
     eq("offer", holdingsToAdd(["aapl", "NVDA", "nvda", " "], ["AAPL"]), ["NVDA"]);
     eq("nothing new", holdingsToAdd(["AAPL"], ["AAPL"]), []);
 
     const feed = fixture<main.WatchFeed>("research-my");
     const html = renderToString(<MyView feed={feed} holdings={["AAPL", "NVDA"]} onChange={noop}
-        selected="0000320193-26-000018" onSelect={noop} today={new Date(2026, 9, 7)} />)
+        selected="0000320193-26-000018" onSelect={noop} />)
         .replace(/<!-- -->/g, "").replace(/&#x27;/g, "'");
     for (const want of ["My watchlist", "Remove AAPL", "Add the form’s holdings (1)",
-        "Upcoming earnings", "Oct 29, 2026", "4:30 pm", "in 22 days", "After close",
-        "Recent earnings", "+5.00%", "rt-bar", "Filings", "Jul 31, 2026", "Quarterly report",
+        "Filings", "Jul 31, 2026", "Quarterly report",
         "Earnings results", "rt-click active", "Since Jul 9, 2026", "No SEC filer under ZZZZ"]) {
         if (!html.includes(want)) throw new Error(`MY lacks ${want}`);
     }
-    // Three tables, each sortable; filings newest first, by date only.
-    eq("tables", (html.match(/<table/g) ?? []).length, 3);
+    for (const gone of ["Upcoming earnings", "Recent earnings", "rt-bar", "Price move"]) {
+        if (html.includes(gone)) throw new Error(`MY still shows ${gone}`);
+    }
+    // One sortable table; filings newest first, by date only.
+    eq("tables", (html.match(/<table/g) ?? []).length, 1);
     const filingsHTML = html.slice(html.indexOf("Filings</h3>"));
     if (filingsHTML.indexOf("Jul 31, 2026") > filingsHTML.indexOf("Jul 30, 2026")) {
         throw new Error("MY's filings are not newest first");
@@ -2640,7 +2566,7 @@ check("MY merges a watchlist's filings and earnings, newest first", () => {
     }
     if (html.includes("Insider")) throw new Error("MY shows insider forms");
 
-    const empty = renderToString(<MyView feed={main.WatchFeed.createFrom({ tickers: [], upcoming: [],
+    const empty = renderToString(<MyView feed={main.WatchFeed.createFrom({ tickers: [],
         recent: [], since: "2026-07-09", notes: [] })} holdings={[]} onChange={noop} selected=""
         onSelect={noop} />);
     if (!empty.includes("The watchlist is empty") || empty.includes("Add the form")) {
@@ -2658,7 +2584,7 @@ check("quotes make a full-text search, the rest names the company", () => {
     eq("company first", parseResearchCommand('AAPL "share repurchase" "tender offer"'),
         { query: "AAPL", fn: "FTS", text: '"share repurchase" "tender offer"' });
     eq("unclosed", parseResearchCommand('"going concern'), { query: "", fn: "FTS", text: '"going concern"' });
-    eq("empty quotes are not a search", parseResearchCommand('"" AAPL')?.fn, "DES");
+    eq("empty quotes are not a search", parseResearchCommand('"" AAPL')?.fn, "CN");
     eq("year", searchSince("year", new Date(2026, 9, 7)), "2025-10-07");
     eq("all", searchSince("all", new Date(2026, 9, 7)), "");
 });

@@ -4,24 +4,10 @@
     "ACME",
     "ZZZZ"
   ],
-  "upcoming": [
-    {
-      "ticker": "AAPL",
-      "when": "2026-10-29 16:30",
-      "kind": "earnings",
-      "title": "Earnings report",
-      "filing": null,
-      "cik": "",
-      "timing": "after close",
-      "move": 0,
-      "hasMove": false
-    }
-  ],
   "recent": [
     {
       "ticker": "AAPL",
       "when": "2026-07-31 06:01",
-      "kind": "filing",
       "title": "Quarterly report",
       "filing": {
         "accession": "0000320193-26-000020",
@@ -35,26 +21,11 @@
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/0000320193-26-000020-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/aapl-20260627.htm"
       },
-      "cik": "0000320193",
-      "timing": "",
-      "move": 0,
-      "hasMove": false
+      "cik": "0000320193"
     },
     {
       "ticker": "AAPL",
       "when": "2026-07-30 16:30",
-      "kind": "earnings",
-      "title": "Earnings report",
-      "filing": null,
-      "cik": "",
-      "timing": "after close",
-      "move": 0.050000000000000044,
-      "hasMove": true
-    },
-    {
-      "ticker": "AAPL",
-      "when": "2026-07-30 16:30",
-      "kind": "filing",
       "title": "Earnings results",
       "filing": {
         "accession": "0000320193-26-000018",
@@ -71,10 +42,7 @@
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/0000320193-26-000018-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/aapl-20260730.htm"
       },
-      "cik": "0000320193",
-      "timing": "",
-      "move": 0,
-      "hasMove": false
+      "cik": "0000320193"
     }
   ],
   "since": "2026-07-09",
