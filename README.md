@@ -15,6 +15,16 @@ documented here and are all, to some degree, wrong. Past simulated performance
 does not predict future returns, and the bundled data has known defects — read
 [`DATA-LICENSE.md`](DATA-LICENSE.md) before trusting a number.
 
+## Demo
+
+[![Backtester demo: a Ray Dalio All Weather backtest, its verdict and charts, the Lua strategy behind it, a SQL query, and an NVIDIA earnings filing read in-app](docs/demo-poster.jpg)](docs/demo.mp4)
+
+Ninety seconds, recorded against a real database: copy Ray Dalio's All Weather
+portfolio and run it against the S&P 500; read the pre-registered verdict, the
+objections a skeptic would raise, and the equity curve; open the Lua script
+that does the rebalancing; query the price table in SQL; and read NVIDIA's
+latest earnings release straight from SEC EDGAR. ([`docs/demo.mp4`](docs/demo.mp4))
+
 ## How it works
 
 - **`src/main.go`** — CLI entry point. Opens the DuckDB file, loads `config.toml`, converts each TOML portfolio entry into a `Portfolio`, and hands them to the runner.
