@@ -63,7 +63,8 @@ const (
 
 var isoDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
-// locateHelper finds python3 and the named helper script at the repo root.
+// locateHelper finds python3 and the named helper script in the repo's
+// scripts/ directory.
 // errMsg is non-empty (and py/script empty) when either is missing, phrased
 // per the tool convention so it can be returned to the model directly.
 func locateHelper(name string) (py, script, errMsg string) {
@@ -74,7 +75,7 @@ func locateHelper(name string) (py, script, errMsg string) {
 	}
 	// Absolute path: the argv is resolved by the child process against
 	// cmd.Dir, which differs from this process's cwd.
-	script, err = filepath.Abs(filepath.Join(repoRoot(), name))
+	script, err = filepath.Abs(filepath.Join(repoRoot(), "scripts", name))
 	if err != nil {
 		return "", "", fmt.Sprintf("ERROR: resolving helper path: %v", err)
 	}

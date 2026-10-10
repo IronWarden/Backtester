@@ -116,7 +116,7 @@ own — so choosing one as the strategy is all it takes, from the Simple form or
 the Config tab alike. `strategy_library.toml` has a ready block for each, over one list of large
 companies from 2015-06. Things to know before reading their results:
 
-- **They need `sec_financials`** (`python3 add_sec_financials.py`). Without
+- **They need `sec_financials`** (`python3 scripts/add_sec_financials.py`). Without
   it every `fundamental()` is `nil`, and they hold nothing at all — by
   design, not a bug; the `Fund Cov %` column says so.
 - **Every ratio is two dollar figures from the same filing** — ROE, gross

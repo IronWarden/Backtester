@@ -16,10 +16,10 @@ second; this script sends both and paces itself, and it checkpoints so an
 interrupted run resumes instead of starting the 7,000 over.
 
 Usage:
-    python3 add_company_info.py --dry-run --limit 20   # probe, writes nothing
-    python3 add_company_info.py --dry-run              # full fetch, no write
-    python3 add_company_info.py                        # fetch and replace table
-    python3 add_company_info.py --no-fetch             # write from the cache only
+    python3 scripts/add_company_info.py --dry-run --limit 20   # probe, writes nothing
+    python3 scripts/add_company_info.py --dry-run              # full fetch, no write
+    python3 scripts/add_company_info.py                        # fetch and replace table
+    python3 scripts/add_company_info.py --no-fetch             # write from the cache only
 Requires the UI app closed for a real write (DuckDB is single-writer).
 
 WHAT THIS COVERS, WHICH IS NOT EVERYTHING:
@@ -56,7 +56,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "company_profile"
 CACHE = ROOT / "company_info_cache.json"

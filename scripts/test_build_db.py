@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for build_db.py and fred_public.py.
 
-Run with:  python3 -m pytest test_build_db.py -q
+Run with:  python3 -m pytest scripts/test_build_db.py -q
 
 Nothing here downloads anything or opens a file on disk: the writers run
 against an in-memory DuckDB, and the parsers are fed text shaped like the real

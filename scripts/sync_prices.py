@@ -13,8 +13,8 @@ date. In a database that has been synced before, nearly all of them do -- which
 is why src/data.SyncBatches groups by start date before calling this.
 
 Usage:
-    python3 sync_prices.py --start 2026-07-03 AAPL MSFT NVDA
-    python3 sync_prices.py --start 2026-07-03 --end 2026-09-08 AAPL MSFT
+    python3 scripts/sync_prices.py --start 2026-07-03 AAPL MSFT NVDA
+    python3 scripts/sync_prices.py --start 2026-07-03 --end 2026-09-08 AAPL MSFT
 
 Output: {"results": [...]} with one entry per symbol, in the order given; each
 entry is {"symbol", "rows": [["YYYY-MM-DD", open, high, low, close, volume]]}

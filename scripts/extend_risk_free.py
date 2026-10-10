@@ -14,9 +14,9 @@ the existing FRED-sourced rows are left untouched. --full rebuilds every row
 from $CASH.
 
 Usage:
-    python3 extend_risk_free.py            # backfill pre-2010 from $CASH
-    python3 extend_risk_free.py --full     # rebuild the whole table from $CASH
-    python3 extend_risk_free.py --dry-run
+    python3 scripts/extend_risk_free.py            # backfill pre-2010 from $CASH
+    python3 scripts/extend_risk_free.py --full     # rebuild the whole table from $CASH
+    python3 scripts/extend_risk_free.py --dry-run
 Requires the UI app closed (DuckDB is single-writer) and $CASH present
 (run add_collections.py first).
 """
@@ -30,7 +30,7 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "3MTreasuryYields"
 TRADING_DAYS = 252.0

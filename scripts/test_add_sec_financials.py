@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for add_sec_financials.py's row selection.
 
-Run with:  python3 -m pytest test_add_sec_financials.py -q
+Run with:  python3 -m pytest scripts/test_add_sec_financials.py -q
 
 Nothing here downloads or opens the database: `get` is replaced by a function
 returning a synthetic Financial Statement Data Set ZIP built in memory, with the

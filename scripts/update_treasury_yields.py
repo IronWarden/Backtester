@@ -19,7 +19,7 @@ import loader_provenance
 from dotenv import load_dotenv
 from fredapi import Fred
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DB_PATH = ROOT / "stock_data.db"
 
 TABLES = {

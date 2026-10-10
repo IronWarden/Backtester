@@ -23,10 +23,10 @@ $CASH compounds the FRED 3-month T-bill rate (DTB3) back to 1954, matching the
 daily-compounding convention already used for the risk-free-rate tables.
 
 Usage:
-    python3 add_collections.py                 # build + write all
-    python3 add_collections.py --dry-run       # build + print coverage, no write
-    python3 add_collections.py --only '$SP500' '$CASH'
-    python3 add_collections.py --shiller path/to/ie_data.xls
+    python3 scripts/add_collections.py                 # build + write all
+    python3 scripts/add_collections.py --dry-run       # build + print coverage, no write
+    python3 scripts/add_collections.py --only '$SP500' '$CASH'
+    python3 scripts/add_collections.py --shiller path/to/ie_data.xls
 
 Notes:
   * DuckDB is single-writer -- close the UI app first, or the open will fail.
@@ -46,7 +46,7 @@ import pandas as pd
 import loader_provenance
 import yfinance as yf
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "stock_data_optimized"
 TRADING_DAYS = 252.0

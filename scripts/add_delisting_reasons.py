@@ -34,10 +34,10 @@ EDGAR answers it, per company, for free, in two stages:
      -> acquired.
 
 Usage:
-    python3 add_delisting_reasons.py --dry-run --from-year 2016 --limit-ciks 25
-    python3 add_delisting_reasons.py --dry-run          # full harvest, no write
-    python3 add_delisting_reasons.py                    # replace the table
-    python3 add_delisting_reasons.py --emit-cik-list ciks.txt --no-classify
+    python3 scripts/add_delisting_reasons.py --dry-run --from-year 2016 --limit-ciks 25
+    python3 scripts/add_delisting_reasons.py --dry-run          # full harvest, no write
+    python3 scripts/add_delisting_reasons.py                    # replace the table
+    python3 scripts/add_delisting_reasons.py --emit-cik-list ciks.txt --no-classify
 Requires the UI app closed for a real write (DuckDB is single-writer).
 
 COSTS AND LIMITS, because both are real:
@@ -84,7 +84,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "delisting_reasons"
 CACHE = ROOT / "delisting_reasons_cache.json"

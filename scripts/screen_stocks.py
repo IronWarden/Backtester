@@ -2,8 +2,8 @@
 """Screen the US stock market by fundamentals via Yahoo Finance.
 
 Usage:
-    python3 screen_stocks.py --pe-max 20 --cap-min 10000000000
-    python3 screen_stocks.py --sector Technology --div-yield-min 2 --limit 50
+    python3 scripts/screen_stocks.py --pe-max 20 --cap-min 10000000000
+    python3 scripts/screen_stocks.py --sector Technology --div-yield-min 2 --limit 50
 
 Companion to the UI's screen_stocks chat tool. Builds a Yahoo screener
 query (yfinance EquityQuery) over US equities and prints one JSON object

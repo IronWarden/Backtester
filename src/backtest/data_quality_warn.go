@@ -60,7 +60,7 @@ func warnDataQuality(portfolios []*Portfolio) {
 		missingAuditOnce.Do(func() {
 			diagf("info", "",
 				"this database has no data_quality table, so no holding was "+
-					"checked for defective bars; run add_data_quality.py to "+
+					"checked for defective bars; run scripts/add_data_quality.py to "+
 					"enable those warnings")
 		})
 		return

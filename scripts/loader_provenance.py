@@ -46,7 +46,7 @@ from pathlib import Path
 from typing import Any
 
 TABLE = "data_sources"
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS "{TABLE}" (

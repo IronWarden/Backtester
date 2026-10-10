@@ -20,7 +20,7 @@
 #   wails build -tags webkit2_41   (from ui/)
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."   # run from the repo root; this script lives in scripts/
 
 VERSION=$(grep -oP 'Version = "\K[^"]+' src/version/version.go)
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)

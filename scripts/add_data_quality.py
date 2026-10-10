@@ -24,8 +24,8 @@ one query over all 35M bars and takes a few seconds -- there is no sampling and
 no approximation, so every number can be re-derived exactly.
 
 Usage:
-    python3 add_data_quality.py --dry-run    # audit and report, write nothing
-    python3 add_data_quality.py              # audit and replace the table
+    python3 scripts/add_data_quality.py --dry-run    # audit and report, write nothing
+    python3 scripts/add_data_quality.py              # audit and replace the table
 Requires the UI app closed for a real write (DuckDB is single-writer).
 
 The verdict thresholds mirror src/data/data_quality.go, which is the authority
@@ -47,7 +47,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "data_quality"
 PRICES = "stock_data_optimized"

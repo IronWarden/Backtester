@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for add_collections.py's return construction.
 
-Run with:  python3 -m pytest test_add_collections.py -q
+Run with:  python3 -m pytest scripts/test_add_collections.py -q
 
 These are pure-arithmetic tests over synthetic series: nothing here opens the
 database, downloads anything, or touches yfinance. The expected values are

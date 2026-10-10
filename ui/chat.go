@@ -783,7 +783,7 @@ first-run form writes the repo-root .env in a checkout and
 ~/.config/backtester/.env when there is none. If the header says "Choose DB…"
 no database was found next to the app, and the user has to pick one.
 A user with NO database at all builds one with build_db.py, from the repo
-root, with the app closed: "python3 build_db.py --db my.db" (a starter set of
+root, with the app closed: "python3 scripts/build_db.py --db my.db" (a starter set of
 ~80 well-known stocks and ETFs plus rates, CPI, the $ benchmarks back to 1927,
 index membership and the quality audit — a few minutes, no API keys).
 --universe takes sp500, us-stocks, us-etfs, us-all, @file or plain symbols;
@@ -1026,7 +1026,7 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   - company_profile(ticker, cik, name, sic, sic_description, sector,
     exchange, former_names, state_of_incorporation, fetched_at) — OPTIONAL,
     may not exist. This IS the sector data, loaded from SEC EDGAR (free, no
-    key) by python3 add_company_info.py. sector is the SIC division, e.g.
+    key) by python3 scripts/add_company_info.py. sector is the SIC division, e.g.
     Manufacturing, Services, Finance, Insurance & Real Estate. Check the
     table exists before querying it, and if it does not, say it can be
     loaded rather than saying sector data does not exist.
@@ -1143,7 +1143,7 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   that takes its target's name matches too, so COHR reads renamed although
   Coherent Inc really was bought by II-VI.
 
-- REPAIRING A RECYCLED SERIES. python3 split_recycled.py separates the
+- REPAIRING A RECYCLED SERIES. python3 scripts/split_recycled.py separates the
   companies: the one trading today keeps the bare symbol and the previous
   occupant takes a generation suffix numbering from the oldest, so CoreSite
   Realty becomes COR.1 while COR still means Cencora. It is a dry run unless
@@ -1160,7 +1160,7 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   the script with --apply; do not assume COR.1 is queryable.
 
 - The delistings table is OPTIONAL and may not exist; it is loaded by
-  python3 add_delistings.py from Alpha Vantage's free LISTING_STATUS feed
+  python3 scripts/add_delistings.py from Alpha Vantage's free LISTING_STATUS feed
   (needs ALPHA_VANTAGE_KEY). Columns: symbol, name, exchange, asset_type,
   security_class ('operating' | 'etf' | 'derivative'), ipo_date,
   delisting_date. ~9,400 rows, of which ~5,600 are operating companies.
@@ -1171,7 +1171,7 @@ different proposition from one with the same Sharpe and shallow drawdowns.
 - FUNDAMENTALS BACK TO 2009, WITH REAL PUBLICATION DATES. Optional table
   sec_financials(cik, ticker, company_name, sic, metric, tag, period_end,
   filed, filing_period, value, form, frequency, accession), loaded from SEC's
-  Financial Statement Data Sets by python3 add_sec_financials.py (free, no
+  Financial Statement Data Sets by python3 scripts/add_sec_financials.py (free, no
   key). It covers 2009+ and includes companies that later died, and 'filed' is
   the ACTUAL publication date rather than an estimate. Metrics use the same
   names as the financials table, so the two can be compared over their overlap.
@@ -1887,7 +1887,7 @@ different proposition from one with the same Sharpe and shallow drawdowns.
 
 - POINT-IN-TIME INDEX MEMBERSHIP. Optional table index_membership(index_name,
   ticker, security, start_date, end_date, start_is_horizon, confidence,
-  source), loaded by python3 add_index_membership.py from two free Wikipedia
+  source), loaded by python3 scripts/add_index_membership.py from two free Wikipedia
   tables. It answers "who was in the S&P 500 on this date", which fixes the
   SELECTION half of survivorship bias — the half that matters most here,
   because the default config's five megacaps were chosen knowing who won.
@@ -1905,7 +1905,7 @@ different proposition from one with the same Sharpe and shallow drawdowns.
 
 - WHY A COMPANY DELISTED. Optional table delisting_reasons(cik, company_name,
   sic, tickers, delisting_date, reason, confidence, evidence, ...), loaded from
-  SEC EDGAR by python3 add_delisting_reasons.py (free, no key). reason is
+  SEC EDGAR by python3 scripts/add_delisting_reasons.py (free, no key). reason is
   bankruptcy | acquired | compliance | voluntary | unknown, derived from 8-K
   item 1.03 (bankruptcy) and item 2.01 (completed acquisition) filed near the
   Form 25/25-NSE/15. It matters because the two outcomes are opposite: an
@@ -1943,7 +1943,7 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   The price table has NO duplicate rows, unlike financials. The $-benchmarks
   are clean — they read 'usable' only because they have zero volume, which is
   correct for a reconstructed index and not a defect.
-  The optional data_quality table (python3 add_data_quality.py) stores the
+  The optional data_quality table (python3 scripts/add_data_quality.py) stores the
   per-ticker evidence; src/data.LoadDataQuality reads it and ClassifyQuality
   recomputes the verdict. NOTHING refuses to trade an unusable series yet, so
   when a user names one, the warning is yours to give.
@@ -2312,8 +2312,9 @@ total US market.
   backtest fails if any ticker lacks data anywhere in the window. Offer
   fetch_history for one missing ticker; when the database as a whole is
   behind, tell the user to close the app and run "ui --sync <db>". A user
-  with no database builds one: "python3 build_db.py --db my.db" from the
-  repo root (starter universe, no API keys; --universe sp500 etc. for more).
+  with no database builds one from the repo root: "python3
+  scripts/build_db.py --db my.db" (starter universe, no keys; --universe
+  sp500 etc. for more).
 - Results: verdicts, curve and metrics open; other panels are collapsed (a
   MISSING panel had no data). A panel pops out on a header double-click (⤢),
   leaving an "in its own window" stub. The bar above minimises (▁) or

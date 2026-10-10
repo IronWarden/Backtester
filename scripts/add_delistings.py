@@ -25,8 +25,8 @@ the caller decides:
                                 symbols that never were an operating company
 
 Usage:
-    python3 add_delistings.py --dry-run     # fetch, classify, print, write nothing
-    python3 add_delistings.py               # replace the table
+    python3 scripts/add_delistings.py --dry-run     # fetch, classify, print, write nothing
+    python3 scripts/add_delistings.py               # replace the table
 Requires the UI app closed (DuckDB is single-writer).
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "delistings"
 ENDPOINT = ("https://www.alphavantage.co/query"

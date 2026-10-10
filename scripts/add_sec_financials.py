@@ -23,9 +23,9 @@ existing table's numbers cannot then move, and the overlapping window (2020-07+)
 becomes a free correctness check on both sources.
 
 Usage:
-    python3 add_sec_financials.py --dry-run --limit-quarters 1   # probe
-    python3 add_sec_financials.py --from-year 2020               # smaller
-    python3 add_sec_financials.py                                # 2009 -> now
+    python3 scripts/add_sec_financials.py --dry-run --limit-quarters 1   # probe
+    python3 scripts/add_sec_financials.py --from-year 2020               # smaller
+    python3 scripts/add_sec_financials.py                                # 2009 -> now
 Requires the UI app closed for a real write (DuckDB is single-writer).
 
 WHAT IT COSTS, measured 2026-08-17 with the original 12 tags: each quarterly ZIP
@@ -79,7 +79,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "sec_financials"
 

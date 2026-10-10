@@ -2,8 +2,8 @@
 """Fetch daily OHLCV history from yfinance and print it as JSON.
 
 Usage:
-    python3 fetch_history.py TSLA NVDA                # full available history
-    python3 fetch_history.py SPY --start 2024-01-01 --end 2024-12-31
+    python3 scripts/fetch_history.py TSLA NVDA                # full available history
+    python3 scripts/fetch_history.py SPY --start 2024-01-01 --end 2024-12-31
 
 Companion to the UI's fetch_history chat tool: unlike add_ticker.py this
 script never opens the DuckDB (which the running UI holds a write lock on)

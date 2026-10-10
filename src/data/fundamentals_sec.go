@@ -160,7 +160,7 @@ func SECPointInTimeFundamentals(
 	}
 	if !tableExists("sec_financials") {
 		log.Printf("FundamentalSource = %q but the database has no "+
-			"sec_financials table; run add_sec_financials.py", SourceSEC)
+			"sec_financials table; run scripts/add_sec_financials.py", SourceSEC)
 		return nil
 	}
 	query := `SELECT ` + secColumns() + `

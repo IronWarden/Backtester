@@ -42,8 +42,8 @@ engine reads. The legacy `stock_data` table is deliberately left untouched --
 say so out loud rather than half-migrating a table nothing reads.
 
 Usage:
-    python3 split_recycled.py                # dry run, writes nothing
-    python3 split_recycled.py --apply        # rewrite the bars
+    python3 scripts/split_recycled.py                # dry run, writes nothing
+    python3 scripts/split_recycled.py --apply        # rewrite the bars
 Requires the UI app closed (DuckDB is single-writer).
 """
 from __future__ import annotations
@@ -60,7 +60,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 PRICES = "stock_data_optimized"
 

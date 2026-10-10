@@ -2,7 +2,7 @@
 """Live quote & fundamentals lookup for the backtester's chat assistant.
 
 Usage:
-    python3 quote_lookup.py AAPL MSFT BRK-B
+    python3 scripts/quote_lookup.py AAPL MSFT BRK-B
 
 Prints one JSON object to stdout: {"quotes": [...]} with exactly one entry
 per requested symbol, in order. Each entry is either a data dict or

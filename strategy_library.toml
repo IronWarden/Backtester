@@ -149,7 +149,7 @@ rebalance_days = 21
 # --- Fundamentals (SEC filings) ------------------------------------------
 #
 # Ranked screens on reported figures, read from sec_financials — run
-# `python3 add_sec_financials.py` first, or they hold nothing (Fund Cov %
+# `python3 scripts/add_sec_financials.py` first, or they hold nothing (Fund Cov %
 # says so). Each script's fundamentals = { ... } table says which figures it
 # reads, and the engine loads them when the block declares none of its own,
 # so naming the Strategy is enough. Each figure is the one first filed, usable from the day after the

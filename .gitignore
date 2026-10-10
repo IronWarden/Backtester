@@ -3,7 +3,7 @@
 src/.env
 
 # --- Data --------------------------------------------------------------
-# stock_data.db is ~2.9 GB and is rebuilt by the Python loaders.
+# stock_data.db is ~2.9 GB and is rebuilt by the Python loaders in scripts/.
 stock_data.db
 stock_data.db.wal
 # The research log, written by -record. Local experiment history, not code.
@@ -61,7 +61,14 @@ analysis/
 # --- Agent workflow scaffolding ---------------------------------------
 # Local tooling, not part of the application. Present on disk so the
 # unattended agent can read them; never tracked, so they stay out of PRs.
+CLAUDE.md
+TASKS.md
+TASKS-ARCHIVE.md
+AGENT_LOG.md
+ui/frontend/AGENT_LOG.md
+agent_monologue.log
+.claude/
 
-# Release directories assembled by package.sh: a copy of the binary, the
+# Release directories assembled by scripts/package.sh: a copy of the binary, the
 # licences, and optionally a 2.9 GB database. Never committed.
 dist/

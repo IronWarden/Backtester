@@ -10,10 +10,10 @@ the fetched date range are deleted, then re-inserted. So re-running is safe,
 and topping up recent data (e.g. --start last-week) won't disturb history.
 
 Examples:
-    python3 add_ticker.py BRK-A BRK-B          # full coverage of existing table
-    python3 add_ticker.py NVDA --full          # all history yfinance has
-    python3 add_ticker.py SPY --start 2024-01-01 --end 2024-12-31
-    python3 add_ticker.py AAPL --dry-run       # fetch + preview, no write
+    python3 scripts/add_ticker.py BRK-A BRK-B          # full coverage of existing table
+    python3 scripts/add_ticker.py NVDA --full          # all history yfinance has
+    python3 scripts/add_ticker.py SPY --start 2024-01-01 --end 2024-12-31
+    python3 scripts/add_ticker.py AAPL --dry-run       # fetch + preview, no write
 
 Note: DuckDB is single-writer. Close the UI app before running, or the open
 will fail with a lock error.
@@ -32,7 +32,7 @@ import pandas as pd
 import loader_provenance
 import yfinance as yf
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "stock_data_optimized"
 

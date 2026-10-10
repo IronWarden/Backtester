@@ -33,9 +33,9 @@ implied: a reconstructed year that does not hold ~500 members is a year whose
 changes are missing.
 
 Usage:
-    python3 add_index_membership.py --dry-run          # reconstruct and report
-    python3 add_index_membership.py                    # replace the table
-    python3 add_index_membership.py --from-year 2011   # only the dense era
+    python3 scripts/add_index_membership.py --dry-run          # reconstruct and report
+    python3 scripts/add_index_membership.py                    # replace the table
+    python3 scripts/add_index_membership.py --from-year 2011   # only the dense era
 Requires the UI app closed for a real write (DuckDB is single-writer).
 
 This is a scrape of a community-maintained page, not a vendor feed. Every row
@@ -59,7 +59,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 DEFAULT_DB = os.environ.get("BACKTESTER_DB", str(ROOT / "stock_data.db"))
 TABLE = "index_membership"
 INDEX_NAME = "SP500"

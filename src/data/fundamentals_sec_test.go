@@ -96,7 +96,7 @@ func TestSECPointsDropsWhatCannotBeJoinedOrKnown(t *testing.T) {
 // The Go list is what config validation checks a declared metric against, and
 // the loader is what decides which metrics exist. They must agree.
 func TestSECMetricsMatchesTheLoader(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "add_sec_financials.py"))
+	src, err := os.ReadFile(filepath.Join("..", "..", "scripts", "add_sec_financials.py"))
 	if err != nil {
 		t.Fatalf("read loader: %v", err)
 	}

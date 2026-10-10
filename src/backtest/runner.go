@@ -571,7 +571,7 @@ func prefetchDelistings(portfolios []*Portfolio) {
 		diagf("warn", "",
 			"DelistingReturn is set but no delisting registry was found, so "+
 				"no holding can be identified as dead and nothing is haircut; "+
-				"run add_delistings.py to enable it")
+				"run scripts/add_delistings.py to enable it")
 		return
 	}
 	for _, p := range portfolios {

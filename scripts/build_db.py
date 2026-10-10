@@ -30,13 +30,13 @@ No API keys are needed for any of it. FRED is read through its public CSV
 download (fred_public.py) rather than the keyed API.
 
 Usage:
-    python3 build_db.py --db my.db --dry-run                 # show the plan
-    python3 build_db.py --db my.db                           # starter universe
-    python3 build_db.py --db my.db --universe sp500
-    python3 build_db.py --db my.db --universe us-etfs --start 2005-01-01
-    python3 build_db.py --db my.db --universe AAPL MSFT KO
-    python3 build_db.py --db my.db --universe @tickers.txt   # one per line
-    python3 build_db.py --db my.db --steps fundamentals      # add a step later
+    python3 scripts/build_db.py --db my.db --dry-run                 # show the plan
+    python3 scripts/build_db.py --db my.db                           # starter universe
+    python3 scripts/build_db.py --db my.db --universe sp500
+    python3 scripts/build_db.py --db my.db --universe us-etfs --start 2005-01-01
+    python3 scripts/build_db.py --db my.db --universe AAPL MSFT KO
+    python3 scripts/build_db.py --db my.db --universe @tickers.txt   # one per line
+    python3 scripts/build_db.py --db my.db --steps fundamentals      # add a step later
 
 Universes: starter (~80 well-known stocks and ETFs -- a few minutes), sp500
 (today's members), us-stocks, us-etfs, us-all (every US-listed symbol, from
@@ -65,7 +65,7 @@ import pandas as pd
 
 import loader_provenance
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # the repo root; scripts live in scripts/
 PRICES = "stock_data_optimized"
 
 STEPS = ["prices", "rates", "macro", "benchmarks", "sectors", "index",
@@ -433,7 +433,7 @@ def run_loader(script: str, db: str, *extra: str) -> bool:
     The builder holds no connection while it runs: DuckDB is single-writer, so
     an open handle here would lock the child out.
     """
-    cmd = [sys.executable, str(ROOT / script), "--db", db, *extra]
+    cmd = [sys.executable, str(Path(__file__).resolve().parent / script), "--db", db, *extra]
     print(f"   $ {' '.join(cmd[1:])}")
     return subprocess.run(cmd, cwd=ROOT).returncode == 0
 
