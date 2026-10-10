@@ -1,0 +1,366 @@
+{
+  "query": "\"share repurchase\"",
+  "ticker": "AAPL",
+  "company": "Apple Inc.",
+  "since": "",
+  "total": 82,
+  "atLeast": false,
+  "from": 0,
+  "hits": [
+    {
+      "accession": "0000928464-14-000003",
+      "form": "PX14A6G",
+      "kind": "other",
+      "title": "PX14A6G",
+      "docType": "PX14A6G",
+      "fileName": "aaplpx14a6g012314.htm",
+      "filed": "2014-01-23",
+      "company": "APPLE INC",
+      "others": [
+        "ICAHN CARL C"
+      ],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000092846414000003/aaplpx14a6g012314.htm",
+      "filing": {
+        "accession": "0000928464-14-000003",
+        "form": "PX14A6G",
+        "kind": "other",
+        "title": "PX14A6G",
+        "filed": "2014-01-23",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000092846414000003/0000928464-14-000003-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000092846414000003/aaplpx14a6g012314.htm"
+      }
+    },
+    {
+      "accession": "0000320193-18-000067",
+      "form": "8-K",
+      "kind": "event",
+      "title": "Earnings results",
+      "docType": "EX-99.1",
+      "fileName": "a8-kexhibit991q220183312018.htm",
+      "filed": "2018-05-01",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000067/a8-kexhibit991q220183312018.htm",
+      "filing": {
+        "accession": "0000320193-18-000067",
+        "form": "8-K",
+        "kind": "event",
+        "title": "Earnings results",
+        "filed": "2018-05-01",
+        "accepted": "",
+        "reportDate": "",
+        "items": [
+          "2.02",
+          "9.01"
+        ],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000067/0000320193-18-000067-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000067/a8-kexhibit991q220183312018.htm"
+      }
+    },
+    {
+      "accession": "0001193125-15-023732",
+      "form": "8-K",
+      "kind": "event",
+      "title": "Other event",
+      "docType": "EX-99.1",
+      "fileName": "d835617dex991.htm",
+      "filed": "2015-01-28",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000119312515023732/d835617dex991.htm",
+      "filing": {
+        "accession": "0001193125-15-023732",
+        "form": "8-K",
+        "kind": "event",
+        "title": "Other event",
+        "filed": "2015-01-28",
+        "accepted": "",
+        "reportDate": "",
+        "items": [
+          "8.01",
+          "9.01"
+        ],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312515023732/0001193125-15-023732-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312515023732/d835617dex991.htm"
+      }
+    },
+    {
+      "accession": "0001193125-13-167469",
+      "form": "8-K",
+      "kind": "event",
+      "title": "Regulation FD disclosure",
+      "docType": "EX-99.1",
+      "fileName": "d525706dex991.htm",
+      "filed": "2013-04-23",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000119312513167469/d525706dex991.htm",
+      "filing": {
+        "accession": "0001193125-13-167469",
+        "form": "8-K",
+        "kind": "event",
+        "title": "Regulation FD disclosure",
+        "filed": "2013-04-23",
+        "accepted": "",
+        "reportDate": "",
+        "items": [
+          "7.01",
+          "9.01"
+        ],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312513167469/0001193125-13-167469-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312513167469/d525706dex991.htm"
+      }
+    },
+    {
+      "accession": "0001628280-17-004790",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "a10-qq22017412017.htm",
+      "filed": "2017-05-03",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000162828017004790/a10-qq22017412017.htm",
+      "filing": {
+        "accession": "0001628280-17-004790",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2017-05-03",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017004790/0001628280-17-004790-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017004790/a10-qq22017412017.htm"
+      }
+    },
+    {
+      "accession": "0001628280-17-000717",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "a10-qq1201712312016.htm",
+      "filed": "2017-02-01",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000162828017000717/a10-qq1201712312016.htm",
+      "filing": {
+        "accession": "0001628280-17-000717",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2017-02-01",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017000717/0001628280-17-000717-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017000717/a10-qq1201712312016.htm"
+      }
+    },
+    {
+      "accession": "0001193125-16-439878",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "d66145d10q.htm",
+      "filed": "2016-01-27",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000119312516439878/d66145d10q.htm",
+      "filing": {
+        "accession": "0001193125-16-439878",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2016-01-27",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312516439878/0001193125-16-439878-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312516439878/d66145d10q.htm"
+      }
+    },
+    {
+      "accession": "0000320193-18-000007",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "a10-qq1201812302017.htm",
+      "filed": "2018-02-02",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000007/a10-qq1201812302017.htm",
+      "filing": {
+        "accession": "0000320193-18-000007",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2018-02-02",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000007/0000320193-18-000007-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000007/a10-qq1201812302017.htm"
+      }
+    },
+    {
+      "accession": "0000320193-22-000007",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "aapl-20211225.htm",
+      "filed": "2022-01-28",
+      "company": "Apple Inc.",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000007/aapl-20211225.htm",
+      "filing": {
+        "accession": "0000320193-22-000007",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2022-01-28",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000007/0000320193-22-000007-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000007/aapl-20211225.htm"
+      }
+    },
+    {
+      "accession": "0000320193-20-000052",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "a10-qq220203282020.htm",
+      "filed": "2020-05-01",
+      "company": "Apple Inc.",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000052/a10-qq220203282020.htm",
+      "filing": {
+        "accession": "0000320193-20-000052",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2020-05-01",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000052/0000320193-20-000052-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000052/a10-qq220203282020.htm"
+      }
+    },
+    {
+      "accession": "0000320193-24-000006",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "aapl-20231230.htm",
+      "filed": "2024-02-02",
+      "company": "Apple Inc.",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000006/aapl-20231230.htm",
+      "filing": {
+        "accession": "0000320193-24-000006",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2024-02-02",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000006/0000320193-24-000006-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000006/aapl-20231230.htm"
+      }
+    },
+    {
+      "accession": "0001193125-14-157311",
+      "form": "10-Q",
+      "kind": "report",
+      "title": "Quarterly report",
+      "docType": "10-Q",
+      "fileName": "d694710d10q.htm",
+      "filed": "2014-04-24",
+      "company": "APPLE INC",
+      "others": [],
+      "cik": "0000320193",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000119312514157311/d694710d10q.htm",
+      "filing": {
+        "accession": "0001193125-14-157311",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2014-04-24",
+        "accepted": "",
+        "reportDate": "",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312514157311/0001193125-14-157311-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312514157311/d694710d10q.htm"
+      }
+    }
+  ],
+  "forms": [
+    {
+      "form": "10-Q",
+      "count": 42
+    },
+    {
+      "form": "10-K",
+      "count": 14
+    },
+    {
+      "form": "8-K",
+      "count": 12
+    },
+    {
+      "form": "424B2",
+      "count": 4
+    },
+    {
+      "form": "DEF 14A",
+      "count": 4
+    },
+    {
+      "form": "PX14A6G",
+      "count": 4
+    },
+    {
+      "form": "PRE 14A",
+      "count": 2
+    }
+  ],
+  "notes": [],
+  "error": ""
+}

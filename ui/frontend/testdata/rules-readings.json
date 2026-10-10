@@ -1,0 +1,22 @@
+{
+  "default": {
+    "sentence": "Every 21 trading days (about monthly), hold every one of these stocks, equally weighted.",
+    "headline": "hold every one of these stocks",
+    "error": ""
+  },
+  "edited": {
+    "sentence": "Every 5 trading days (about weekly), hold the 2 stocks that rose most over the last 126 trading days, counting only those trading above their 200-day average, equally weighted; keep a holding while it stays in the top 3. Move everything to cash whenever the S\u0026P 500 is below its 200-day average. If none qualify, the money waits in cash. The first decision waits for 200 trading days of history; until then it holds cash.",
+    "headline": "hold the 2 stocks that rose most over the last 126 trading days, counting only those trading above their 200-day average",
+    "error": ""
+  },
+  "invalid": {
+    "sentence": "",
+    "headline": "",
+    "error": "Rules.RiskOff reads the market through the portfolio's Benchmark, and none is set; add Benchmark = \"$SP500\" or remove RiskOff"
+  },
+  "proposed": {
+    "sentence": "Every 21 trading days (about monthly), hold the 2 stocks that rose most over the last 126 trading days, counting only those trading above their 200-day average, equally weighted. Move everything to cash whenever the S\u0026P 500 is below its 200-day average. If none qualify, the money waits in cash. The first decision waits for 200 trading days of history; until then it holds cash.",
+    "headline": "hold the 2 stocks that rose most over the last 126 trading days, counting only those trading above their 200-day average",
+    "error": ""
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "My Portfolio",
+  "buyingPower": 10000,
+  "startDate": "2015-05-26",
+  "endDate": "2025-05-26",
+  "tickers": [
+    "AAPL",
+    "MSFT",
+    "9988.HK"
+  ],
+  "evenSplit": false,
+  "allocations": {
+    "AAPL": 50,
+    "MSFT": 30,
+    "9988.HK": 20
+  },
+  "benchmark": "$SP500",
+  "strategy": "",
+  "cashflowDirection": "deposit",
+  "cashflowAmount": 0,
+  "cashflowFrequency": "never"
+}

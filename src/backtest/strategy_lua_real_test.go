@@ -296,4 +296,3 @@ end
 			"path executed); got pos=%+v ok=%v", pos, ok)
 	}
 }
-

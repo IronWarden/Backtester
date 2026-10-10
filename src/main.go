@@ -2,26 +2,130 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"log"
+	"my-backtester/src/apppath"
 	"my-backtester/src/backtest"
 	"my-backtester/src/data"
+	"my-backtester/src/version"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 )
 
 func main() {
 	var (
-		debug      bool
-		configPath string
+		showVersion bool
+		debug       bool
+		configPath  string
+		scanSignals bool
+		eventStudy  bool
+		listStrats  bool
+		record      bool
+		campaign    string
+		history     int
+		robustness  bool
+		validate    string
+		check       bool
+		bundlePath  string
+		verifyPath  string
+		research    bool
+		pagesDir    string
+		hypothPath  string
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug output")
+	flag.BoolVar(
+		&scanSignals, "scan-signals", false,
+		"Screen the built-in signal library over the config's tickers and "+
+			"print the information coefficients, instead of running backtests",
+	)
+	flag.BoolVar(
+		&eventStudy, "event-study", false,
+		"Measure what followed each built-in event (drawdowns, breakouts, "+
+			"sigma moves) over the config's tickers, instead of running "+
+			"backtests",
+	)
+	flag.BoolVar(
+		&listStrats, "list-strategies", false,
+		"Print the strategy gallery — what each shipped script is for, how it "+
+			"fails, and the parameter ranges worth sweeping",
+	)
+	flag.BoolVar(
+		&record, "record", false,
+		"Append every result to the research log (../research.db) so you can "+
+			"tell later what you have already tried",
+	)
 	flag.StringVar(
-		&configPath, "config", "../config.toml",
+		&campaign, "campaign", "",
+		"Group these runs under a campaign name in the research log",
+	)
+	flag.IntVar(
+		&history, "history", 0,
+		"Print the last N runs from the research log and exit",
+	)
+	flag.BoolVar(
+		&robustness, "robustness", false,
+		"Re-run each portfolio under more friction and from later start dates, "+
+			"and print how much of the edge survives. Costs ~9x the "+
+			"simulation time",
+	)
+	flag.StringVar(
+		&validate, "validate", "",
+		"Run the adversarial checks against a strategy spec (e.g. "+
+			"lua:strategies/rsi.lua) and exit: look-ahead, did-it-trade, "+
+			"cash conservation, degenerate inputs",
+	)
+	flag.BoolVar(
+		&check, "check", false,
+		"Validate the config and exit without running: reversed dates, "+
+			"duplicate tickers, Params a strategy cannot read, swept keys "+
+			"nothing reads, an unusable [Output] block. Opens no database",
+	)
+	flag.StringVar(
+		&bundlePath, "bundle", "",
+		"After running, write a self-contained bundle (config, strategy "+
+			"source, engine sha, metrics) to this path",
+	)
+	flag.StringVar(
+		&verifyPath, "verify", "",
+		"Re-run a bundle and report whether its numbers still reproduce",
+	)
+	flag.BoolVar(
+		&research, "research", false,
+		"Run the config and report it as research: baseline, chance, "+
+			"attribution, regimes and robustness, in the order that kills an "+
+			"idea fastest. Implies -robustness",
+	)
+	flag.StringVar(
+		&hypothPath, "hypothesis", "",
+		"Judge the run against a pre-registered hypothesis file (ID, Claim, "+
+			"Criterion, TrialBudget). The verdict is mechanical: survives, "+
+			"rejected or inconclusive",
+	)
+	flag.StringVar(
+		&pagesDir, "pages", "",
+		"After running, write one self-contained HTML page per result into "+
+			"this directory: the equity curve, the underwater plot, the "+
+			"splits, and the baseline/chance/trial-count checks together",
+	)
+	flag.StringVar(
+		&configPath, "config", resolveOrDefault("config.toml", "../config.toml"),
 		"Path to portfolio TOML config",
 	)
+	flag.BoolVar(
+		&showVersion, "version", false,
+		"Print the build's version and exit",
+	)
 	flag.Parse()
+
+	// Before anything else opens a database or reads a config: a build a user
+	// cannot identify is a bug report nobody can act on.
+	if showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if debug {
 		file, err := os.OpenFile(
@@ -49,10 +153,113 @@ func main() {
 		backtest.TransactionLogger = log.New(io.Discard, "", 0)
 	}
 
-	duckDBPath := "../stock_data.db"
+	// Validation is adversarial and self-contained: synthetic data generated
+	// in-process, so it needs neither the market data nor a config.
+	if validate != "" {
+		report := backtest.ValidateStrategy(validate, nil)
+		fmt.Print(report.String())
+		if !report.Passed {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Checking a config runs the same construction path a run does and stops
+	// there, so it needs the config but never the market data. That is the
+	// point: a typo is reported in milliseconds rather than after a
+	// simulation.
+	if check {
+		cfg, err := backtest.LoadConfig(configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config check FAILED: %v\n", err)
+			os.Exit(1)
+		}
+		// diagf writes to the log as well as the sink, which is right during
+		// a run and pure duplication here, where the sink IS the output.
+		log.SetOutput(io.Discard)
+		var warnings int
+		backtest.Diagnostics = func(d backtest.Diagnostic) {
+			if d.Level == "warn" {
+				warnings++
+			}
+			where := ""
+			if d.Portfolio != "" {
+				where = d.Portfolio + ": "
+			}
+			fmt.Printf("%-5s %s%s\n", strings.ToUpper(d.Level), where, d.Message)
+		}
+		errors := backtest.CheckConfig(cfg, "")
+		backtest.Diagnostics = nil
+		fmt.Println(backtest.CheckSummary(errors, warnings))
+		if errors > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// The research log is its own database and needs neither the market data
+	// nor a config, so it answers before either is opened.
+	if history > 0 {
+		reg, err := backtest.OpenRegistry(backtest.DefaultRegistryPath)
+		if err != nil {
+			log.Fatalf("opening the research log: %v", err)
+		}
+		defer reg.Close()
+		lines, err := reg.RecentRuns(history)
+		if err != nil {
+			log.Fatalf("reading the research log: %v", err)
+		}
+		if len(lines) == 0 {
+			fmt.Println("No runs recorded yet. Add -record to a run to start " +
+				"keeping a log.")
+		}
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+		return
+	}
+
+	// The gallery is documentation: no database, no config, so it answers
+	// before either is opened and works on a machine with neither.
+	if listStrats {
+		cards, err := backtest.LoadLibrary()
+		if err != nil {
+			log.Fatalf("reading the strategy gallery: %v", err)
+		}
+		fmt.Print(backtest.GalleryReport(cards))
+		return
+	}
+
+	// Resolved rather than assumed: "../stock_data.db" is where the database
+	// sits relative to src/, and the CLI is not always run from there.
+	duckDBPath := resolveOrDefault("stock_data.db", "../stock_data.db")
 	_, err := data.InitDB(duckDBPath)
 	if err != nil {
 		log.Fatalf("Failed to open DuckDB: %v", err)
+	}
+
+	// A bundle carries its own config, so verification replaces the TOML path
+	// entirely: re-reading config.toml would be verifying today's config
+	// against yesterday's numbers.
+	if verifyPath != "" {
+		bundle, err := backtest.LoadBundle(verifyPath)
+		if err != nil {
+			log.Fatalf("reading the bundle: %v", err)
+		}
+		portfolios, err := bundle.BundleToPortfolios()
+		if err != nil {
+			log.Fatalf("rebuilding the bundle's portfolios: %v", err)
+		}
+		results, err := backtest.Run(portfolios, nil)
+		if err != nil {
+			log.Fatalf("re-running the bundle: %v", err)
+		}
+		report := bundle.Verify(verifyPath, results)
+		fmt.Print(report.String())
+		if !report.Reproduced {
+			os.Exit(1)
+		}
+		return
 	}
 
 	// Load configuration from TOML file
@@ -61,19 +268,165 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Convert config to portfolios
+	// Convert config to portfolios. One block expands to several when it
+	// carries a Sweep, and to exactly one when it does not.
 	portfolios := make([]*backtest.Portfolio, 0, len(config.Portfolios))
 	for _, pc := range config.Portfolios {
-		portfolio, err := pc.ToPortfolio()
+		expanded, err := pc.ToPortfolios()
 		if err != nil {
 			log.Fatalf(
 				"Failed to convert portfolio %s: %v", pc.Name, err,
 			)
 		}
-		portfolios = append(portfolios, portfolio)
+		portfolios = append(portfolios, expanded...)
 	}
 
-	if _, err := backtest.Run(portfolios, config.Output); err != nil {
+	// A screen, not a run: ask whether any signal ranks forward returns on this
+	// universe before spending an afternoon writing a strategy around one.
+	if scanSignals {
+		fmt.Print(backtest.ScanConfigPortfolios(portfolios, nil))
+		return
+	}
+	// "What happens after X?" — the other cheap question, answered before
+	// writing a strategy around the answer.
+	if eventStudy {
+		fmt.Print(backtest.StudyConfigPortfolios(portfolios, nil))
+		return
+	}
+
+	// Set before Run: the battery runs inside each worker, over data already
+	// aligned there, so it cannot be switched on afterwards.
+	backtest.RobustnessChecks = robustness || research
+	if robustness {
+		fmt.Printf("robustness battery on: %d extra simulations per portfolio "+
+			"(%d cost levels, %d start shifts)\n",
+			len(backtest.CostLevels)+len(backtest.StartShifts),
+			len(backtest.CostLevels), len(backtest.StartShifts))
+	}
+
+	results, err := backtest.Run(portfolios, config.Output)
+	if err != nil {
 		log.Fatalf("Run: %v", err)
 	}
+
+	if research {
+		fmt.Print(backtest.ResearchSummary(results))
+	} else if robustness {
+		for _, res := range results {
+			fmt.Printf("\n%s\n%s", res.PortfolioName, res.Robustness.String())
+		}
+	}
+
+	// Judged before anything is written out, so a rejection is visible in the
+	// same breath as the numbers that produced it rather than after them.
+	if hypothPath != "" {
+		h, err := backtest.LoadHypothesis(hypothPath)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		for _, res := range results {
+			trials := res.Trials
+			if h.Campaign != "" {
+				if n, err := campaignTrialCount(h.Campaign); err == nil && n > trials {
+					trials = n
+				}
+			}
+			fmt.Print(backtest.Judge(h, res, trials).String())
+		}
+	}
+
+	if pagesDir != "" {
+		paths, err := backtest.WriteCandidatePages(results, pagesDir)
+		if err != nil {
+			log.Printf("could not write the candidate pages: %v", err)
+		} else {
+			fmt.Printf("%d candidate page(s) written to %s\n", len(paths), pagesDir)
+		}
+	}
+
+	if bundlePath != "" {
+		bundle := backtest.NewBundle(portfolios, results)
+		if err := bundle.Save(bundlePath); err != nil {
+			log.Printf("could not write the bundle: %v", err)
+		} else {
+			fmt.Printf("bundle written to %s (engine %s, %d run(s))\n",
+				bundlePath, bundle.EngineSHA, len(bundle.Runs))
+		}
+	}
+
+	// Bookkeeping, and strictly after the fact: a failure to record must never
+	// cost a run that already succeeded.
+	if record {
+		if err := recordRun(portfolios, results, campaign); err != nil {
+			log.Printf("could not record this run: %v", err)
+		}
+	}
+}
+
+// recordRun appends the results to the research log and reports whether this
+// exact config has been run before — which is the question the log exists to
+// answer, and is worth saying at the moment it is still actionable.
+func recordRun(
+	portfolios []*backtest.Portfolio, results []backtest.Result, campaign string,
+) error {
+	reg, err := backtest.OpenRegistry(backtest.DefaultRegistryPath)
+	if err != nil {
+		return err
+	}
+	defer reg.Close()
+
+	for _, p := range portfolios {
+		hash := backtest.ConfigHash(p)
+		if prior, last, err := reg.PriorRuns(hash); err == nil && prior > 0 {
+			fmt.Printf("note: %q has been run %d time(s) before, last on %s "+
+				"[%s]\n", p.Pname, prior, last.Format("2006-01-02"), hash)
+		}
+	}
+	if err := reg.Record(campaign, portfolios, results); err != nil {
+		return err
+	}
+	if campaign != "" {
+		// The campaign figure is the honest one: a search that has tried 200
+		// things must clear a higher bar than one that tried 6, and the
+		// per-sweep number does not know about the other 194.
+		if trials, bar, err := reg.CampaignDeflation(campaign); err == nil {
+			fmt.Printf("campaign %q has now spent %d trials", campaign, trials)
+			if bar > 0 {
+				fmt.Printf("; luck alone would produce a Sharpe of %.2f across "+
+					"that many, so treat anything below it as noise", bar)
+			}
+			fmt.Println()
+		}
+	}
+	fmt.Printf("recorded %d result(s) to %s\n",
+		len(results), backtest.DefaultRegistryPath)
+	return nil
+}
+
+// campaignTrialCount reads a campaign's cumulative trial count from the
+// research log, so a verdict deflates against every trial ever spent on the
+// question rather than only the ones in this invocation.
+//
+// A missing or unreadable log is not an error here: the verdict falls back to
+// this run's own trial count, which is the conservative direction (fewer
+// trials means a lower bar, so it can only make a verdict harder to justify,
+// never easier to fake).
+func campaignTrialCount(campaign string) (int, error) {
+	reg, err := backtest.OpenRegistry(backtest.DefaultRegistryPath)
+	if err != nil {
+		return 0, err
+	}
+	defer reg.Close()
+	return reg.CampaignTrials(campaign)
+}
+
+// resolveOrDefault finds a file the app ships with, falling back to the path
+// this program assumed before it could be launched from outside the checkout.
+// The fallback matters: it is what the -config flag's help text shows, and a
+// user who has always typed "../config.toml" should keep seeing it.
+func resolveOrDefault(name, fallback string) string {
+	if p, ok := apppath.Resolve(name); ok {
+		return p
+	}
+	return fallback
 }

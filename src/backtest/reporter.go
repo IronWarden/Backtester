@@ -33,8 +33,13 @@ type Reporter struct {
 	buf     []Result
 }
 
-// resultFields lists every value addressable from a filter expression or
-// fields list. The same names are used in `filter` and `fields`.
+// resultFields lists every value addressable from a filter expression, a
+// fields list or sort_by. resultValue is the authority on what actually
+// resolves; this list exists to name the alternatives when a user gets one
+// wrong, which is the difference between "unknown output field" and a message
+// they can act on. TestResultFieldsMatchResultValue keeps the two in step —
+// this list had already drifted, missing Trials, ExpectedMaxSharpe and
+// DeflatedSharpe, while nothing read it.
 var resultFields = []string{
 	"PortfolioName",
 	"Strategy",
@@ -43,9 +48,68 @@ var resultFields = []string{
 	"MaxDrawdown",
 	"AnnualReturn",
 	"StandardDev",
+	"CalmarRatio",
+	"LongestUnderwaterDays",
 	"AvgCorrelation",
 	"CointegratedPairs",
+	"Turnover",
+	"AvgExposure",
+	"TimeInMarket",
+	"Alpha",
+	"Beta",
+	"TrackingError",
+	"InformationRatio",
+	"UpCapture",
+	"DownCapture",
+	"InitialCapital",
+	"FinalValue",
+	"Profit",
+	"Trials",
+	"ExpectedMaxSharpe",
+	"DeflatedSharpe",
+	// The blotter's summary. Trades is the one worth filtering on before any
+	// of the others: a strategy that placed no trades is not a strategy, and
+	// it reports a flat curve rather than an error, so it survives a filter
+	// written in terms of returns.
+	"Trades",
+	"Buys",
+	"Sells",
+	"RoundTrips",
+	"Wins",
+	"Losses",
+	"WinRate",
+	"AvgWin",
+	"AvgLoss",
+	"ProfitFactor",
+	"TotalRealized",
+	"TotalFees",
+	"AvgHoldingDays",
+	// The baseline comparison. Prefixed because BaselineStats carries its own
+	// FinalValue, SharpeRatio, MaxDrawdown and StandardDev, and an unprefixed
+	// name here would quietly resolve to the wrong one of the two.
+	"BaselineFinalValue",
+	"BaselineAnnualReturn",
+	"BaselineSharpe",
+	"BaselineMaxDrawdown",
+	"BaselineStandardDev",
+	"ExcessFinalValue",
+	"ExcessAnnualReturn",
+	"BeatBaseline",
+	"BaselineComputed",
+	// Is this better than chance. PValue is the reason to want any of this,
+	// and SignificanceComputed is the reason not to trust it alone — see the
+	// note on resultValue below.
+	"PValue",
+	"Percentile",
+	"NullMeanSharpe",
+	"NullP95Sharpe",
+	"BootstrapLow",
+	"BootstrapHigh",
+	"SignificanceComputed",
 }
+
+// knownFields renders the addressable names for an error message.
+func knownFields() string { return strings.Join(resultFields, ", ") }
 
 func resultValue(r Result, name string) (any, bool) {
 	switch name {
@@ -63,10 +127,115 @@ func resultValue(r Result, name string) (any, bool) {
 		return r.Metrics.AnnualReturn, true
 	case "StandardDev":
 		return r.Metrics.StandardDev, true
+	case "CalmarRatio":
+		return r.Metrics.CalmarRatio, true
+	case "LongestUnderwaterDays":
+		return float64(r.Metrics.LongestUnderwaterDays), true
 	case "AvgCorrelation":
 		return r.Metrics.AvgCorrelation, true
 	case "CointegratedPairs":
 		return float64(r.Metrics.CointegratedPairs), true
+	case "Turnover":
+		return r.Metrics.Turnover, true
+	case "AvgExposure":
+		return r.Metrics.AvgExposure, true
+	case "TimeInMarket":
+		return r.Metrics.TimeInMarket, true
+	case "Alpha":
+		return r.Metrics.Alpha, true
+	case "Beta":
+		return r.Metrics.Beta, true
+	case "TrackingError":
+		return r.Metrics.TrackingError, true
+	case "InformationRatio":
+		return r.Metrics.InformationRatio, true
+	case "UpCapture":
+		return r.Metrics.UpCapture, true
+	case "DownCapture":
+		return r.Metrics.DownCapture, true
+	case "InitialCapital":
+		return r.InitialCapital, true
+	case "FinalValue":
+		return r.FinalValue, true
+	case "Profit":
+		return r.FinalValue - r.InitialCapital, true
+	case "Trials":
+		// float64 like every other number here: evalBinary compares float64s
+		// and lessByField sorts them, so an int makes "Trials > 5" fail with
+		// a type error and sort_by = "Trials" silently not sort.
+		return float64(r.Trials), true
+	case "ExpectedMaxSharpe":
+		return r.ExpectedMaxSharpe, true
+	case "DeflatedSharpe":
+		return r.DeflatedSharpe, true
+	// Blotter fields. The counts convert to float64 like every other number
+	// here — see the note on Trials above.
+	case "Trades":
+		return float64(r.TradeStats.Trades), true
+	case "Buys":
+		return float64(r.TradeStats.Buys), true
+	case "Sells":
+		return float64(r.TradeStats.Sells), true
+	case "RoundTrips":
+		return float64(r.TradeStats.RoundTrips), true
+	case "Wins":
+		return float64(r.TradeStats.Wins), true
+	case "Losses":
+		return float64(r.TradeStats.Losses), true
+	case "WinRate":
+		return r.TradeStats.WinRate, true
+	case "AvgWin":
+		return r.TradeStats.AvgWin, true
+	case "AvgLoss":
+		return r.TradeStats.AvgLoss, true
+	case "ProfitFactor":
+		return r.TradeStats.ProfitFactor, true
+	case "TotalRealized":
+		return r.TradeStats.TotalRealized, true
+	case "TotalFees":
+		return r.TradeStats.TotalFees, true
+	case "AvgHoldingDays":
+		return r.TradeStats.AvgHoldingDays, true
+	// Baseline comparison.
+	case "BaselineFinalValue":
+		return r.Baseline.FinalValue, true
+	case "BaselineAnnualReturn":
+		return r.Baseline.AnnualReturn, true
+	case "BaselineSharpe":
+		return r.Baseline.SharpeRatio, true
+	case "BaselineMaxDrawdown":
+		return r.Baseline.MaxDrawdown, true
+	case "BaselineStandardDev":
+		return r.Baseline.StandardDev, true
+	case "ExcessFinalValue":
+		return r.Baseline.ExcessFinalValue, true
+	case "ExcessAnnualReturn":
+		return r.Baseline.ExcessAnnualReturn, true
+	case "BeatBaseline":
+		return r.Baseline.Beat, true
+	// The Computed flags are addressable because without them the figures
+	// above and below LIE BY OMISSION rather than by being absent. An
+	// uncomputed Significance has PValue 0, which passes "PValue < 0.05" and
+	// reads as maximally significant; an uncomputed Baseline has Beat false
+	// and Excess 0, which reads as "tied with buy-and-hold". Neither is a
+	// result. A filter over either family wants the flag in it.
+	case "BaselineComputed":
+		return r.Baseline.Computed, true
+	// Better than chance.
+	case "PValue":
+		return r.Significance.PValue, true
+	case "Percentile":
+		return r.Significance.Percentile, true
+	case "NullMeanSharpe":
+		return r.Significance.NullMeanSharpe, true
+	case "NullP95Sharpe":
+		return r.Significance.NullP95Sharpe, true
+	case "BootstrapLow":
+		return r.Significance.BootstrapLow, true
+	case "BootstrapHigh":
+		return r.Significance.BootstrapHigh, true
+	case "SignificanceComputed":
+		return r.Significance.Computed, true
 	}
 	return nil, false
 }
@@ -95,7 +264,8 @@ func NewReporter(cfg *OutputConfig) (*Reporter, error) {
 	}
 	for _, f := range fields {
 		if _, ok := resultValue(Result{}, f); !ok {
-			return nil, fmt.Errorf("unknown output field %q", f)
+			return nil, fmt.Errorf(
+				"unknown output field %q; known fields are %s", f, knownFields())
 		}
 	}
 
@@ -114,7 +284,9 @@ func NewReporter(cfg *OutputConfig) (*Reporter, error) {
 	sortBy := cfg.SortBy
 	if sortBy != "" {
 		if _, ok := resultValue(Result{}, sortBy); !ok {
-			return nil, fmt.Errorf("unknown sort_by field %q", sortBy)
+			return nil, fmt.Errorf(
+				"unknown sort_by field %q; known fields are %s",
+				sortBy, knownFields())
 		}
 	}
 
@@ -325,7 +497,9 @@ func validateFilter(e ast.Expr) error {
 				return true
 			}
 			if _, ok := resultValue(Result{}, v.Name); !ok {
-				walkErr = fmt.Errorf("unknown identifier %q", v.Name)
+				walkErr = fmt.Errorf(
+					"unknown identifier %q; known fields are %s",
+					v.Name, knownFields())
 				return false
 			}
 		case *ast.CallExpr, *ast.SelectorExpr, *ast.IndexExpr:

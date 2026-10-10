@@ -1,0 +1,131 @@
+{
+  "results": [
+    {
+      "portfolioName": "2021-03-04",
+      "strategy": "2021-03-04",
+      "sharpeRatio": 1.25,
+      "sortinoRatio": 1.25,
+      "maxDrawdown": 1.25,
+      "annualReturn": 1.25,
+      "realAnnualReturn": 1.25,
+      "netContributions": 1.25,
+      "withdrawalsMissed": 7,
+      "standardDev": 1.25,
+      "avgCorrelation": 1.25,
+      "cointegratedPairs": 7,
+      "turnover": 1.25,
+      "avgExposure": 1.25,
+      "fundamentalCoverage": 1.25,
+      "calmarRatio": 1.25,
+      "longestUnderwaterDays": 7,
+      "timeInMarket": 1.25,
+      "alpha": 1.25,
+      "beta": 1.25,
+      "trackingError": 1.25,
+      "informationRatio": 1.25,
+      "upCapture": 1.25,
+      "downCapture": 1.25,
+      "initialCapital": 1.25,
+      "finalValue": 1.25,
+      "plots": [
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        },
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        }
+      ],
+      "equityCurve": [
+        1.25,
+        1.25
+      ],
+      "dates": [
+        "2021-03-04",
+        "2021-03-04"
+      ],
+      "drawdowns": null,
+      "rollingSharpe": null,
+      "yearlyReturns": null,
+      "monthlyReturns": null,
+      "benchmarkCurve": null,
+      "benchmarkStats": {
+        "ticker": "",
+        "annualReturn": 0,
+        "sharpeRatio": 0,
+        "maxDrawdown": 0,
+        "standardDev": 0,
+        "realAnnualReturn": 0
+      },
+      "splits": null,
+      "walkForward": null,
+      "trials": 7,
+      "expectedMaxSharpe": 1.25,
+      "deflatedSharpe": 1.25,
+      "baseline": {
+        "name": "2021-03-04",
+        "finalValue": 1.25,
+        "annualReturn": 1.25,
+        "sharpeRatio": 1.25,
+        "maxDrawdown": 1.25,
+        "standardDev": 1.25,
+        "excessFinalValue": 1.25,
+        "excessAnnualReturn": 1.25,
+        "beat": true,
+        "computed": true,
+        "outOfSampleAnnualReturn": 1.25,
+        "outOfSampleComputed": true
+      },
+      "significance": {
+        "draws": 7,
+        "seed": 7,
+        "sharpe": 1.25,
+        "pValue": 1.25,
+        "percentile": 1.25,
+        "nullMeanSharpe": 1.25,
+        "nullP95Sharpe": 1.25,
+        "bootstrapLow": 1.25,
+        "bootstrapHigh": 1.25,
+        "computed": true
+      },
+      "tradeStats": {
+        "trades": 0,
+        "buys": 0,
+        "sells": 0,
+        "roundTrips": 0,
+        "wins": 0,
+        "losses": 0,
+        "winRate": 0,
+        "avgWin": 0,
+        "avgLoss": 0,
+        "profitFactor": 0,
+        "totalRealized": 0,
+        "totalFees": 0,
+        "avgHoldingDays": 0,
+        "perTicker": null
+      }
+    }
+  ],
+  "diagnostics": null,
+  "verdicts": null,
+  "hypothesisError": ""
+}

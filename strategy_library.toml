@@ -1,0 +1,339 @@
+# Strategy library — every shipped strategy over the same tickers and
+# window, so the results table compares them directly. Open this in
+# Advanced mode and hit "Run backtest".
+#
+# To adapt: change Tickers / dates once per block, or delete the blocks you
+# don't care about. Each Strategy points at a file in strategies/ that you
+# can copy and edit — see strategies/README.md for the Lua API.
+#
+# Note the two families need different universes:
+#   - Per-ticker signal strategies (trend, breakout, RSI, Bollinger) decide
+#     each ticker independently, so a basket of individual stocks is right.
+#   - Allocation strategies (rotation, risk parity, rebalance) split capital
+#     across the universe, so mixing asset classes ($SP500 with $CASH) is
+#     where they earn their keep.
+
+# --- Baselines -----------------------------------------------------------
+
+[[portfolio]]
+Name = "Baseline: buy & hold"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "buyAndHold:equalWeights"
+
+[[portfolio]]
+Name = "Baseline: dollar-cost averaging"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/dca.lua"
+# ~115 monthly buys over the window; 870/buy fully invests the balance.
+[portfolio.Params]
+amount = 870.0
+every_days = 21
+
+# --- Trend following -----------------------------------------------------
+
+[[portfolio]]
+Name = "Trend: 200-day timing"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/trend_following.lua"
+[portfolio.Params]
+period = 200
+buffer_pct = 1.0
+
+[[portfolio]]
+Name = "Trend: SMA crossover"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/sma_cross.lua"
+[portfolio.Params]
+short = 50
+long = 200
+
+[[portfolio]]
+Name = "Trend: Donchian breakout"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/donchian_breakout.lua"
+[portfolio.Params]
+entry_period = 55
+exit_period = 20
+
+# --- Mean reversion ------------------------------------------------------
+
+[[portfolio]]
+Name = "Reversion: RSI oversold"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/rsi.lua"
+[portfolio.Params]
+period = 14
+buy_thresh = 30
+sell_thresh = 70
+
+[[portfolio]]
+Name = "Reversion: Bollinger bands"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL"]
+Strategy = "lua:strategies/bollinger_reversion.lua"
+[portfolio.Params]
+period = 20
+k = 2.0
+
+# --- Allocation ----------------------------------------------------------
+# These split capital across the universe, so they get a mixed one.
+
+[[portfolio]]
+Name = "Alloc: 60/40 rebalanced"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["$SP500", "$CASH"]
+Strategy = "lua:strategies/rebalance.lua"
+[portfolio.Params]
+rebalance_days = 63
+weights = { "$SP500" = 60, "$CASH" = 40 }
+
+[[portfolio]]
+Name = "Alloc: 60/40 buy & hold (no rebalance)"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["$SP500", "$CASH"]
+Strategy = "lua:strategies/buy_and_hold.lua"
+[portfolio.Params]
+weights = { "$SP500" = 60, "$CASH" = 40 }
+
+# Expect a near-flat curve here: inverse-volatility weighting is uncapped,
+# so pairing an index with $CASH parks almost everything in cash. Swap
+# $CASH for a bond fund (or another equity index) to see it allocate.
+[[portfolio]]
+Name = "Alloc: risk parity"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["$SP500", "$CASH"]
+Strategy = "lua:strategies/risk_parity.lua"
+[portfolio.Params]
+lookback = 60
+rebalance_days = 21
+
+[[portfolio]]
+Name = "Alloc: momentum rotation"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "GOOGL", "$CASH"]
+Strategy = "lua:strategies/momentum_rotation.lua"
+[portfolio.Params]
+lookback = 126
+top_n = 2
+rebalance_days = 21
+
+
+# --- Fundamentals (SEC filings) ------------------------------------------
+#
+# Ranked screens on reported figures, read from sec_financials — run
+# `python3 add_sec_financials.py` first, or they hold nothing (Fund Cov %
+# says so). Each script's fundamentals = { ... } table says which figures it
+# reads, and the engine loads them when the block declares none of its own,
+# so naming the Strategy is enough. Each figure is the one first filed, usable from the day after the
+# filing. The list below is 41 large non-financial companies; every one is
+# alive today, which flatters any long-only screen — compare against the
+# equal-weight baseline, not against zero. GOOGL, DIS, MDT and XOM are left
+# out: their SEC history before 2015 sits under a previous filer.
+
+[[portfolio]]
+Name = "Fundamentals: quality (ROE)"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "INTC", "CSCO", "ORCL", "QCOM", "TXN", "ADP", "IBM",
+           "KO", "PEP", "PG", "CL", "KMB", "WMT", "COST", "HD", "MCD", "NKE",
+           "SBUX", "TGT", "LOW", "JNJ", "PFE", "MRK", "ABT", "BMY", "AMGN",
+           "GILD", "CAT", "MMM", "HON", "EMR", "GD", "LMT", "UNP", "UPS", "T",
+           "VZ", "CMCSA", "CVX"]
+Strategy = "lua:strategies/quality_roe.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+top_n = 10
+rebalance_days = 63
+
+[[portfolio]]
+Name = "Fundamentals: gross profitability"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "INTC", "CSCO", "ORCL", "QCOM", "TXN", "ADP", "IBM",
+           "KO", "PEP", "PG", "CL", "KMB", "WMT", "COST", "HD", "MCD", "NKE",
+           "SBUX", "TGT", "LOW", "JNJ", "PFE", "MRK", "ABT", "BMY", "AMGN",
+           "GILD", "CAT", "MMM", "HON", "EMR", "GD", "LMT", "UNP", "UPS", "T",
+           "VZ", "CMCSA", "CVX"]
+Strategy = "lua:strategies/gross_profitability.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+top_n = 10
+rebalance_days = 63
+
+[[portfolio]]
+Name = "Fundamentals: Piotroski F-score"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "INTC", "CSCO", "ORCL", "QCOM", "TXN", "ADP", "IBM",
+           "KO", "PEP", "PG", "CL", "KMB", "WMT", "COST", "HD", "MCD", "NKE",
+           "SBUX", "TGT", "LOW", "JNJ", "PFE", "MRK", "ABT", "BMY", "AMGN",
+           "GILD", "CAT", "MMM", "HON", "EMR", "GD", "LMT", "UNP", "UPS", "T",
+           "VZ", "CMCSA", "CVX"]
+Strategy = "lua:strategies/piotroski_fscore.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+min_score = 7
+max_names = 10
+rebalance_days = 63
+
+[[portfolio]]
+Name = "Fundamentals: low asset growth"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "INTC", "CSCO", "ORCL", "QCOM", "TXN", "ADP", "IBM",
+           "KO", "PEP", "PG", "CL", "KMB", "WMT", "COST", "HD", "MCD", "NKE",
+           "SBUX", "TGT", "LOW", "JNJ", "PFE", "MRK", "ABT", "BMY", "AMGN",
+           "GILD", "CAT", "MMM", "HON", "EMR", "GD", "LMT", "UNP", "UPS", "T",
+           "VZ", "CMCSA", "CVX"]
+Strategy = "lua:strategies/low_asset_growth.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+top_n = 10
+rebalance_days = 63
+
+[[portfolio]]
+Name = "Fundamentals: strong balance sheet"
+BuyingPower = 100000.0
+StartDate = "2015-06-01"
+EndDate = "2025-01-01"
+Tickers = ["AAPL", "MSFT", "INTC", "CSCO", "ORCL", "QCOM", "TXN", "ADP", "IBM",
+           "KO", "PEP", "PG", "CL", "KMB", "WMT", "COST", "HD", "MCD", "NKE",
+           "SBUX", "TGT", "LOW", "JNJ", "PFE", "MRK", "ABT", "BMY", "AMGN",
+           "GILD", "CAT", "MMM", "HON", "EMR", "GD", "LMT", "UNP", "UPS", "T",
+           "VZ", "CMCSA", "CVX"]
+Strategy = "lua:strategies/strong_balance_sheet.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+top_n = 10
+rebalance_days = 63
+
+
+# --- Famous investors ----------------------------------------------------
+#
+# The same portfolios the Backtest tab offers under "Or copy a famous
+# investor". Each is something you could have bought on its first day: a
+# published recipe, or a 13F bought the day after it was filed -- never
+# today's holdings run backwards, which only lists what worked.
+
+# Buffett's 2013-letter instructions for his estate: 90% S&P 500 index fund,
+# 10% short-term government bonds ($CASH is the T-bill series).
+[[portfolio]]
+Name = "Investor: Buffett 90/10"
+BuyingPower = 100000.0
+StartDate = "1996-09-23"
+EndDate = "2026-09-23"
+Tickers = ["$SP500", "$CASH"]
+Strategy = "lua:strategies/rebalance.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+weights = { "$SP500" = 90.0, "$CASH" = 10.0 }
+
+# Berkshire's 13F for Q4 2015 (SEC accession 0000950123-16-015025, filed
+# 2016-02-16), at the filing's dollar values in $M, bought the next day and
+# held. USG (acquired 2019) and Visa are absent from the bundled database and
+# Precision Castparts was bought outright before the filing, so they are left
+# out. EndDate stops at BK's last bar on the bundled database.
+[[portfolio]]
+Name = "Investor: Berkshire 13F, Q4 2015"
+BuyingPower = 100000.0
+StartDate = "2016-02-17"
+EndDate = "2026-06-26"
+Tickers = ["WFC", "KHC", "KO", "IBM", "AXP", "PSX", "PG", "USB", "WMT", "DVA",
+           "MCO", "GS", "CHTR", "DE", "GM", "T", "VRSN", "BK", "SU", "COST",
+           "VZ", "MTB", "AXTA"]
+Strategy = "lua:strategies/buy_and_hold.lua"
+Benchmark = "$SP500"
+[portfolio.Params.weights]
+WFC = 26077.0
+KHC = 23693.0
+KO = 17184.0
+IBM = 11152.0
+AXP = 10545.0
+PSX = 5030.0
+PG = 4192.0
+USB = 3630.0
+WMT = 3444.0
+DVA = 2688.0
+MCO = 2475.0
+GS = 1975.0
+CHTR = 1883.0
+DE = 1745.0
+GM = 1701.0
+T = 1603.0
+VRSN = 1134.0
+BK = 829.0
+SU = 774.0
+COST = 700.0
+VZ = 693.0
+MTB = 652.0
+AXTA = 622.0
+
+# Dalio's All Weather as he gave it to Tony Robbins (2014) -- the retail
+# recipe, not Bridgewater's leveraged fund.
+[[portfolio]]
+Name = "Investor: Dalio All Weather"
+BuyingPower = 100000.0
+StartDate = "2006-09-25"
+EndDate = "2026-09-23"
+Tickers = ["VTI", "TLT", "IEF", "GLD", "DBC"]
+Strategy = "lua:strategies/rebalance.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+weights = { VTI = 30.0, TLT = 40.0, IEF = 15.0, GLD = 7.5, DBC = 7.5 }
+
+# Harry Browne's Permanent Portfolio. He rebalanced on a 15-35% band; the
+# quarterly default here approximates it.
+[[portfolio]]
+Name = "Investor: Browne Permanent Portfolio"
+BuyingPower = 100000.0
+StartDate = "2006-09-25"
+EndDate = "2026-09-23"
+Tickers = ["VTI", "TLT", "GLD", "$CASH"]
+Strategy = "lua:strategies/rebalance.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+weights = { VTI = 25.0, TLT = 25.0, GLD = 25.0, "$CASH" = 25.0 }
+
+# David Swensen's portfolio for individuals, Unconventional Success (2005).
+[[portfolio]]
+Name = "Investor: Swensen portfolio"
+BuyingPower = 100000.0
+StartDate = "2011-09-23"
+EndDate = "2026-09-23"
+Tickers = ["VTI", "VEA", "VWO", "VNQ", "TIP", "IEF"]
+Strategy = "lua:strategies/rebalance.lua"
+Benchmark = "$SP500"
+[portfolio.Params]
+weights = { VTI = 30.0, VEA = 15.0, VWO = 5.0, VNQ = 20.0, TIP = 15.0, IEF = 15.0 }

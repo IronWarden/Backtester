@@ -1,9 +1,15 @@
 package backtest
 
 import (
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"my-backtester/src/data"
 )
 
 type Config struct {
@@ -15,12 +21,179 @@ type Config struct {
 // All fields are optional; an absent [Output] block disables file output.
 type OutputConfig struct {
 	Path   string   `toml:"path"`
-	Format string   `toml:"format"` // "txt" (default), "csv", "json"
-	Fields []string `toml:"fields"` // result fields to emit, in order
-	Filter string   `toml:"filter"` // Go-style expression, e.g. "SharpeRatio > 0.5 && AnnualReturn > 5"
+	Format string   `toml:"format"`  // "txt" (default), "csv", "json"
+	Fields []string `toml:"fields"`  // result fields to emit, in order
+	Filter string   `toml:"filter"`  // Go-style expression, e.g. "SharpeRatio > 0.5 && AnnualReturn > 5"
 	SortBy string   `toml:"sort_by"` // result field to sort by; empty disables sorting
 	Order  string   `toml:"order"`   // "asc" or "desc" (default "desc")
 	Limit  int      `toml:"limit"`   // emit at most N results; 0 means unlimited
+}
+
+// CostConfig models the cost of trading. Every field defaults to 0, and a
+// zero CostConfig reproduces the frictionless behaviour the engine had
+// before costs existed — so an absent [portfolio.Costs] block changes
+// nothing. Unlike OutputConfig this is a value, not a pointer: "no costs"
+// and "all costs zero" are the same thing, so there is nothing for nil to
+// express and no nil to guard against on the trade path.
+// CashflowConfig is a schedule of deposits or withdrawals applied during the
+// run: contributing on payday, or drawing down in retirement.
+//
+// An absent block means no flows and byte-identical results, which is what
+// keeps every config written before this existed unaffected.
+type CashflowConfig struct {
+	// Amount is signed: positive deposits, negative withdraws. The desktop
+	// form owns the sign through a Deposit/Withdraw dropdown rather than
+	// asking anyone to type a minus into a currency field.
+	Amount float64 `toml:"Amount"`
+	// Frequency is "monthly", "quarterly" or "annually". Empty means no
+	// schedule at all, so a block that sets only Amount does nothing and says
+	// so at check time rather than silently.
+	Frequency string `toml:"Frequency"`
+	// Start is the optional YYYY-MM-DD anchor. Empty means the portfolio's
+	// StartDate.
+	//
+	// The FIRST flow lands one whole period after this date, not on it: the
+	// starting capital is already in the book, so a June start with a monthly
+	// schedule contributes in July. Anything else double-counts the opening
+	// balance on day one.
+	Start string `toml:"Start"`
+}
+
+// Zero reports whether the block asks for nothing, which is the state every
+// pre-existing config is in.
+func (c CashflowConfig) Zero() bool {
+	return c.Amount == 0 && c.Frequency == "" && c.Start == ""
+}
+
+// cashflowPeriods maps the configured vocabulary onto a month step. Months
+// rather than days because "monthly" must not drift: 30-day steps walk off the
+// calendar within a year.
+var cashflowPeriods = map[string]int{
+	"monthly":   1,
+	"quarterly": 3,
+	"annually":  12,
+}
+
+type CostConfig struct {
+	// CommissionPerTrade is a flat amount charged per filled order.
+	CommissionPerTrade float64 `toml:"commission_per_trade"`
+	// CommissionBps is charged per filled order as basis points of the
+	// order's notional value.
+	CommissionBps float64 `toml:"commission_bps"`
+	// SlippageBps worsens the fill price by basis points: buys fill higher
+	// than the quoted close, sells fill lower.
+	SlippageBps float64 `toml:"slippage_bps"`
+	// BorrowBpsAnnual is the annual cost of borrowing shares to hold short,
+	// in basis points of the short position's marked value, accrued once per
+	// trading day over a 252-day year. It is charged only on NEGATIVE
+	// positions, so it is inert for a long-only book whatever it is set to.
+	//
+	// A real borrow rate is per-security and moves daily — general collateral
+	// is a few tens of basis points while a hard-to-borrow name can be
+	// hundreds or thousands. One flat rate is a deliberate simplification and
+	// is the wrong shape for a strategy that shorts hard-to-borrow names; see
+	// README.
+	BorrowBpsAnnual float64 `toml:"borrow_bps_annual"`
+}
+
+// Zero reports whether the config charges nothing, i.e. whether trades
+// execute exactly as they did before the cost model existed.
+func (c CostConfig) Zero() bool {
+	return c.CommissionPerTrade == 0 && c.CommissionBps == 0 &&
+		c.SlippageBps == 0 && c.BorrowBpsAnnual == 0
+}
+
+// bps converts a basis-point figure to a plain multiplier.
+func bps(v float64) float64 { return v / 10000.0 }
+
+// BuyFill is the price a buy actually executes at: slippage moves it
+// against the buyer. With zero slippage this multiplies by exactly 1.0 and
+// so returns quoted unchanged, bit for bit.
+func (c CostConfig) BuyFill(quoted float64) float64 {
+	return quoted * (1.0 + bps(c.SlippageBps))
+}
+
+// SellFill is the price a sell actually executes at: slippage moves it
+// against the seller. Floored at 0 so an absurd slippage setting cannot
+// produce a negative price.
+func (c CostConfig) SellFill(quoted float64) float64 {
+	fill := quoted * (1.0 - bps(c.SlippageBps))
+	if fill < 0 {
+		return 0
+	}
+	return fill
+}
+
+// Commission is the fee charged on one filled order of the given notional
+// value: a flat amount plus a proportional one.
+func (c CostConfig) Commission(notional float64) float64 {
+	return c.CommissionPerTrade + notional*bps(c.CommissionBps)
+}
+
+// MaxAffordableNotional is the largest notional value whose commission the
+// given cash balance can also cover, i.e. the n solving
+// n + Commission(n) = cash. Returns 0 when the cash cannot even cover the
+// flat fee. This is what lets the sub-cent clamp in Buy stay exact once
+// commissions exist.
+func (c CostConfig) MaxAffordableNotional(cash float64) float64 {
+	n := (cash - c.CommissionPerTrade) / (1.0 + bps(c.CommissionBps))
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+// MarginConfig is the equity a short position must be backed by. It replaces
+// the placeholder cap T27a shipped with — gross short notional limited to cash
+// — with the rule brokers actually apply.
+//
+// Both fields are fractions of the short's CURRENT marked value, not of the
+// price it was opened at, which is what makes a maintenance breach possible
+// without the strategy doing anything: the short moves against you and the
+// requirement grows while the equity backing it shrinks.
+//
+// Zero means "use the default below", NOT "no requirement". That is the one
+// place in this config where a zero value is not the inert value, and it is
+// deliberate: a zero margin requirement is unbounded leverage, which is never
+// what an unset field should mean. Shorting is itself opt-in, so no config
+// written before this exists is affected either way.
+type MarginConfig struct {
+	// InitialPct is the equity required to OPEN a short, as a fraction of the
+	// position's value. Defaults to RegTInitialMargin.
+	InitialPct float64 `toml:"initial_pct"`
+	// MaintenancePct is the equity required to KEEP one, checked every day
+	// after the strategy acts. Defaults to DefaultMaintenanceMargin. A breach
+	// forces a cover — see enforceMaintenanceMargin.
+	MaintenancePct float64 `toml:"maintenance_pct"`
+}
+
+// Margin requirements, as fractions of a short position's marked value.
+const (
+	// RegTInitialMargin is Regulation T's initial requirement for a short:
+	// 50% of the position's value must be backed by equity, i.e. a book may
+	// carry short notional up to twice its equity.
+	RegTInitialMargin = 0.50
+
+	// DefaultMaintenanceMargin is the ongoing requirement. Exchange minimums
+	// are nearer 25-30% and brokers commonly set 30-35%; 30% is the
+	// conservative middle and is a default, not a fact about any broker.
+	DefaultMaintenanceMargin = 0.30
+)
+
+// Initial returns the initial requirement with the default filled in.
+func (m MarginConfig) Initial() float64 {
+	if m.InitialPct <= 0 {
+		return RegTInitialMargin
+	}
+	return m.InitialPct
+}
+
+// Maintenance returns the maintenance requirement with the default filled in.
+func (m MarginConfig) Maintenance() float64 {
+	if m.MaintenancePct <= 0 {
+		return DefaultMaintenanceMargin
+	}
+	return m.MaintenancePct
 }
 
 type PortfolioConfig struct {
@@ -31,6 +204,405 @@ type PortfolioConfig struct {
 	Tickers     []string       `toml:"Tickers"`
 	Strategy    string         `toml:"Strategy"`
 	Params      map[string]any `toml:"Params"`
+	Costs       CostConfig     `toml:"Costs"`
+	// Cashflow is an optional schedule of deposits or withdrawals. Absent
+	// means none, and none is what every config written before this existed
+	// has, so their numbers are unchanged.
+	Cashflow CashflowConfig `toml:"Cashflow"`
+	// Benchmark is an optional ticker to score this portfolio against, e.g.
+	// "$SP500". It is NOT traded and never joins Tickers — it only supplies
+	// a return series for the benchmark-relative metrics. Empty means those
+	// metrics are not computed.
+	Benchmark string `toml:"Benchmark"`
+	// Fundamentals declares which reported figures the strategy needs, e.g.
+	// ["Net Income", "Stockholders Equity"]. They are fetched once per run and
+	// reach Lua through fundamental() and market_cap().
+	//
+	// A declaration is required rather than fetching everything because the
+	// raw table is 8.5M rows; naming the metrics keeps it to the handful a
+	// strategy actually reads. Absent or empty, nothing is fetched and nothing
+	// about the run changes, which is why every existing config is unaffected.
+	Fundamentals []string `toml:"Fundamentals"`
+	// FundamentalSource picks the table those figures are read from. Empty
+	// (or "financials") is the `financials` table, 2020-07 onward, exactly as
+	// before this existed. "sec" reads `sec_financials` instead: 2009 onward,
+	// each figure as first filed, with "annual" and "quarterly" kept apart by
+	// SEC's own period length. Under "sec", market_cap() is always nil —
+	// SEC share counts are as reported, never restated for a later split.
+	FundamentalSource string `toml:"FundamentalSource"`
+	// DelistingReturn is the fraction of a position's value lost on the day
+	// the company delists, applied only when the delisting was
+	// performance-related (bankruptcy or a compliance removal) and only to a
+	// holding still open when the run ends. Acquisitions keep their last
+	// close, and a delisting whose reason could not be identified is NOT
+	// haircut — it is counted and reported instead.
+	//
+	// Zero, the default, applies nothing at all and reproduces every previous
+	// result exactly. Researched values are ShumwayNYSEReturn (-0.30) and
+	// ShumwayNasdaqReturn (-0.55). Must be in [-1, 0].
+	DelistingReturn float64 `toml:"DelistingReturn"`
+	// AllowShort permits a position to go negative: a sell past the holding
+	// opens a short instead of being refused, and the engine values it,
+	// realises it and reports its exposure as gross rather than net.
+	//
+	// False, the default, is the long-only engine exactly as it was — every
+	// config written before shorting existed produces identical numbers. While
+	// this is on, gross short notional is capped at the portfolio's cash; that
+	// is a placeholder for a real margin rule, not a model of one.
+	AllowShort bool `toml:"AllowShort"`
+	// Margin is what a short position must be backed by. Ignored entirely
+	// unless AllowShort is on.
+	Margin MarginConfig `toml:"Margin"`
+	// Rules is a strategy written as choices from a fixed menu instead of as a
+	// script (see rules.go). It replaces Strategy; setting both is an error.
+	// Absent, nothing about the portfolio changes.
+	Rules *RulesConfig `toml:"Rules"`
+	// Sweep turns one config block into many runs: every key maps to a LIST
+	// of values, and the block expands to the cartesian product of them. Each
+	// resulting portfolio takes Params with its own sweep values written over
+	// the top, so a swept key overrides its base value and an unswept one is
+	// inherited. Absent or empty, the block produces exactly one portfolio
+	// with exactly Params — which is what every pre-sweep config does.
+	//
+	// Typed as map[string]any rather than map[string][]any so a scalar can be
+	// rejected with an error naming the key, instead of failing as an opaque
+	// TOML decode error.
+	Sweep map[string]any `toml:"Sweep"`
+	// Validation splits the run into a segment the parameters were chosen on
+	// and a segment they were not. Absent, nothing is split and nothing about
+	// the run changes.
+	Validation ValidationConfig `toml:"Validation"`
+	// WalkForward rolls the in-sample/out-of-sample split across the whole
+	// history instead of splitting it once. Requires a Sweep: it works by
+	// re-selecting the best candidate on each training window, and with no
+	// candidates there is nothing to select.
+	WalkForward WalkForwardConfig `toml:"WalkForward"`
+}
+
+// WalkForwardConfig describes a rolling train/test schedule. Windows are
+// counted in TRADING DAYS, not calendar days, so a schedule means the same
+// thing regardless of how many holidays a period happens to contain.
+//
+// A zero WalkForwardConfig means no walk-forward, which is what every config
+// written before this behaved as.
+type WalkForwardConfig struct {
+	// TrainDays is the length of each selection window and TestDays the
+	// length of the scored window that follows it.
+	TrainDays int `toml:"train_days"`
+	TestDays  int `toml:"test_days"`
+	// StepDays is how far the schedule advances between windows. Defaults to
+	// TestDays, which tiles the scored segments end to end with no overlap
+	// and no gap — anything else either double-counts days or drops them.
+	StepDays int `toml:"step_days"`
+	// Objective is the Result field the selection maximizes on each training
+	// window: SharpeRatio (default), SortinoRatio or AnnualReturn. It is
+	// recorded on the result, because a walk-forward whose objective is not
+	// stated cannot be reproduced.
+	Objective string `toml:"objective"`
+}
+
+// Zero reports whether the block asks for no walk-forward at all.
+func (w WalkForwardConfig) Zero() bool {
+	return w.TrainDays == 0 && w.TestDays == 0 && w.StepDays == 0 &&
+		strings.TrimSpace(w.Objective) == ""
+}
+
+// walkForwardObjectives maps the configurable objective names to the figure
+// each selects on. Kept as a map so an unknown name is rejected by listing
+// what is valid rather than silently defaulting.
+var walkForwardObjectives = map[string]func(Metrics) float64{
+	"SharpeRatio":  func(m Metrics) float64 { return m.SharpeRatio },
+	"SortinoRatio": func(m Metrics) float64 { return m.SortinoRatio },
+	"AnnualReturn": func(m Metrics) float64 { return m.AnnualReturn },
+}
+
+// normalized returns the config with defaults applied, or an error naming
+// what is wrong. Validation lives here rather than at the point of use so a
+// bad schedule is rejected before any simulation starts.
+func (w WalkForwardConfig) normalized() (WalkForwardConfig, error) {
+	if w.TrainDays < minSegmentDays {
+		return w, fmt.Errorf(
+			"WalkForward.train_days is %d; at least %d trading days are "+
+				"needed to score a selection window",
+			w.TrainDays, minSegmentDays)
+	}
+	if w.TestDays < minSegmentDays {
+		return w, fmt.Errorf(
+			"WalkForward.test_days is %d; at least %d trading days are "+
+				"needed to score a test window",
+			w.TestDays, minSegmentDays)
+	}
+	if w.StepDays == 0 {
+		w.StepDays = w.TestDays
+	}
+	if w.StepDays < 1 {
+		return w, fmt.Errorf("WalkForward.step_days is %d; must be positive",
+			w.StepDays)
+	}
+	if strings.TrimSpace(w.Objective) == "" {
+		w.Objective = "SharpeRatio"
+	}
+	if _, ok := walkForwardObjectives[w.Objective]; !ok {
+		valid := make([]string, 0, len(walkForwardObjectives))
+		for name := range walkForwardObjectives {
+			valid = append(valid, name)
+		}
+		sort.Strings(valid)
+		return w, fmt.Errorf(
+			"WalkForward.objective %q is not one of %s",
+			w.Objective, strings.Join(valid, ", "))
+	}
+	return w, nil
+}
+
+// ValidationConfig marks where a run stops being evidence. A sweep picks its
+// winner using every day in the window, so scoring that winner on the same
+// days says nothing about whether it works — the split is the cheapest
+// honest defence, and it costs no extra simulation because both segments are
+// sliced out of the one run that already happened.
+//
+// A zero ValidationConfig means no split, which is what every config written
+// before this behaved as.
+type ValidationConfig struct {
+	// InSampleEnd is the last day of the in-sample segment, YYYY-MM-DD. It
+	// must fall strictly inside the portfolio's own [StartDate, EndDate].
+	InSampleEnd string `toml:"in_sample_end"`
+}
+
+// Zero reports whether the block asks for no split at all.
+func (v ValidationConfig) Zero() bool { return strings.TrimSpace(v.InSampleEnd) == "" }
+
+// MaxSweepRuns caps how many portfolios one config block may expand to.
+// Five keys of ten values each is 100,000 backtests and a hung UI, so an
+// oversized product is refused up front rather than discovered by waiting.
+const MaxSweepRuns = 1000
+
+// sweepValues normalizes one Sweep entry to its list of values, rejecting a
+// scalar (which would silently read as a one-value sweep the user did not
+// ask for) and an empty list (which would drop the whole block to zero runs).
+func sweepValues(key string, raw any) ([]any, error) {
+	list, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf(
+			"Sweep key %q must be a list of values, e.g. %s = [1, 2, 3]", key, key,
+		)
+	}
+	if len(list) == 0 {
+		return nil, fmt.Errorf("Sweep key %q has an empty list of values", key)
+	}
+	return list, nil
+}
+
+// sweepCombos expands a Sweep block into one parameter map per combination.
+// Returns nil for an absent or empty block, which callers read as "no sweep".
+//
+// Keys are iterated in sorted order and values in the order they were
+// written, so the same config always expands to the same portfolios in the
+// same sequence. A sweep whose ordering moved between runs could not be
+// diffed against a previous one, which is most of what a sweep is for.
+func sweepCombos(sweep map[string]any) ([]map[string]any, error) {
+	if len(sweep) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(sweep))
+	for k := range sweep {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Size the product first so an oversized sweep is refused before any of
+	// it is built.
+	total := 1
+	lists := make([][]any, len(keys))
+	for i, k := range keys {
+		list, err := sweepValues(k, sweep[k])
+		if err != nil {
+			return nil, err
+		}
+		lists[i] = list
+		total *= len(list)
+		if total > MaxSweepRuns {
+			return nil, fmt.Errorf(
+				"Sweep expands to more than %d runs; narrow the lists or "+
+					"split the block across several portfolios",
+				MaxSweepRuns,
+			)
+		}
+	}
+
+	combos := make([]map[string]any, 0, total)
+	idx := make([]int, len(keys))
+	for {
+		combo := make(map[string]any, len(keys))
+		for i, k := range keys {
+			combo[k] = lists[i][idx[i]]
+		}
+		combos = append(combos, combo)
+		// Odometer increment over the last key first, which makes the earlier
+		// (alphabetically first) keys the slow-moving ones and keeps runs
+		// that share a prefix adjacent in the results.
+		pos := len(keys) - 1
+		for pos >= 0 {
+			idx[pos]++
+			if idx[pos] < len(lists[pos]) {
+				break
+			}
+			idx[pos] = 0
+			pos--
+		}
+		if pos < 0 {
+			break
+		}
+	}
+	return combos, nil
+}
+
+// sweepValueLabel renders one swept value for a portfolio name. TOML integers
+// arrive as int64 and floats as float64; %v would print 1e+06 for a large
+// float and is avoided so the label reads back as what was written.
+func sweepValueLabel(v any) string {
+	switch t := v.(type) {
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
+}
+
+// sweepLabel names a run for its parameters, e.g. "[buy_thresh=20 period=7]".
+// Without it a sweep produces N rows with the same Name, and the parameter
+// set — the only thing that distinguishes them — never reaches the results
+// table or [Output].
+func sweepLabel(combo map[string]any) string {
+	keys := make([]string, 0, len(combo))
+	for k := range combo {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = k + "=" + sweepValueLabel(combo[k])
+	}
+	return "[" + strings.Join(parts, " ") + "]"
+}
+
+// mergeParams returns base with overrides written over the top, leaving base
+// untouched — every combination shares the same base map, so mutating it
+// would leak one combination's values into the next.
+func mergeParams(base, overrides map[string]any) map[string]any {
+	merged := make(map[string]any, len(base)+len(overrides))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range overrides {
+		merged[k] = v
+	}
+	return merged
+}
+
+// ToPortfolios expands one config block into the portfolios it describes:
+// exactly one when there is no Sweep, and the cartesian product of the sweep
+// otherwise. This is the entry point callers should use; ToPortfolio remains
+// the single-portfolio conversion it has always been.
+//
+// Expansion happens here rather than in the runner deliberately. The runner
+// already accepts a slice and fans it out across its worker pool, so a sweep
+// is N portfolios to it and nothing about its concurrency needs to change.
+func (pc *PortfolioConfig) ToPortfolios() ([]*Portfolio, error) {
+	combos, err := sweepCombos(pc.Sweep)
+	if err != nil {
+		return nil, err
+	}
+	// Once per block, before expanding: a swept block would otherwise repeat
+	// the same message for every combination it produces.
+	spec := pc.Strategy
+	if pc.Rules != nil {
+		spec = RulesSpec
+	}
+	warnIgnoredParams(pc.Name, spec, pc.Params, pc.Sweep, len(combos))
+	if len(combos) == 0 {
+		p, err := pc.ToPortfolio()
+		if err != nil {
+			return nil, err
+		}
+		// An unswept block is one trial in a group of one, which is what
+		// makes the overfitting correction a no-op for it.
+		p.Trials = 1
+		p.TrialGroup = pc.Name
+		return []*Portfolio{p}, nil
+	}
+
+	portfolios := make([]*Portfolio, 0, len(combos))
+	for _, combo := range combos {
+		sub := *pc
+		sub.Params = mergeParams(pc.Params, combo)
+		sub.Name = strings.TrimSpace(pc.Name + " " + sweepLabel(combo))
+		p, err := sub.ToPortfolio()
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", sweepLabel(combo), err)
+		}
+		// Every run from this block shares a group and knows how many
+		// candidates it was chosen from.
+		p.Trials = len(combos)
+		p.TrialGroup = pc.Name
+		portfolios = append(portfolios, p)
+	}
+	return portfolios, nil
+}
+
+// LoadConfigText decodes a config from a string rather than a file, for
+// callers that already hold the text — the UI's editor buffer, and -check
+// wanting to validate something before it is saved anywhere.
+// ResolveStrategy fills in a portfolio that omits Strategy, using the caller's
+// default Lua script — the UI passes the script open in its editor; the CLI
+// passes nothing, so an omitted Strategy is an error there.
+//
+// It lives here rather than in each caller because -check is only worth having
+// if it validates exactly the config a run would execute. Two copies of this
+// rule could drift, and the failure would be a check that passes a config the
+// run then rejects.
+func (pc *PortfolioConfig) ResolveStrategy(defaultLuaPath string) error {
+	if pc.Rules != nil {
+		// Refused rather than half-supported: each of these would run
+		// something other than what the rules' sentence says.
+		switch {
+		case strings.TrimSpace(pc.Strategy) != "":
+			return fmt.Errorf(
+				"portfolio %q sets both Strategy and [Portfolio.Rules]; pick one", pc.Name)
+		case len(pc.Sweep) > 0:
+			return fmt.Errorf(
+				"portfolio %q: [Portfolio.Sweep] cannot vary [Portfolio.Rules] yet; "+
+					"write one [[Portfolio]] block per setting instead", pc.Name)
+		case !pc.WalkForward.Zero():
+			return fmt.Errorf(
+				"portfolio %q: walk-forward is not available for [Portfolio.Rules] yet", pc.Name)
+		}
+		return nil
+	}
+	if strings.TrimSpace(pc.Strategy) != "" {
+		return nil
+	}
+	if defaultLuaPath == "" {
+		return fmt.Errorf(
+			"portfolio %q: Strategy is required and no default Lua script "+
+				"is set", pc.Name)
+	}
+	pc.Strategy = "lua:" + defaultLuaPath
+	return nil
+}
+
+func LoadConfigText(text string) (*Config, error) {
+	var config Config
+	if _, err := toml.Decode(text, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
 }
 
 func LoadConfig(filepath string) (*Config, error) {
@@ -53,13 +625,187 @@ func (pc *PortfolioConfig) ToPortfolio() (*Portfolio, error) {
 		return nil, err
 	}
 
-	return InitializePortfolio(
+	spec, params := pc.Strategy, pc.Params
+	if pc.Rules != nil {
+		if strings.TrimSpace(pc.Strategy) != "" {
+			return nil, fmt.Errorf(
+				"portfolio %q sets both Strategy and [Portfolio.Rules]; pick one", pc.Name)
+		}
+		c, err := compileRules(*pc.Rules, pc.Tickers, pc.Benchmark)
+		if err != nil {
+			return nil, fmt.Errorf("portfolio %q: %v", pc.Name, err)
+		}
+		if n := weekdaysBetween(startTime, endTime); c.warmup >= n {
+			return nil, fmt.Errorf(
+				"portfolio %q: the rules need %d trading days of history before "+
+					"their first decision, but %s..%s has at most %d; start earlier "+
+					"or use shorter lookbacks",
+				pc.Name, c.warmup, pc.StartTime, pc.EndTime, n)
+		}
+		spec, params = RulesSpec, pc.Rules.params()
+	}
+	p, err := InitializePortfolio(
 		pc.BuyingPower,
 		startTime,
 		endTime,
 		pc.Name,
 		pc.Tickers,
-		pc.Strategy,
-		pc.Params,
+		spec,
+		params,
 	)
+	if err != nil {
+		return nil, err
+	}
+	// Set after construction rather than as an eighth positional argument to
+	// InitializePortfolio, which is already at the limit of what a positional
+	// signature carries readably.
+	// A positive delisting return would pay a holder for a bankruptcy, and
+	// below -1 would take more than the position is worth. Rejected by name
+	// rather than clamped: a config asking for either meant something else.
+	if pc.Costs.BorrowBpsAnnual < 0 {
+		return nil, fmt.Errorf(
+			"portfolio %q: borrow_bps_annual is %.2f; a negative borrow rate "+
+				"would pay a strategy to hold a short",
+			pc.Name, pc.Costs.BorrowBpsAnnual)
+	}
+	if pc.DelistingReturn > 0 || pc.DelistingReturn < -1 {
+		return nil, fmt.Errorf(
+			"portfolio %q: DelistingReturn is %.4f; it is the fraction of a "+
+				"position LOST on delisting and must be in [-1, 0] "+
+				"(e.g. -0.30 for Shumway's NYSE figure)",
+			pc.Name, pc.DelistingReturn)
+	}
+	p.Costs = pc.Costs
+	if pc.Margin.InitialPct < 0 || pc.Margin.InitialPct > 1 ||
+		pc.Margin.MaintenancePct < 0 || pc.Margin.MaintenancePct > 1 {
+		return nil, fmt.Errorf(
+			"portfolio %q: margin requirements are fractions of a position's "+
+				"value and must be in [0, 1]; got initial_pct %.4f, "+
+				"maintenance_pct %.4f", pc.Name,
+			pc.Margin.InitialPct, pc.Margin.MaintenancePct)
+	}
+	// A maintenance requirement above the initial one would margin-call a
+	// position the instant it was opened.
+	if pc.Margin.Maintenance() > pc.Margin.Initial() {
+		return nil, fmt.Errorf(
+			"portfolio %q: maintenance_pct %.4f exceeds initial_pct %.4f, so "+
+				"every short would be called the day it was opened",
+			pc.Name, pc.Margin.Maintenance(), pc.Margin.Initial())
+	}
+	// Validated here rather than at check time alone, because ToPortfolio is
+	// the one path every caller shares -- the CLI, the UI and the sweep
+	// expansion all arrive through it.
+	if !pc.Cashflow.Zero() {
+		step, ok := cashflowPeriods[pc.Cashflow.Frequency]
+		if !ok {
+			return nil, fmt.Errorf(
+				"portfolio %q: Cashflow.Frequency is %q; it must be one of "+
+					"monthly, quarterly, annually",
+				pc.Name, pc.Cashflow.Frequency)
+		}
+		if pc.Cashflow.Amount == 0 {
+			return nil, fmt.Errorf(
+				"portfolio %q: Cashflow.Frequency is %q but Amount is 0, so the "+
+					"schedule would do nothing. Set an amount or remove the block",
+				pc.Name, pc.Cashflow.Frequency)
+		}
+		anchor := startTime
+		if pc.Cashflow.Start != "" {
+			t, err := time.Parse("2006-01-02", pc.Cashflow.Start)
+			if err != nil {
+				return nil, fmt.Errorf("portfolio %q: Cashflow.Start: %w", pc.Name, err)
+			}
+			if t.Before(startTime) || t.After(endTime) {
+				return nil, fmt.Errorf(
+					"portfolio %q: Cashflow.Start %s falls outside the window "+
+						"%s..%s, so no flow could ever land",
+					pc.Name, pc.Cashflow.Start, pc.StartTime, pc.EndTime)
+			}
+			anchor = t
+		}
+		p.Cashflow = pc.Cashflow
+		p.cashflowStep = step
+		// One whole period after the anchor: the opening balance is already in
+		// the book, so a flow on day one would double-count it.
+		p.cashflowAnchor = anchor
+		p.nextCashflow = p.firstCashflow()
+	}
+	p.AllowShort = pc.AllowShort
+	p.Margin = pc.Margin
+	p.DelistingReturn = pc.DelistingReturn
+	p.Benchmark = pc.Benchmark
+	metrics, source := pc.Fundamentals, pc.FundamentalSource
+	if ls, ok := p.Strategy.(*LuaStrategy); ok && len(metrics) == 0 {
+		// The config declares no figures, so the script's own `fundamentals`
+		// table decides — which is what makes a fundamentals strategy work
+		// when it is picked by name and nothing else. A config that names
+		// any metrics is taken as meaning exactly those.
+		hs, hm, err := ls.DeclaredFundamentals()
+		if err != nil {
+			return nil, fmt.Errorf("portfolio %q: %w", pc.Name, err)
+		}
+		metrics = hm
+		if source == "" {
+			source = hs
+		}
+	}
+	p.Fundamentals = metrics
+	source, err = fundamentalSource(pc.Name, source, metrics)
+	if err != nil {
+		return nil, err
+	}
+	p.FundamentalSource = source
+
+	if !pc.Validation.Zero() {
+		split, err := time.Parse("2006-01-02", pc.Validation.InSampleEnd)
+		if err != nil {
+			return nil, fmt.Errorf("Validation.in_sample_end: %w", err)
+		}
+		// Strictly inside, not merely within: a split on either boundary
+		// produces one empty segment, which is a config mistake rather than a
+		// degenerate-but-valid run.
+		if !split.After(startTime) || !split.Before(endTime) {
+			return nil, fmt.Errorf(
+				"Validation.in_sample_end %s must fall strictly between "+
+					"StartDate %s and EndDate %s",
+				pc.Validation.InSampleEnd, pc.StartTime, pc.EndTime,
+			)
+		}
+		p.InSampleEnd = split
+	}
+	return p, nil
+}
+
+// fundamentalSource validates FundamentalSource and returns the value the
+// engine keys on: "" for `financials`, data.SourceSEC for `sec_financials`.
+//
+// Under "sec" every declared metric must be one the SEC loader writes. A name
+// it does not know would otherwise return nil forever, which reads exactly
+// like a company that has not reported — the silent failure this refuses.
+func fundamentalSource(name, source string, metrics []string) (string, error) {
+	switch source {
+	case "", "financials":
+		return "", nil
+	case data.SourceSEC:
+	default:
+		return "", fmt.Errorf(
+			"portfolio %q: FundamentalSource %q is not one of \"financials\" "+
+				"(the default) or \"sec\"", name, source)
+	}
+	if len(metrics) == 0 {
+		return "", fmt.Errorf(
+			"portfolio %q: FundamentalSource = \"sec\" but Fundamentals is "+
+				"empty, so nothing would be read from it. Declare the metrics "+
+				"the strategy uses, e.g. Fundamentals = [\"Net Income\"]", name)
+	}
+	for _, m := range metrics {
+		if !data.IsSECMetric(m) {
+			return "", fmt.Errorf(
+				"portfolio %q: %q is not a metric sec_financials carries, so "+
+					"fundamental() would return nil for it every day. The SEC "+
+					"metrics are: %s", name, m,
+				strings.Join(data.SECMetrics, ", "))
+		}
+	}
+	return data.SourceSEC, nil
 }

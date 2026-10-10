@@ -1,0 +1,199 @@
+{
+  "releases": [
+    {
+      "agency": "BEA",
+      "series": "International trade",
+      "title": "U.S. International Trade in Goods and Services, August 2026",
+      "summary": "The U.S. goods and services trade deficit increased in August 2026 according to the U.S. Bureau of Economic Analysis and the U.S. Census Bureau. The deficit increased from $92.8 billion in July (revised) to $105.6 billion in August, as imports increased more than exports. The goods deficit increased $12.8 billion in August to $136.6 billion. The services surplus increased less than $0.1 billion in August to $31.0 billion.",
+      "url": "https://www.bea.gov/news/2026/us-international-trade-goods-and-services-august-2026",
+      "date": "2026-10-06",
+      "when": "2026-10-06 08:30",
+      "next": "2026-11-04"
+    },
+    {
+      "agency": "Census",
+      "series": "Factory orders",
+      "title": "Manufacturers' Shipments, Inventories, and Orders",
+      "summary": "New orders for manufactured goods in August, up two consecutive months, increased $0.7 billion or 0.1 percent to $663.5 billion.",
+      "url": "https://www.census.gov/manufacturing/m3/current/index.html",
+      "date": "2026-10-02",
+      "when": "2026-10-02 10:00",
+      "next": ""
+    },
+    {
+      "agency": "BLS",
+      "series": "Employment Situation",
+      "title": "Both payroll employment (+29,000) and unemployment rate (4.2%) change little in September",
+      "summary": "Both nonfarm payroll employment (+29,000) and the unemployment rate (4.2 percent) changed little in September. Employment in all major industries changed little over the month.",
+      "url": "https://www.bls.gov/news.release/archives/empsit_10022026.htm",
+      "date": "2026-10-02",
+      "when": "2026-10-02 07:51",
+      "next": ""
+    },
+    {
+      "agency": "Census",
+      "series": "Construction spending",
+      "title": "Construction Spending",
+      "summary": "Total construction spending for August 2026 ($2,203.1 billion) was 0.9 percent (+/- 1.0 percent)* above the revised July 2026 ($2,184.5 billion) estimate.",
+      "url": "https://www.census.gov/construction/c30/current/index.html",
+      "date": "2026-10-01",
+      "when": "2026-10-01 10:00",
+      "next": ""
+    },
+    {
+      "agency": "BEA",
+      "series": "GDP",
+      "title": "GDP, (Third Estimate), Industries, Corporate Profits, State GDP, and State Personal Income, 2nd Quarter 2026; State PCE, 2025",
+      "summary": "Real gross domestic product (GDP) increased at an annual rate of 2.2 percent in the second quarter of 2026 (April, May, and June), according to the third estimate released today by the U.S. Bureau of Economic Analysis (BEA). In the first quarter, real GDP increased 2.5 percent (revised). The contributors to the increase in real GDP in the second quarter were consumer spending, investment, and exports. Imports, which are a subtraction in the calculation of GDP, increased. At the state level, real GDP ranged from a 4.0 percent increase in New York to a 2.3 percent decrease in West Virginia.",
+      "url": "https://www.bea.gov/news/2026/gdp-third-estimate-industries-corporate-profits-state-gdp-and-state-personal-income-2nd",
+      "date": "2026-09-30",
+      "when": "2026-09-30 08:30",
+      "next": "2026-10-29"
+    },
+    {
+      "agency": "Census",
+      "series": "Advance goods trade",
+      "title": "Advance U.S. International Trade in Goods",
+      "summary": "The advance international trade deficit in goods increased to $132.6 billion in August from $118.9 billion in July as imports increased more than exports.",
+      "url": "https://www.census.gov/econ/indicators/current/index.html",
+      "date": "2026-09-30",
+      "when": "2026-09-30 08:30",
+      "next": ""
+    },
+    {
+      "agency": "Census",
+      "series": "Durable goods orders",
+      "title": "Advance Monthly Manufacturers' Shipments, Inventories, and Orders",
+      "summary": "New orders for manufactured durable goods in August, down following two consecutive monthly increases, decreased $0.1 billion or virtually unchanged to $338.6 billion.",
+      "url": "https://www.census.gov/manufacturing/m3/adv/current/index.html",
+      "date": "2026-09-25",
+      "when": "2026-09-25 08:30",
+      "next": ""
+    },
+    {
+      "agency": "Census",
+      "series": "New home sales",
+      "title": "New Home Sales",
+      "summary": "Sales of new single-family houses in August 2026 were at a seasonally adjusted annual rate of 684,000. This is 6.4 percent (+/- 19.5%)* above the revised July 2026 estimate of 643,000.",
+      "url": "https://www.census.gov/construction/nrs/current/index.html",
+      "date": "2026-09-24",
+      "when": "2026-09-24 10:00",
+      "next": ""
+    },
+    {
+      "agency": "BEA",
+      "series": "International transactions",
+      "title": "U.S. International Transactions and Investment Position, 2nd Quarter 2026",
+      "summary": "The U.S. current-account deficit resulting from international economic transactions widened by $33.4 billion, or 15.7 percent, to $246.0 billion in the second quarter of 2026, according to statistics released today by the U.S. Bureau of Economic Analysis. The revised first-quarter deficit was $212.6 billion. The second-quarter deficit was 3.0 percent of current-dollar gross domestic product, up from 2.7 percent in the first quarter. The U.S. net international investment position, the difference between U.S. residents' foreign financial assets and liabilities, was –$22.42 trillion at the end of the second quarter of 2026. Assets totaled $46.97 trillion, and liabilities totaled $69.39 trillion. At the end of the first quarter of 2026, the net investment position was –$21.27 trillion (revised).",
+      "url": "https://bea.gov/news/2026/us-international-transactions-and-investment-position-2nd-quarter-2026",
+      "date": "2026-09-24",
+      "when": "2026-09-24 08:30",
+      "next": "2026-12-18"
+    },
+    {
+      "agency": "Census",
+      "series": "Housing starts",
+      "title": "New Residential Construction",
+      "summary": "Privately-owned housing starts in August 2026 were at a seasonally adjusted annual rate of 1,275,000. This is 2.6 percent (+/- 12.0%)* below the revised July 2026 estimate of 1,309,000.",
+      "url": "https://www.census.gov/construction/nrc/current/index.html",
+      "date": "2026-09-17",
+      "when": "2026-09-17 08:30",
+      "next": ""
+    },
+    {
+      "agency": "Census",
+      "series": "Business inventories",
+      "title": "Manufacturing and Trade Inventories and Sales",
+      "summary": "U.S. total business end-of-month inventories for July 2026 were $2,764.7 billion, up 0.8 percent (+/- 0.1 percent) from last month. U.S. total business sales were $2,120.7 billion, up 0.3 percent (+/- 0.2 percent) from last month.",
+      "url": "https://www.census.gov/mtis/current/index.html",
+      "date": "2026-09-16",
+      "when": "2026-09-16 10:00",
+      "next": ""
+    },
+    {
+      "agency": "Census",
+      "series": "Retail sales",
+      "title": "Advance Monthly Sales for Retail and Food Services",
+      "summary": "U.S. retail and food services sales for August 2026 were $773.9 billion, up 1.2 percent (+/-0.4 percent) from the previous month.",
+      "url": "https://www.census.gov/retail/sales.html",
+      "date": "2026-09-16",
+      "when": "2026-09-16 08:30",
+      "next": ""
+    },
+    {
+      "agency": "BLS",
+      "series": "Consumer Price Index",
+      "title": "CPI for all items increases 0.4% in August; gasoline rises",
+      "summary": "In August, the Consumer Price Index for All Urban Consumers rose 0.4 percent, seasonally adjusted (SA), and rose 3.4 percent over the last 12 months, not seasonally adjusted (NSA). The index for all items less food and energy rose 0.3 percent in August (SA), up 2.4 percent over the year (NSA).",
+      "url": "https://www.bls.gov/news.release/archives/cpi_09112026.htm",
+      "date": "2026-09-11",
+      "when": "2026-09-11 07:50",
+      "next": ""
+    },
+    {
+      "agency": "BLS",
+      "series": "Employment Situation",
+      "title": "Payroll employment increases by 162,000 in August; unemployment rate unchanged at 4.1%",
+      "summary": "Total nonfarm payroll employment increased by 162,000 in August, and the unemployment rate was unchanged at 4.1 percent. Employment increased in food services and drinking places and in local government education. The information industry lost jobs.",
+      "url": "https://www.bls.gov/news.release/archives/empsit_09042026.htm",
+      "date": "2026-09-04",
+      "when": "2026-09-04 07:51",
+      "next": ""
+    },
+    {
+      "agency": "BEA",
+      "series": "Personal income and outlays (PCE)",
+      "title": "Personal Income and Outlays, July 2026",
+      "summary": "Personal income increased $115.1 billion (0.4 percent at a monthly rate) in July, according to estimates released today by the U.S. Bureau of Economic Analysis (BEA). Disposable personal income (DPI)-personal income less personal current taxes-increased $125.9 billion (0.5 percent), and personal consumption expenditures (PCE) increased $36.3 billion (0.2 percent). Personal outlays-the sum of PCE, personal interest payments, and personal current transfer payments-increased $36.6 billion in July. Personal saving was $712.0 billion in July, and the personal saving rate-personal saving as a percentage of DPI-was 3.0 percent.",
+      "url": "https://www.bea.gov/news/2026/personal-income-and-outlays-july-2026",
+      "date": "2026-08-26",
+      "when": "2026-08-26 08:30",
+      "next": "2026-09-30"
+    },
+    {
+      "agency": "BLS",
+      "series": "Consumer Price Index",
+      "title": "CPI for all items increases 0.1% in July; shelter rises",
+      "summary": "In July, the Consumer Price Index for All Urban Consumers rose 0.1 percent, seasonally adjusted (SA), and rose 3.4 percent over the last 12 months, not seasonally adjusted (NSA). The index for all items less food and energy rose 0.2 percent in July (SA); up 2.5 percent over the year (NSA).",
+      "url": "https://www.bls.gov/news.release/archives/cpi_08122026.htm",
+      "date": "2026-08-12",
+      "when": "2026-08-12 07:51",
+      "next": ""
+    },
+    {
+      "agency": "BLS",
+      "series": "Employment Situation",
+      "title": "Both payroll employment (-23,000) and unemployment rate (4.1%) change little in July",
+      "summary": "Both nonfarm payroll employment (-23,000) and the unemployment rate (4.1 percent) changed little in July. Employment declined in local government education and retail trade. Employment continued to trend up in health care.",
+      "url": "https://www.bls.gov/news.release/archives/empsit_08072026.htm",
+      "date": "2026-08-07",
+      "when": "2026-08-07 07:50",
+      "next": ""
+    },
+    {
+      "agency": "BEA",
+      "series": "Personal income and outlays (PCE)",
+      "title": "Personal Income and Outlays, June 2026",
+      "summary": "Personal income increased $54.9 billion (0.2 percent at a monthly rate) in June, according to estimates released today by the U.S. Bureau of Economic Analysis (BEA). Disposable personal income (DPI)-personal income less personal current taxes-increased $48.3 billion (0.2 percent), and personal consumption expenditures (PCE) increased $65.2 billion (0.3 percent). Personal outlays-the sum of PCE, personal interest payments, and personal current transfer payments-increased $70.0 billion in June. Personal saving was $646.1 billion in June, and the personal saving rate-personal saving as a percentage of DPI-was 2.7 percent. Full Text",
+      "url": "https://www.bea.gov/news/2026/personal-income-and-outlays-june-2026",
+      "date": "2026-07-30",
+      "when": "2026-07-30 08:30",
+      "next": "2026-08-26"
+    },
+    {
+      "agency": "BLS",
+      "series": "Consumer Price Index",
+      "title": "CPI for all items falls 0.4% in June; gasoline down",
+      "summary": "In June, the Consumer Price Index for All Urban Consumers fell 0.4 percent, seasonally adjusted, and rose 3.5 percent over the last 12 months, not seasonally adjusted. The index for all items less food and energy was unchanged in June (SA); up 2.6 percent over the year (NSA).",
+      "url": "https://www.bls.gov/news.release/archives/cpi_07142026.htm",
+      "date": "2026-07-14",
+      "when": "2026-07-14 07:50",
+      "next": ""
+    }
+  ],
+  "since": "2026-07-11",
+  "notes": [
+    "BLS Producer Price Index could not be read: answered 404 Not Found"
+  ],
+  "error": ""
+}

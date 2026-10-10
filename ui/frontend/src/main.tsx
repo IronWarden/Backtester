@@ -2,30 +2,20 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import App from "./App";
+import ErrorBoundary from "./ErrorBoundary";
 
-// Bundle Monaco locally so the app works offline. Importing from
-// editor.api skips Monaco's "all basic languages" barrel — we add only
-// the syntaxes we use (Lua, INI for TOML). Vite turns ?worker into a
-// worker entry point, which MonacoEnvironment uses to spawn the editor's
-// background services without touching the network.
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
-import "monaco-editor/esm/vs/basic-languages/lua/lua.contribution";
-import "monaco-editor/esm/vs/basic-languages/ini/ini.contribution";
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import { loader } from "@monaco-editor/react";
-
-self.MonacoEnvironment = {
-  getWorker() {
-    return new editorWorker();
-  },
-};
-loader.config({ monaco });
+// Monaco is NOT imported here: see monacoSetup.ts. Preloaded after the first
+// paint, so it costs the first screen nothing and the Config tab nothing
+// either. setTimeout rather than requestIdleCallback, which WebKitGTK lacks.
+setTimeout(() => void import("./monacoSetup"), 1200);
 
 const container = document.getElementById("root");
 const root = createRoot(container!);
 
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary label="The app">
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

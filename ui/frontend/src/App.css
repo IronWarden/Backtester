@@ -1,3 +1,73 @@
+/* Design tokens — the whole UI reads from these, so the theme lives in one
+   place. Sizes are in em so the app-wide Ctrl+scroll zoom scales everything. */
+.app {
+  /* Kanagawa (Wave). Surfaces step up through the sumiInk ramp, so depth reads
+     as "lighter = closer" without any borders doing the work. */
+  --bg-page: #16161d;
+  --bg-panel: #1a1a22;
+  --bg-card: #1f1f28;
+  --bg-inset: #181820;
+  --bg-raised: #2a2a37;
+  --bg-hover: #2f2f3d;
+  --border: #2a2a37;
+  --border-strong: #363646;
+  --text-1: #dcd7ba;
+  --text-2: #bdb9a4;
+  --text-3: #938aa9;
+  --accent: #7e9cd8;
+  --accent-strong: #98b1e2;
+  --accent-soft: rgba(126, 156, 216, 0.14);
+  --accent-line: rgba(126, 156, 216, 0.32);
+  /* Text ON the accent. crystalBlue is a light hue, so white on it fails
+     contrast; the page ink is what Kanagawa itself puts there. */
+  --on-accent: #16161d;
+  --focus-ring: 0 0 0 3px rgba(126, 156, 216, 0.28);
+
+  /* Semantic colours: springGreen / waveRed / roninYellow. */
+  --pos: #98bb6c;
+  --neg: #e46876;
+  --warn: #ff9e3b;
+  --pos-soft: rgba(152, 187, 108, 0.12);
+  --neg-soft: rgba(228, 104, 118, 0.1);
+  --neg-line: rgba(228, 104, 118, 0.32);
+  --warn-soft: rgba(255, 158, 59, 0.12);
+  --tool: #7aa89f;
+  /* A filing is printed matter: its own markup sets black text in inline
+     styles, so the reader shows it on white paper in every theme, as sec.gov
+     does. The only place these are used. */
+  --paper: #ffffff;
+  --paper-ink: #000000;
+  --paper-link: #0000ee;
+  --paper-rule: #c8c8c8;
+
+  /* Type scale. Every size in the app is one of these, in em, so Ctrl+scroll
+     scales all of it — the invariant this file's header claims and which the
+     verdict strip used to break by hardcoding px.
+     --fs-m is the workhorse and is deliberately the value the results panels
+     already used, so adopting the scale moved nothing that was already
+     consistent. */
+  --fs-xs: 0.7em;
+  --fs-s: 0.78em;
+  --fs-m: 0.85em;
+  --fs-l: 1.05em;
+  --fs-xl: 1.4em;
+
+  /* --radius-xs is for elements smaller than a line of text — a colour
+     swatch, an inline code span — where --radius-s would round them almost to
+     a circle. Having the step means those stop being one-off literals. */
+  --radius-xs: 0.25em;
+  --radius-s: 0.5em;
+  --radius-m: 0.75em;
+  --radius-l: 1em;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.45);
+  /* The top edge of a card catches a little light — the one gradient in the
+     system, and it is what makes a flat card read as a surface. */
+  --card-sheen: linear-gradient(180deg, rgba(220, 215, 186, 0.025), transparent 4em);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
 html,
 body,
 #root,
@@ -11,75 +81,368 @@ body,
 }
 
 body {
-  background: #1e1e1e;
-  color: #ddd;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #16161d;
+  color: #bdb9a4;
+  font-family: Inter, "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
 }
 
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background: var(--bg-page);
+  color: var(--text-2);
 }
 
-.editor {
-  flex: 1;
+/* Shared button styles ---------------------------------------------------- */
+
+.app button {
+  font-family: inherit;
+  font-size: 1em;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+    color 0.15s var(--ease), box-shadow 0.15s var(--ease), transform 0.1s var(--ease);
+  /* The base is a full appearance, not just a font and a corner radius.
+     It used to set neither background nor border, so a button that forgot its
+     role class did not fall back to a plain-looking button — it fell out of
+     the design system entirely and rendered as the native GTK control, light
+     grey on a dark UI. That is how "✦ Ask the assistant" ended up as the one
+     pale rectangle on the screen.
+     Defaulting to the ghost appearance means the worst case for a missing
+     class is now "correct but unemphasised". `.primary` and the others below
+     still win on source order. */
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  padding: 0.4em 0.9em;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-.main-scroll {
-  flex: 1;
-  overflow: auto;
+.app button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
 }
+
+.app button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* One focus treatment for every control: a soft accent halo, keyboard only,
+   so a mouse click never leaves a ring behind. */
+.app :focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Thin, ink-coloured scrollbars. The GTK default is a light trough that is
+   the brightest thing in every scrolling panel. */
+.app ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app ::-webkit-scrollbar-track,
+.app ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.app ::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+.app ::-webkit-scrollbar-thumb:hover {
+  background: #54546d;
+  background-clip: padding-box;
+}
+
+.app ::selection {
+  background: #2d4f67;
+  color: var(--text-1);
+}
+
+.app button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Ghost: the default chrome button.
+   `.ghost` is the ROLE and is what new components should use. The selectors
+   after it are the places that predate the class; they are listed rather than
+   rewritten because the alternative is touching every call site. What matters
+   is that the list has stopped growing: three components had already given up
+   and re-declared the same four properties themselves, drifting by a tenth of
+   an em each time, and that drift is most of what "the buttons feel
+   inconsistent" is. */
+.ghost,
+.topbar button,
+.toolbar button,
+.simple-form .actions button,
+.simple-form .ticker-add button,
+.even-split,
+.chat-head button {
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  padding: 0.4em 0.9em;
+}
+
+.ghost:hover:not(:disabled),
+.topbar button:hover:not(:disabled),
+.toolbar button:hover:not(:disabled),
+.simple-form .actions button:hover:not(:disabled),
+.simple-form .ticker-add button:hover:not(:disabled),
+.even-split:hover:not(:disabled),
+.chat-head button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+/* Danger: a ghost whose hover says "this removes something". Not a third
+   button style -- it inherits everything above and overrides only the colour
+   the hover reveals. */
+.btn-danger,
+.simple-form .portfolio-remove {
+  color: var(--text-3);
+  border-color: var(--border);
+}
+
+.btn-danger:hover:not(:disabled),
+.simple-form .portfolio-remove:hover:not(:disabled) {
+  background: var(--neg-soft);
+  color: var(--neg);
+  border-color: var(--neg);
+}
+
+/* Primary: the one action per view that runs something. */
+button.primary,
+.toolbar button.run,
+.simple-form .actions button.run,
+.chat-inputrow .run {
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  border: 1px solid transparent;
+  color: var(--on-accent);
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 0 4px 14px rgba(126, 156, 216, 0.22);
+}
+
+button.primary:hover:not(:disabled),
+.toolbar button.run:hover:not(:disabled),
+.simple-form .actions button.run:hover:not(:disabled),
+.chat-inputrow .run:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 0 6px 20px rgba(126, 156, 216, 0.32);
+}
+
+/* Header ------------------------------------------------------------------ */
 
 .topbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6em;
+  gap: 0.75em;
   align-items: center;
-  padding: 0.5em 0.9em;
-  background: #232323;
-  border-bottom: 1px solid #333;
+  padding: 0.6em 1.1em;
+  /* Solid, not a backdrop blur: nothing scrolls under the topbar, so a blur
+     has nothing to show and WebKitGTK pays for it on every repaint anyway. */
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 5;
 }
 
-.topbar button {
-  background: #3a3a3a;
-  color: #ddd;
-  border: 1px solid #555;
-  padding: 0.4em 0.9em;
-  border-radius: 0.3em;
-  cursor: pointer;
-  font-size: 1em;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  margin-right: 0.5em;
+  color: var(--text-1);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  user-select: none;
 }
 
-.topbar button:hover {
-  background: #4a4a4a;
+.brand-mark {
+  width: 1.05em;
+  height: 1.05em;
+  fill: var(--accent);
+}
+
+.brand-mark rect:nth-child(1) {
+  opacity: 0.45;
+}
+
+.brand-mark rect:nth-child(2) {
+  opacity: 0.7;
 }
 
 .mode-toggle {
   display: inline-flex;
-  border: 1px solid #555;
-  border-radius: 0.3em;
-  overflow: hidden;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2em;
+  gap: 0.15em;
 }
 
 .mode-toggle button {
   border: none;
-  border-radius: 0;
-  background: #2a2a2a;
+  background: transparent;
+  color: var(--text-3);
+  padding: 0.3em 1.05em;
+  border-radius: 999px;
+}
+
+.mode-toggle button:hover {
+  color: var(--text-1);
+  background: transparent;
 }
 
 .mode-toggle button.active {
-  background: #2a6cdf;
-  color: #fff;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  box-shadow: var(--shadow-1), 0 0 0 1px var(--border-strong) inset;
 }
 
-/* Simple form ------------------------------------------------------------ */
+.topbar-spacer {
+  flex: 1;
+}
+
+.db-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  max-width: 18em;
+}
+
+.db-chip .db-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+.db-chip .db-ico {
+  color: var(--text-3);
+}
+
+.topbar .chat-toggle.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+/* Simple form ------------------------------------------------------------- */
+
+.main-scroll {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-page);
+}
+
 .simple-form {
-  padding: 1em 1.1em;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(24em, 100%), 1fr));
+  gap: 1em;
+  max-width: 68em;
+  margin: 0 auto;
+  padding: 1.25em 1.25em 2em;
+}
+
+.form-card {
+  background: var(--card-sheen), var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-1);
+  padding: 1.1em 1.2em 1.2em;
   display: flex;
   flex-direction: column;
-  gap: 1.1em;
-  max-width: 60em;
+  gap: 0.9em;
+  min-width: 0;
+}
+
+/* A portfolio is a group of cards now, not a card. It spans the full width and
+   repeats the parent's grid inside itself, so the two-column layout the form
+   always had is unchanged within one portfolio while several portfolios stack
+   as distinct, labelled units rather than one long undifferentiated column. */
+.simple-form .portfolio-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(24em, 100%), 1fr));
+  gap: 1em;
+  padding: 0.9em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg-panel);
+}
+
+.simple-form .portfolio-card-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75em;
+  padding: 0 0.2em;
+}
+
+.simple-form .portfolio-card-name {
+  font-weight: 600;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simple-form .portfolio-remove {
+  margin-left: auto;
+  padding: 0.2em 0.7em;
+  font-size: var(--fs-m);
+}
+
+/* Deposit/Withdraw, amount, frequency: one row that wraps rather than
+   overflowing a narrow window. The money field is the same control as Starting
+   capital directly above it, deliberately — one way to type money into this
+   form, not two. */
+.simple-form .cashflow-row {
+  margin-top: 0.2em;
+}
+
+.simple-form .cashflow-row .money-field {
+  flex: 0 1 9em;
+  min-width: 0;
+}
+
+.simple-form .add-portfolio {
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0.9em;
+}
+
+.simple-form .add-portfolio .hint {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.form-card.wide,
+.simple-form .coverage-msg,
+.simple-form .actions {
+  grid-column: 1 / -1;
+}
+
+.form-card-title {
+  margin: 0;
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
 }
 
 .simple-form .field-row {
@@ -91,16 +454,16 @@ body {
 .simple-form label {
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
+  gap: 0.35em;
   font-size: 1em;
-  color: #aaa;
+  color: var(--text-3);
 }
 
 /* Let the top-row fields share the width and shrink instead of overflowing when
    the window narrows. min-width: 0 overrides the input's intrinsic min width so
    flex can size them down; width: 100% makes each input fill its label. */
 .simple-form .field-row > label {
-  flex: 1 1 12em;
+  flex: 1 1 10em;
   min-width: 0;
 }
 
@@ -109,39 +472,154 @@ body {
 }
 
 .simple-form input {
-  background: #2a2a2a;
-  color: #eee;
-  border: 1px solid #555;
-  border-radius: 0.3em;
-  padding: 0.4em 0.5em;
+  background: var(--bg-inset);
+  color: var(--text-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  padding: 0.45em 0.6em;
   font-size: 1em;
-  /* Drop the native (GTK-themed) control box. WebKitGTK renders default form
-     controls at fixed metrics that ignore the app-wide font-size zoom, so the
-     calendar/number fields wouldn't grow on Ctrl+scroll. As a plain CSS box the
-     field is sized purely from its em padding + font-size and scales in step. */
+  /* Plain-text CSS box (no native GTK control): its size comes purely from the
+     em padding + font-size, so every field scales in step with the app-wide
+     Ctrl+scroll / Ctrl+Arrow zoom. Dates and dollar amounts are typed text now,
+     so there are no native pickers or spinners to fight. */
   appearance: none;
   -webkit-appearance: none;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
-/* The native date field ships a fixed-size picker glyph that ignores the
-   app-wide font-size zoom. Sizing it in em keeps the calendar icon growing
-   in step with the Ctrl+scroll / Ctrl+Arrow zoom. */
-.simple-form input[type="date"]::-webkit-calendar-picker-indicator {
-  width: 0.9em;
-  height: 0.9em;
-  cursor: pointer;
+.simple-form input:hover:not(:disabled):not(:focus) {
+  border-color: #54546d;
 }
 
-/* Hide the number field's up/down spin buttons — they read as clutter, and the
-   field still takes typed input and the arrow keys. */
-.simple-form input[type="number"]::-webkit-inner-spin-button,
-.simple-form input[type="number"]::-webkit-outer-spin-button {
+.simple-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Selects get the same box as inputs.
+   Without this they fall back to the native GTK widget — a light-grey control
+   with its own font and a chunky arrow — which on a dark UI is the single most
+   visible inconsistency in the app. It went unnoticed because it is an
+   ABSENCE, not a wrong value: nothing in the stylesheet was incorrect, the rule
+   simply was not there. No amount of reading App.css finds that; a screenshot
+   finds it instantly.
+
+   Scoped to `.app select` rather than to each place a select appears, for the
+   same reason the ghost button is a role: the next component to add a dropdown
+   should not have to know this rule exists. */
+.app select {
+  background-color: var(--bg-inset);
+  color: var(--text-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  /* Right padding leaves room for the chevron below. */
+  padding: 0.45em 1.9em 0.45em 0.6em;
+  font-size: 1em;
+  font-family: inherit;
+  line-height: 1.3;
+  appearance: none;
   -webkit-appearance: none;
-  margin: 0;
+  /* Drawn here because the native arrow only comes with the native widget.
+     Stroke is --text-3's value: a data URI cannot read a custom property, so
+     this is the one place a token has to be repeated. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23938aa9' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6em center;
+  background-size: 0.62em;
+  transition: border-color 0.12s;
 }
 
-.simple-form input[type="number"] {
-  -moz-appearance: textfield;
+.app select:hover:not(:disabled) {
+  border-color: var(--text-3);
+}
+
+.app select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.app select:disabled {
+  opacity: 0.55;
+}
+
+/* The popup list is drawn by the platform and is mostly beyond reach, but GTK
+   honours these, which is the difference between a white flash and a menu. */
+.app select option {
+  background-color: var(--bg-raised);
+  color: var(--text-1);
+}
+
+/* Dollar amount: a "$" adornment sits inside the field box and the input fills
+   the rest, so it reads as one control. */
+.money-field {
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  padding: 0 0.6em;
+}
+
+.money-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.money-field .money-sign {
+  color: var(--text-3);
+}
+
+.simple-form .money-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding-left: 0.15em;
+}
+
+.simple-form .money-field input:focus {
+  border: none;
+  box-shadow: none;
+}
+
+/* Quick-range chips that snap the dates to the available data window. */
+.date-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.date-presets .presets-label,
+.criterion-presets .presets-label {
+  font-size: 0.8em;
+  color: var(--text-3);
+  margin-right: 0.2em;
+}
+
+.preset-chip {
+  background: var(--bg-inset);
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0.2em 0.8em;
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+
+.app .preset-chip:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+
+.even-split {
+  border-radius: var(--radius-s);
+  padding: 0.3em 0.7em;
+  font-size: 0.85em;
 }
 
 .simple-form .block-head {
@@ -149,31 +627,6 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1em;
-  margin-bottom: 0.4em;
-}
-
-.simple-form .block-label {
-  font-size: 0.85em;
-  color: #aaa;
-}
-
-.even-split {
-  background: #3a3a3a;
-  color: #ddd;
-  border: 1px solid #555;
-  border-radius: 0.3em;
-  padding: 0.3em 0.7em;
-  cursor: pointer;
-  font-size: 0.85em;
-}
-
-.even-split:hover:not(:disabled) {
-  background: #4a4a4a;
-}
-
-.even-split:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .simple-form .ticker-add {
@@ -183,31 +636,82 @@ body {
   flex-wrap: wrap;
 }
 
-.simple-form .ticker-add input[list] {
-  /* Hold ~16em on a roomy window, but allow shrinking so it never overflows a
+/* The combobox wraps the input so the listbox can hang off it. Relative
+   positioning is what keeps the list attached to the field rather than to the
+   card, which matters once several portfolios stack. */
+.simple-form .ticker-combo {
+  position: relative;
+  /* Hold ~18em on a roomy window, but allow shrinking so it never overflows a
      narrow one (0 grow keeps it from stretching the full row width). */
-  flex: 0 1 16em;
+  flex: 0 1 18em;
   min-width: 0;
 }
 
-.simple-form .ticker-add button {
-  background: #3a3a3a;
-  color: #ddd;
-  border: 1px solid #555;
-  border-radius: 0.3em;
-  padding: 0.4em 0.9em;
+.simple-form .ticker-combo input {
+  width: 100%;
+  min-width: 0;
+}
+
+.simple-form .ticker-listbox {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.2em 0;
+  list-style: none;
+  max-height: 15em;
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-2);
+}
+
+.simple-form .ticker-listbox li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.3em 0.6em;
   cursor: pointer;
-  /* Without an explicit size this button keeps the UA default and is the one
-     control that won't grow with the app-wide zoom. */
-  font-size: 1em;
+}
+
+.simple-form .ticker-listbox li.on {
+  background: var(--accent-soft);
+}
+
+.simple-form .ticker-listbox .opt-sym {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* The name is the gloss, not the identity: it truncates rather than wrapping,
+   so every row stays one line and the symbols keep a straight left edge. */
+.simple-form .ticker-listbox .opt-name,
+.simple-form .alloc-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85em;
+  color: var(--text-3);
+}
+
+.simple-form .alloc-sym {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  min-width: 0;
 }
 
 /* Allocation list: one row per holding, each with a % of the portfolio. */
 .alloc-list {
-  margin-top: 0.7em;
-  max-width: 26em;
-  border: 1px solid #333;
-  border-radius: 0.4em;
+  max-width: 28em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
   overflow: hidden;
 }
 
@@ -217,21 +721,21 @@ body {
   align-items: center;
   gap: 0.6em;
   padding: 0.4em 0.7em;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--border);
 }
 
 .alloc-head {
-  font-size: 0.75em;
+  font-size: 0.72em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #888;
-  background: #202020;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  background: var(--bg-inset);
 }
 
 .alloc-sym {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-weight: 600;
-  color: #eee;
+  color: var(--text-1);
 }
 
 .alloc-pct {
@@ -243,25 +747,25 @@ body {
 .alloc-pct input {
   width: 5em;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .pct-sign {
-  color: #999;
+  color: var(--text-3);
 }
 
 .alloc-x {
-  background: transparent !important;
-  border: none !important;
-  color: #999;
-  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
   font-size: 1.2em;
   line-height: 1;
-  padding: 0 !important;
+  padding: 0;
   justify-self: center;
 }
 
 .alloc-x:hover {
-  color: #ff6b6b;
+  color: var(--neg);
 }
 
 .alloc-total {
@@ -269,277 +773,961 @@ body {
   grid-template-columns: 1fr 8em 1.6em;
   gap: 0.6em;
   padding: 0.45em 0.7em;
-  background: #202020;
-  border-top: 1px solid #333;
+  background: var(--bg-inset);
   font-size: 0.9em;
-  color: #aaa;
+  color: var(--text-3);
 }
 
 .alloc-total .total-val {
   text-align: right;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-weight: 600;
 }
 
 .alloc-total.ok .total-val {
-  color: #22c55e;
+  color: var(--pos);
 }
 
 .alloc-total.warn .total-val {
-  color: #f59e0b;
+  color: var(--warn);
 }
 
 .simple-form .hint,
 .simple-form .empty {
   font-size: 0.82em;
-  color: #777;
+  color: var(--text-3);
   font-style: italic;
+}
+
+/* What an import changed or left out. Not italic like other hints: these are
+   facts about the user's own book that they need to read, not asides. */
+.simple-form .import-note {
+  font-style: normal;
   margin-top: 0.5em;
+  padding: 0.5em 0.8em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
 }
 
-.simple-form .actions {
-  margin-top: 0.3em;
+.simple-form .import-note.err {
+  color: var(--neg);
+  background: var(--neg-soft);
+  border-color: var(--neg-line);
 }
 
-.simple-form .actions button {
-  background: #3a3a3a;
-  color: #ddd;
-  border: 1px solid #555;
-  border-radius: 0.3em;
-  padding: 0.5em 1.1em;
+.simple-form .import-note button.link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-3);
+  text-decoration: underline;
   cursor: pointer;
   font-size: 1em;
 }
 
-.simple-form .actions button.run {
-  background: #2a6cdf;
-  border-color: #1a5cdf;
-  color: #fff;
+/* Starter baskets, inside an empty holdings box. Same idea as the starter
+   examples one level down: a holdings list to accept and then edit, for
+   someone who does not know which symbols they want. Not offered while the
+   whole form is empty -- the examples own that moment. */
+.simple-form .baskets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin-top: 0.6em;
+  font-style: normal;
 }
 
-.simple-form .actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.simple-form button.basket {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.35em 0.7em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  cursor: pointer;
 }
 
-.resize-handle {
-  height: 5px;
-  background: #2a2a2a;
-  cursor: ns-resize;
-  border-top: 1px solid #333;
-  border-bottom: 1px solid #333;
-  transition: background 0.1s;
+.simple-form button.basket:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
-.resize-handle:hover,
-.resize-handle:active {
-  background: #2a6cdf;
+.simple-form .basket-label {
+  font-size: var(--fs-s);
+  color: var(--text-2);
 }
+
+.simple-form .basket-note {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* Criterion presets. They fill the metric/operator/number controls above
+   rather than replacing them, so the row sits directly under those and reuses
+   the same chips the date presets use. */
+.simple-form .criterion-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* Starter examples. Shown only while no portfolio has holdings, so this is
+   what an empty form looks like rather than a permanent banner. Each button
+   leads with the QUESTION, because a strategy name teaches a beginner
+   nothing. */
+.simple-form .examples-lead {
+  margin: 0;
+  font-size: var(--fs-s);
+  color: var(--text-3);
+}
+
+.simple-form .example-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15em, 1fr));
+  gap: 0.5em;
+}
+
+.simple-form button.example {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.6em 0.75em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.simple-form button.example:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.simple-form .example-label {
+  font-size: var(--fs-m);
+  color: var(--text-1, var(--text-2));
+}
+
+.simple-form .example-question {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+/* Famous-investor cards: who, above the portfolio's name, and the caveat
+   under the description in the quietest type on the card. */
+.simple-form .example-investor {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+
+.simple-form .example-caveat {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  font-style: italic;
+  color: var(--text-3);
+}
+
+/* First-run card. Sits above the form, blocks nothing, and never returns
+   once dismissed — an onboarding step you have to dismiss before every run
+   is a tax, not an explanation. */
+.simple-form .first-run {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.simple-form .first-run-steps {
+  margin: 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  font-size: 0.88em;
+  color: var(--text-2);
+}
+
+.simple-form .first-run-steps b {
+  color: var(--text-1, var(--text-2));
+}
+
+.simple-form .first-run-aside {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--text-3);
+}
+
+.simple-form .first-run-actions {
+  display: flex;
+  gap: 0.5em;
+}
+
+/* Strategy picker. The works/fails pair is the point of the card: a user
+   should be able to read how a strategy fails before running it, not after
+   a bad result. */
+.simple-form .strategy-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.simple-form .strategy-pick select {
+  width: 100%;
+}
+
+.simple-form .strategy-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 0.7em 0.9em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  font-size: 0.85em;
+}
+
+.simple-form .strategy-idea {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.simple-form .strategy-twin p {
+  margin: 0 0 0.3em;
+  color: var(--text-2);
+}
+
+.simple-form .example-rules,
+.simple-form .example-note {
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+/* The rules card (T135). The sentence is the thing being confirmed, so it is
+   the largest text on the card; the controls beneath it are how it is edited. */
+.simple-form .rules-sentence {
+  margin: 0;
+  font-size: 1.15em;
+  line-height: 1.45;
+  color: var(--text-1);
+}
+
+.simple-form .rules-sentence.pending {
+  color: var(--text-3);
+}
+
+.simple-form .rules-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+}
+
+.simple-form .rules-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6em;
+}
+
+.simple-form .rules-row .strategy-pick {
+  flex: 1 1 16em;
+}
+
+.simple-form .rules-num {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.simple-form .rules-num input {
+  width: 6em;
+}
+
+.simple-form .strategy-when {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3em 0.7em;
+  align-items: baseline;
+}
+
+.simple-form .strategy-when dt {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.simple-form .strategy-when dt.works {
+  color: var(--pos);
+}
+
+.simple-form .strategy-when dt.fails {
+  color: var(--neg);
+}
+
+.simple-form .strategy-when dd {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.simple-form .strategy-baseline {
+  margin: 0;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+/* Pre-registration. The criterion is a metric/operator/number triple, which
+   is the entire grammar ParseCriterion accepts, laid out on one line so it
+   reads as the sentence it is. */
+/* Collapsible result panels. The header is a button so the whole strip is
+   the hit target and the keyboard reaches it; it must not look like one.
+   Prefixed with .app to outrank the shared `.app button` rule, which would
+   otherwise give it a button's border, fill and padding. */
+.app .panel-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+}
+
+.app .panel-toggle:hover:not(:disabled),
+.app .panel-toggle:active:not(:disabled) {
+  background: none;
+  transform: none;
+}
+
+.panel-toggle:hover .panel-title {
+  color: var(--text-1, var(--text-2));
+}
+
+.panel-chevron {
+  color: var(--text-3);
+  font-size: 0.8em;
+  line-height: 1;
+  width: 0.9em;
+}
+
+.panel.collapsible.closed {
+  padding-bottom: 0.6em;
+}
+
+.simple-form .criterion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+
+.simple-form .criterion-lead {
+  font-size: 0.85em;
+  color: var(--text-3);
+}
+
+.simple-form .criterion-row select {
+  min-width: 0;
+}
+
+.simple-form .criterion-value {
+  width: 6em;
+}
+
+.simple-form .optional {
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: 0.85em;
+}
+
+.simple-form .coverage-msg {
+  font-size: 0.85em;
+  border-radius: var(--radius-s);
+  padding: 0.5em 0.8em;
+}
+
+.simple-form .coverage-msg.err {
+  color: var(--neg);
+  background: var(--neg-soft);
+  border: 1px solid var(--neg-line);
+}
+
+.simple-form .coverage-msg.ok {
+  color: var(--text-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.simple-form .actions {
+  display: flex;
+  gap: 0.7em;
+}
+
+.simple-form .actions button {
+  padding: 0.55em 1.3em;
+}
+
+/* Advanced mode ----------------------------------------------------------- */
 
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6em;
-  padding: 0.6em 0.9em;
-  background: #2a2a2a;
-  border-bottom: 1px solid #333;
+  padding: 0.55em 1em;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
   align-items: center;
-}
-
-.toolbar button {
-  background: #3a3a3a;
-  color: #ddd;
-  border: 1px solid #555;
-  padding: 0.4em 0.9em;
-  border-radius: 0.3em;
-  cursor: pointer;
-  font-size: 1em;
-}
-
-.toolbar button:hover:not(:disabled) {
-  background: #4a4a4a;
-}
-
-.toolbar button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.toolbar button.run {
-  background: #2a6cdf;
-  border-color: #1a5cdf;
-}
-
-.toolbar button.run:hover:not(:disabled) {
-  background: #3a7cef;
 }
 
 .paths {
   margin-left: auto;
-  font-size: 0.82em;
-  color: #888;
-  text-align: right;
-  line-height: 1.4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  min-width: 0;
+}
+
+.path-chip {
+  font-size: 0.8em;
+  font-family: var(--mono);
+  color: var(--text-3);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25em 0.8em;
+  max-width: 20em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tabs {
   display: flex;
-  background: #252525;
-  border-bottom: 1px solid #333;
+  gap: 0.3em;
+  background: var(--bg-panel);
+  padding: 0.4em 1em;
+  border-bottom: 1px solid var(--border);
 }
 
-.tab {
+.app .tab {
   background: transparent;
-  color: #aaa;
-  border: none;
-  border-right: 1px solid #333;
-  padding: 0.55em 1.1em;
-  cursor: pointer;
-  font-size: 1em;
+  color: var(--text-3);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.3em 1em;
 }
 
-.tab.active {
-  background: #1e1e1e;
-  color: #fff;
-  border-bottom: 2px solid #2a6cdf;
+.app .tab:hover:not(:disabled) {
+  color: var(--text-1);
+  background: var(--bg-hover);
 }
 
-.tab:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.app .tab.active {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
 }
 
 .editor {
+  flex: 1;
   overflow: hidden;
   min-height: 200px;
+  background: var(--bg-inset);
+}
+
+/* Resize handle + status footer ------------------------------------------- */
+
+.resize-handle {
+  height: 6px;
+  flex: none;
+  background: var(--bg-panel);
+  cursor: ns-resize;
+  border-top: 1px solid var(--border);
+  position: relative;
+  z-index: 3;
+  touch-action: none;
+  transition: background 0.12s;
+}
+
+/* The bar stays 6px to look at but is 16px to hit: a 6px target is what made
+   the handle feel like it "missed". The overhang is transparent and sits
+   above both neighbours (z-index), so it takes the pointer, not the layout. */
+.resize-handle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -5px;
+  bottom: -5px;
+}
+
+/* Grip affordance: a short centered bar. */
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 3em;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent-soft);
+}
+
+.resize-handle:hover::after,
+.resize-handle:active::after {
+  background: var(--accent);
 }
 
 .status {
-  background: #1a1a1a;
-  padding: 0.3em 0.9em;
-  font-size: 0.9em;
-  border-top: 1px solid #333;
-  min-height: 1.7em;
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  background: var(--bg-panel);
+  padding: 0.3em 1em;
+  font-size: 0.85em;
+  border-top: 1px solid var(--border);
+  min-height: 1.9em;
+  color: var(--text-3);
 }
 
 .status .err {
-  color: #ff6b6b;
+  color: var(--neg);
   white-space: pre-wrap;
 }
 
+.status-spacer {
+  flex: 1;
+}
+
+.zoom-hint {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Results dashboard ------------------------------------------------------- */
+
 .results {
-  background: #1a1a1a;
-  border-top: 1px solid #333;
+  background: var(--bg-page);
   overflow: auto;
-  padding: 0.6em 0.9em;
+  padding: 0.9em 1.1em 1.1em;
 }
 
-.results .empty {
-  color: #666;
-  font-size: 0.9em;
-  font-style: italic;
+/* A run in progress over the previous results: they stay put, dimmed and
+   inert, under a pinned label, until the new ones replace them. Opacity is a
+   compositor-only change, so dimming a large chart costs no relayout. */
+.results.stale > * {
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 0.15s var(--ease);
 }
 
-.results table {
-  width: 100%;
-  border-collapse: collapse;
+.results.stale::before {
+  content: "Running…";
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: block;
+  width: max-content;
+  margin: 0 auto 0.5em;
+  padding: 0.25em 0.9em;
+  border-radius: var(--radius-l);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent-strong);
+  font-size: var(--fs-s);
+}
+
+.results-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
   font-size: 0.92em;
 }
 
-.results th,
-.results td {
-  text-align: left;
-  padding: 0.3em 0.6em;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.results th {
-  color: #888;
-  font-weight: 600;
-  background: #1a1a1a;
-  position: sticky;
-  top: -0.6em;
-}
-
-.results td {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
-
-/* Results view: headline cards + equity chart ---------------------------- */
 .results-view {
   display: flex;
   flex-direction: column;
   gap: 0.9em;
+  max-width: 110em;
+  margin: 0 auto;
 }
 
-.headline-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7em;
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15em, 100%), 1fr));
+  gap: 0.8em;
 }
 
-.card {
-  background: #232323;
-  border: 1px solid #333;
-  border-radius: 0.4em;
-  padding: 0.6em 0.8em;
-  min-width: 11em;
+.stat-card {
+  background: var(--card-sheen), var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-1);
+  padding: 0.85em 1em 0.9em;
+  min-width: 0;
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
 }
 
-.card-name {
+.stat-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+
+.stat-name {
   display: flex;
   align-items: center;
-  gap: 0.4em;
+  gap: 0.45em;
   font-size: 0.82em;
-  color: #aaa;
+  color: var(--text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 16em;
 }
 
-.card-swatch {
-  width: 0.7em;
-  height: 0.7em;
-  border-radius: 0.2em;
+.swatch {
+  width: 0.65em;
+  height: 0.65em;
+  border-radius: var(--radius-xs);
   flex: none;
 }
 
-.card-big {
-  font-size: 1.7em;
+/* The headline is the ending portfolio value — a neutral figure, so it stays
+   in primary ink and the green/red is carried by the profit line beneath it. */
+.stat-value {
+  font-size: 1.75em;
   font-weight: 700;
-  margin: 0.1em 0;
+  margin: 0.15em 0 0.05em;
+  color: var(--text-1);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
-.card-big.pos {
-  color: #22c55e;
+.stat-gain {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  font-size: 0.88em;
+  font-weight: 600;
+  margin-bottom: 0.5em;
+  font-variant-numeric: tabular-nums;
 }
 
-.card-big.neg {
-  color: #ef4444;
+.stat-from {
+  color: var(--text-3);
+  font-weight: 400;
+  font-size: 0.85em;
 }
 
-.card-sub {
+.pos {
+  color: var(--pos);
+}
+
+.neg {
+  color: var(--neg);
+}
+
+.stat-sub {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7em;
+  gap: 0.45em 1.1em;
   font-size: 0.78em;
-  color: #999;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.stat-sub .sub-k {
+  color: var(--text-3);
+  margin-right: 0.35em;
+}
+
+.stat-sub .sub-v {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Panels: chart + table share the card look with a slim header row. */
+.panel {
+  background: var(--card-sheen), var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5em 1em;
+  padding: 0.55em 0.9em;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-note {
+  padding: 0.5em 0.9em;
+  border-top: 1px solid var(--border);
+  font-size: 0.78em;
+  color: var(--text-3);
+}
+
+.panel-title {
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+}
+
+/* The build's version, beside the name. Quiet, and always visible: a beta bug
+   report that cannot name a build is very hard to act on. */
+.brand-version {
+  font-size: 0.7em;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.15em;
+}
+
+/* Starting shapes for a blank Lua file, above the editor. Reuses the chip
+   styling the date and criterion presets use — it is the same kind of offer:
+   one click that fills something in, made where there is nothing to lose. */
+/* The Lua tab's open scripts, one chip each. Quieter than the TOML/Lua tabs
+   above them, which they sit under. */
+.lua-buffers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  padding: 0.35em 0.9em;
+  border-bottom: 1px solid var(--border);
+}
+
+.lua-buffer {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.lua-buffer button {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: 0.85em;
+  padding: 0.2em 0.6em;
+}
+
+.lua-buffer .lua-buffer-close {
+  padding: 0.2em 0.5em 0.2em 0;
+}
+
+.lua-buffer:hover {
+  background: var(--bg-hover);
+}
+
+.lua-buffer.active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.lua-buffer.active button {
+  color: var(--accent-strong);
+}
+
+/* Over a library script: why it cannot be typed into, and the way out. */
+.lua-readonly {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  padding: 0.45em 0.9em;
+  font-size: var(--fs-s);
+  color: var(--text-2);
+  background: var(--warn-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.lua-readonly button {
+  flex: none;
+}
+
+.app .link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 0.4em;
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.app .link-button:hover {
+  text-decoration: underline;
+}
+
+.skeletons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.5em 0.9em;
+  border-bottom: 1px solid var(--border);
+}
+
+.skeletons-label {
+  font-size: 0.8em;
+  color: var(--text-3);
+  margin-right: 0.2em;
+}
+
+/* What the strategy plotted: one small chart per plot() series, each on its
+   own vertical scale. Not lines on the equity chart -- that axis is in
+   dollars, and an RSI drawn on it is a flat line along the bottom. */
+.plots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+  padding: 0.7em 0.9em;
+}
+
+.plot-owner {
+  font-weight: 600;
+  font-size: 0.85em;
+  margin-bottom: 0.35em;
+}
+
+.plot-chart + .plot-chart {
+  margin-top: 0.7em;
+}
+
+.plot-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1em;
+  font-size: 0.8em;
+}
+
+.plot-name {
+  font-weight: 600;
+  color: var(--text-1, var(--text-2));
+}
+
+.plot-range {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.plot-svg {
+  display: block;
+  width: 100%;
+  height: 64px;
+  margin-top: 0.2em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+}
+
+.plot-svg polyline {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+/* Basics / Everything, in the Metrics panel head. A two-button segmented
+   control rather than a "show more" link: both views are named, so the short
+   one reads as a choice and not as the table having failed to load. Pushed to
+   the right of the title, and it wraps with the head on a narrow window. */
+.metrics-view {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+/* .app-prefixed for the same reason as .panel-toggle: `.app button` outranks a
+   bare class and was drawing these at full button size. */
+.app .metrics-view-btn {
+  background: var(--bg-inset);
+  color: var(--text-3);
+  border: 0;
+  padding: 0.15em 0.75em;
+  font-size: 0.78em;
+  line-height: 1.5;
+}
+
+.app .metrics-view-btn + .metrics-view-btn {
+  border-left: 1px solid var(--border-strong);
+}
+
+.app .metrics-view-btn:hover {
+  color: var(--text-1);
+}
+
+.app .metrics-view-btn.on {
+  background: var(--accent-soft);
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em 1em;
+  margin-left: auto;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.82em;
+  color: var(--text-2);
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-wrap {
+  position: relative;
+  padding: 0.5em 0.4em 0.2em;
 }
 
 .equity-chart {
   display: block;
-  background: #181818;
-  border: 1px solid #2c2c2c;
-  border-radius: 0.4em;
+}
+
+.equity-chart .gridline {
+  stroke: var(--border);
 }
 
 .equity-chart .axis-label {
-  fill: #777;
+  fill: var(--text-3);
   /* font-size is set on the <svg> in JS so it scales with the app zoom; the
      labels inherit it. Declaring a size here would override that inheritance. */
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
 
 .equity-chart .axis-label.end {
@@ -549,3 +1737,1762 @@ body {
 .equity-chart .axis-label.mid {
   text-anchor: middle;
 }
+
+.equity-chart .end-label {
+  fill: var(--text-2);
+}
+
+.equity-chart .crosshair {
+  stroke: var(--border-strong);
+}
+
+/* Hover tooltip: date + one row per series, values in ink, swatch carries
+   the series identity. */
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-2);
+  padding: 0.45em 0.65em;
+  font-size: 0.8em;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.chart-tip .tip-date {
+  color: var(--text-3);
+  margin-bottom: 0.3em;
+}
+
+.chart-tip .tip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  line-height: 1.5;
+}
+
+.chart-tip .tip-name {
+  color: var(--text-2);
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-tip .tip-val {
+  margin-left: auto;
+  padding-left: 1em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Data tables: the metrics table and the SQL console grid share one look. */
+.table-scroll {
+  overflow: auto;
+}
+
+:is(.results, .float-body) table,
+.query-console table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88em;
+}
+
+:is(.results, .float-body) th,
+:is(.results, .float-body) td,
+.query-console th,
+.query-console td {
+  text-align: left;
+  padding: 0.45em 0.8em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+:is(.results, .float-body) tbody tr:last-child td,
+.query-console tbody tr:last-child td {
+  border-bottom: none;
+}
+
+:is(.results, .float-body) tbody tr:hover td,
+.query-console tbody tr:hover td {
+  background: var(--bg-raised);
+}
+
+:is(.results, .float-body) th,
+.query-console th {
+  color: var(--text-3);
+  font-weight: 600;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-card);
+  position: sticky;
+  top: 0;
+}
+
+:is(.results, .float-body) th.num,
+:is(.results, .float-body) td.num,
+.query-console th.num,
+.query-console td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.results, .float-body) td.num,
+.query-console td.num {
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
+
+:is(.results, .float-body) td.strategy {
+  color: var(--text-3);
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The benchmark is the reference the portfolio rows are measured against, so
+   it reads as a footer to the table rather than as another result: separated
+   by a rule, dimmed, and with the profit colouring muted so a green benchmark
+   is never mistaken for a portfolio that did well. */
+:is(.results, .float-body) tr.benchmark-row {
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+}
+
+:is(.results, .float-body) tr.benchmark-row td.num.pos,
+:is(.results, .float-body) tr.benchmark-row td.num.neg {
+  color: var(--text-3);
+}
+
+/* SQL console (Data view) ------------------------------------------------- */
+
+.query-console {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.query-hint {
+  font-size: 0.82em;
+  color: var(--text-3);
+}
+
+.table-chips {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35em;
+  min-width: 0;
+}
+
+.query-editor {
+  flex: none;
+  height: 11em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.query-results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.9em 1.1em;
+  background: var(--bg-page);
+}
+
+/* The panel hugs its content but never outgrows the pane; rows scroll under
+   the sticky header inside .table-scroll. */
+.query-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+
+.query-meta {
+  margin-left: auto;
+  font-size: 0.8em;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.query-empty {
+  color: var(--text-3);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.query-error {
+  color: var(--neg);
+  background: var(--neg-soft);
+  border: 1px solid var(--neg-line);
+  border-radius: var(--radius-s);
+  padding: 0.6em 0.8em;
+  font-family: var(--mono);
+  font-size: 0.88em;
+  white-space: pre-wrap;
+  align-self: flex-start;
+}
+
+/* Claude chat panel ------------------------------------------------------- */
+
+/* Row between the topbar and the results panel: the existing editor/form
+   column on the left, the chat panel (when open) on the right. */
+.mid-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  /* Clip, so nothing in the tabs or the assistant can paint over the results
+     panel below: without it the assistant's key form and the Config editor
+     both spilled into the results when the row got short. */
+  overflow: hidden;
+}
+
+.mid-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Width comes inline from App (drag-resizable); these are just guards. */
+.chat-panel {
+  flex: none;
+  min-width: 200px;
+  max-width: 70vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  font-size: 0.95em;
+  min-height: 0;
+}
+
+/* Vertical drag handle on the assistant panel's left edge. */
+.vresize-handle {
+  width: 6px;
+  flex: none;
+  background: var(--bg-panel);
+  cursor: ew-resize;
+  border-left: 1px solid var(--border);
+  position: relative;
+  z-index: 3;
+  touch-action: none;
+  transition: background 0.12s;
+}
+
+.vresize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  right: -5px;
+}
+
+.vresize-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 3em;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.vresize-handle:hover,
+.vresize-handle:active {
+  background: var(--accent-soft);
+}
+
+.vresize-handle:hover::after,
+.vresize-handle:active::after {
+  background: var(--accent);
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.45em 0.6em;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-title {
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.chat-head select {
+  background: var(--bg-inset);
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  padding: 0.2em 0.4em;
+  font-size: 0.95em;
+}
+
+.chat-head button {
+  padding: 0.2em 0.6em;
+}
+
+.chat-codebar-spacer {
+  flex: 1;
+}
+
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.7em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+}
+
+.chat-empty {
+  color: var(--text-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.chat-starter {
+  text-align: left;
+  background: var(--bg-card);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 0.45em 0.6em;
+  font-size: 0.95em;
+}
+
+.chat-starter:hover {
+  background: var(--bg-raised);
+  color: var(--text-1);
+  border-color: var(--border-strong);
+}
+
+.chat-msg {
+  border-radius: var(--radius-m);
+  padding: 0.5em 0.7em;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.chat-msg.user {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--text-1);
+  align-self: flex-end;
+  max-width: 92%;
+  white-space: pre-wrap;
+}
+
+.chat-msg.assistant {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  align-self: stretch;
+}
+
+.chat-msg p {
+  margin: 0.35em 0;
+}
+
+.chat-msg ul,
+.chat-msg ol {
+  margin: 0.35em 0;
+  padding-left: 1.4em;
+}
+
+.chat-msg code {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  padding: 0 0.25em;
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+.chat-h {
+  font-weight: 600;
+  margin: 0.6em 0 0.25em;
+  color: var(--text-1);
+}
+
+.chat-h1 { font-size: 1.15em; }
+.chat-h2 { font-size: 1.08em; }
+.chat-h3, .chat-h4 { font-size: 1em; }
+
+.chat-codeblock {
+  margin: 0.5em 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.chat-codebar {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 0.25em 0.5em;
+}
+
+.chat-lang {
+  color: var(--text-3);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chat-codebar button {
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  padding: 0.15em 0.55em;
+  font-size: 0.85em;
+}
+
+.chat-codebar button:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.chat-codeblock pre {
+  margin: 0;
+  padding: 0.6em 0.7em;
+  overflow-x: auto;
+  background: var(--bg-inset);
+  font-family: var(--mono);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.chat-toolnote {
+  color: var(--tool);
+  font-size: 0.85em;
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.2em;
+}
+
+.chat-thinking {
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.chat-error {
+  color: var(--neg);
+  background: var(--neg-soft);
+  border: 1px solid var(--neg-line);
+  border-radius: var(--radius-s);
+  padding: 0.4em 0.6em;
+  margin-top: 0.4em;
+  white-space: pre-wrap;
+}
+
+.chat-inputrow {
+  display: flex;
+  gap: 0.5em;
+  padding: 0.6em;
+  border-top: 1px solid var(--border);
+}
+
+.chat-inputrow textarea {
+  flex: 1;
+  resize: none;
+  background: var(--bg-inset);
+  color: var(--text-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  padding: 0.45em 0.6em;
+  font-family: inherit;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.chat-inputrow textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.chat-inputrow .run {
+  border-radius: var(--radius-s);
+  padding: 0 1em;
+}
+
+.chat-setup {
+  padding: 1em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  color: var(--text-2);
+  /* Scrolls in a short panel rather than being clipped by .mid-row. */
+  overflow: auto;
+  min-height: 0;
+}
+
+.chat-setup p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.chat-setup input {
+  background: var(--bg-inset);
+  color: var(--text-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  padding: 0.45em 0.6em;
+  font-size: 1em;
+}
+
+.chat-setup button {
+  align-self: flex-start;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius-s);
+  padding: 0.45em 1em;
+}
+
+/* Verdict strip — the baseline / chance / trial-count cards. Mirrors the
+   -pages HTML export so the same result reads the same way in both places.
+
+   This whole region used to be built to a different system from the rest of
+   the file: hardcoded px in a UI whose zoom is em-based, so it was the one
+   part of the app that did NOT respond to Ctrl+scroll; three tokens that were
+   never defined (--muted, --surface-2, --line), so it painted from a shadow
+   palette no theme change could reach; and its own green/amber/red, a second
+   set of semantics sitting inches from the first. That is most of what "the
+   UI feels inconsistent" meant. It is on the shared tokens now. */
+.verdicts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+  padding: 0.8em 0.9em 0.9em;
+}
+
+.verdict-owner {
+  font-size: var(--fs-s);
+  color: var(--text-3);
+  margin-bottom: 0.4em;
+}
+
+.verdict-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65em;
+}
+
+.vcard {
+  flex: 1 1 14em;
+  padding: 0.65em 0.8em;
+  border-radius: var(--radius-s);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  /* The verdict is carried by one coloured edge rather than a tinted card:
+     three filled cards side by side compete with the chart, and the colour
+     is a qualifier on the number, not the subject. */
+  border-left-width: 3px;
+}
+
+.vcard.good {
+  border-left-color: var(--pos);
+}
+
+.vcard.warn {
+  border-left-color: var(--warn);
+}
+
+.vcard.bad {
+  border-left-color: var(--neg);
+}
+
+.vcard.unknown {
+  border-left-color: var(--text-3);
+}
+
+.vcard .vq {
+  display: block;
+  font-size: var(--fs-s);
+  color: var(--text-3);
+}
+
+.vcard .va {
+  display: block;
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0.05em 0;
+  color: var(--text-1);
+}
+
+.vcard .vd {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+
+.month-owner {
+  font-size: var(--fs-s);
+  color: var(--text-3);
+  padding: 0.55em 0.8em 0.15em;
+}
+
+td.num.dim {
+  color: var(--text-3);
+}
+
+/* Pre-registration box and the hypothesis verdict. */
+.prereg {
+  margin: 0.55em 0 0;
+  font-size: var(--fs-m);
+}
+
+.prereg > summary {
+  cursor: pointer;
+  color: var(--text-3);
+  padding: 0.25em 0;
+}
+
+.prereg-input {
+  width: 100%;
+  min-height: 6.5em;
+  margin-top: 0.4em;
+  padding: 0.55em;
+  font-family: var(--mono);
+  font-size: var(--fs-m);
+  background: var(--bg-inset);
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  resize: vertical;
+}
+
+.prereg-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.prereg-note {
+  color: var(--text-3);
+  font-size: var(--fs-s);
+  margin-top: 0.35em;
+}
+
+.prereg-error {
+  margin-top: 0.4em;
+  padding: 0.5em 0.65em;
+  border-radius: var(--radius-s);
+  font-size: var(--fs-s);
+  font-family: var(--mono);
+  background: var(--neg-soft);
+  border-left: 3px solid var(--neg);
+}
+
+.vhead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65em;
+  padding-bottom: 0.25em;
+}
+
+.vverdict {
+  font-size: var(--fs-l);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vhead.survives .vverdict {
+  color: var(--pos);
+}
+
+.vhead.rejected .vverdict {
+  color: var(--neg);
+}
+
+.vhead.inconclusive .vverdict {
+  color: var(--warn);
+}
+
+.vid {
+  font-family: var(--mono);
+  color: var(--text-3);
+}
+
+.vport {
+  color: var(--text-3);
+  font-size: var(--fs-m);
+}
+
+.vclaim {
+  font-size: var(--fs-m);
+  margin-bottom: 0.2em;
+  color: var(--text-1);
+}
+
+.vcriterion,
+.vbudget {
+  font-size: var(--fs-s);
+  color: var(--text-3);
+}
+
+.vbudget {
+  color: var(--warn);
+  margin-top: 0.2em;
+}
+
+.vchecks {
+  list-style: none;
+  margin: 0.55em 0 0;
+  padding: 0;
+}
+
+.vcheck {
+  display: grid;
+  /* em, not px: the columns have to grow with the text they hold, or the
+     status word wraps out of its cell the moment anyone zooms in. */
+  grid-template-columns: 3em 14em 1fr;
+  gap: 0.65em;
+  padding: 0.35em 0;
+  border-top: 1px solid var(--border);
+  align-items: baseline;
+  font-size: var(--fs-m);
+}
+
+.vstatus {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: var(--fs-s);
+}
+
+.vcheck.pass .vstatus {
+  color: var(--pos);
+}
+
+.vcheck.fail .vstatus {
+  color: var(--neg);
+}
+
+.vcheck.unavailable .vstatus {
+  color: var(--text-3);
+}
+
+.vdetail {
+  color: var(--text-3);
+  font-size: var(--fs-s);
+}
+
+/* Render-error surface. Without this a thrown error unmounts the React root
+   and the window simply goes black — the failure with the least information
+   in it. Shown in place, with the component stack, so the panel that broke
+   names itself. */
+.render-error {
+  margin: 0.6em;
+  padding: 0.7em 0.9em;
+  border: 1px solid var(--neg);
+  border-radius: var(--radius-s);
+  background: var(--neg-soft);
+  overflow: auto;
+}
+
+.render-error-head {
+  color: var(--neg);
+  font-size: 0.9em;
+  margin-bottom: 0.5em;
+}
+
+.render-error-body {
+  margin: 0;
+  font-size: 0.78em;
+  line-height: 1.4;
+  color: var(--text-3);
+  white-space: pre-wrap;
+}
+
+/* ── Sync panel (Data tab) ───────────────────────────────────────────────
+   A strip above the SQL console saying how far behind the price data is,
+   and the one button that fixes it. Sized to sit quietly when the data is
+   current and to be unmissable when it is not. */
+.data-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+
+/* The Config tab's column: toolbar, hypothesis, tabs, editor. Was a fragment
+   laid out by .mid-main directly; now a kept-mounted Pane (see Pane.tsx). */
+.config-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* Result panels as their own windows (ResultPanel.tsx) --------------------- */
+
+.panel-head-spacer {
+  flex: 1;
+}
+
+/* The collapsible's toggle used to BE the header; it now sits inside one
+   beside the pop-out button, and still takes all the room it can so the
+   whole header row stays clickable. */
+.app .panel-head > .panel-toggle {
+  width: auto;
+  flex: 1 1 auto;
+}
+
+/* The toggle already takes the free space; a spacer beside it would split it. */
+.panel-toggle ~ .panel-head-spacer {
+  display: none;
+}
+
+.panel-head {
+  user-select: none;
+}
+
+.app .panel-icon {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-3);
+  padding: 0.1em 0.45em;
+  font-size: 0.85em;
+  line-height: 1.2;
+}
+
+.app .panel-icon:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* The stub left in the strip while the panel is out. */
+.panel-away {
+  opacity: 0.75;
+}
+
+.panel-away .panel-head {
+  border-bottom: none;
+}
+
+.panel-away-note {
+  font-size: 0.78em;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.float-win {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  /* Its own layer: moving it is a compositor job, and repainting it never
+     touches the app underneath. */
+  contain: layout paint;
+  outline: none;
+}
+
+.float-win.max {
+  inset: 3.6em 1em 2.4em 1em;
+}
+
+.float-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5em 1em;
+  padding: 0.5em 0.6em 0.5em 0.9em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.float-win.max .float-head {
+  cursor: default;
+}
+
+.float-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* A panel that lays itself out against the window: the equity curve's
+   container takes the remaining height, and the chart is drawn to it. */
+.float-body.fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.float-body.fill > .chart-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.float-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    var(--border-strong) 50%,
+    var(--border-strong) 60%,
+    transparent 60%,
+    transparent 72%,
+    var(--border-strong) 72%,
+    var(--border-strong) 82%,
+    transparent 82%
+  );
+}
+
+/* Results bar: the resize handle grown into a strip that also carries the
+   minimise / maximise buttons. Still the drag target end to end; the grip
+   (::after) stays centred. */
+.resize-handle.results-bar {
+  height: auto;
+  min-height: 1.7em;
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0 0.5em 0 1em;
+  font-size: var(--fs-s);
+}
+
+.results-bar-title {
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* The grip hides behind nothing, but the buttons must sit above it. */
+.results-bar .panel-icon {
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+}
+
+/* Minimised: only the bar is left. Kept mounted rather than unmounted, so
+   collapsed panels, the metric view and chart state survive a restore. */
+.results.min {
+  display: none;
+}
+
+/* Maximised: the results take the row the tabs had; the tabs stay mounted
+   (Monaco keeps its model and undo history) but take no room. */
+.results.max {
+  flex: 1;
+  min-height: 0;
+}
+
+.mid-row.hidden {
+  display: none;
+}
+
+/* The tabs step aside while the assistant is maximised; it takes the row. */
+.mid-main.hidden {
+  display: none;
+}
+
+.chat-panel.maximized {
+  flex: 1;
+  max-width: none;
+}
+
+/* Keyboard shortcuts: a topbar chip that opens the list, and the list as a
+   modal card. Kept small -- it is a reference, not a page. */
+.topbar .help-chip {
+  padding-inline: 0.6em;
+  color: var(--text-3);
+}
+
+.shortcuts-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.shortcuts-card {
+  width: min(34em, calc(100vw - 2em));
+  max-height: calc(100vh - 4em);
+  overflow: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  padding: 0.8em 1em 1em;
+}
+
+.shortcuts-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.6em;
+}
+
+.shortcuts-title {
+  font-size: var(--fs-l);
+  color: var(--text-1);
+}
+
+.shortcuts-list {
+  margin: 0;
+  display: grid;
+  gap: 0.35em;
+}
+
+.shortcuts-row {
+  display: grid;
+  grid-template-columns: 13em 1fr;
+  gap: 1em;
+  align-items: baseline;
+  font-size: var(--fs-m);
+}
+
+.shortcuts-row dt {
+  color: var(--text-2);
+}
+
+.shortcuts-row dd {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.shortcuts-row kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-1);
+}
+
+/* Command palette (Ctrl+K). Hangs from the top like an editor's, so the list
+   grows downward under the box being typed in rather than recentring. */
+.palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.palette {
+  width: min(36em, calc(100vw - 2em));
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75em 1em;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-size: var(--fs-l);
+  outline: none;
+  box-shadow: none;
+}
+
+.palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.3em;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.palette-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  padding: 0.45em 0.7em;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  color: var(--text-2);
+}
+
+.palette-list li.on {
+  background: var(--accent-soft);
+  color: var(--text-1);
+}
+
+.palette-list li.disabled {
+  cursor: default;
+  color: var(--text-3);
+}
+
+.palette-label {
+  flex: 1;
+}
+
+.palette-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.palette-keys {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-inset);
+  color: var(--text-2);
+}
+
+.palette-list .palette-empty {
+  cursor: default;
+  color: var(--text-3);
+}
+
+/* The editor's placeholder while its chunk loads (LazyEditor). Usually never
+   seen: main.tsx preloads Monaco right after the first paint. */
+.editor-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 6em;
+  color: var(--text-3);
+  font-size: var(--fs-s);
+  background: #181820;
+}
+
+/* Why Run is disabled, beside it. Quiet: an explanation, not an error. */
+.simple-form .run-blocker {
+  align-self: center;
+  color: var(--text-3);
+  font-size: var(--fs-s);
+}
+
+/* The status line's run timer: digits that do not jitter as they tick. */
+.status .run-timer {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Research tab (T142a). A command line on top and, filling the rest of the
+   window, the panes under it: each scrolls by itself, so the command line,
+   the list and the open filing all stay in view. */
+.research-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-page);
+}
+
+.research {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 68em;
+  margin: 0 auto;
+  padding: 1.25em 1.25em 1em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+}
+
+.research > * {
+  flex: none;
+}
+
+.research > .research-empty {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* The panes: the list alone, or the list and the reader with a bar between
+   them to drag. */
+.research > .research-stage {
+  /* The list's width; the pane sets the dragged one inline. */
+  --list-w: 30em;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.research-list-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.research-stage.split .research-list-pane {
+  flex: none;
+  width: var(--list-w);
+  max-width: 60%;
+}
+
+/* Inside a pane the view fills it, and its table takes what the title,
+   filters and caption leave, scrolling under its own header. */
+.research-list-pane > .research-view {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.research-list-pane .research-view > *,
+.research-list-pane .research-section > * {
+  flex: none;
+}
+
+.research-list-pane .research-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+.research-list-pane .rt-wrap {
+  flex: 0 1 auto;
+  min-height: 6em;
+  max-height: none;
+}
+
+/* Between two panes: the assistant panel's handle, on the page. */
+.research-splitter {
+  width: 9px;
+  margin: 0 0.25em;
+  background: transparent;
+  border-left: none;
+  border-radius: var(--radius-xs);
+}
+
+.research-bar {
+  display: flex;
+  gap: 0.5em;
+}
+
+.research-input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-l);
+  padding: 0.45em 0.7em;
+}
+
+.research-fns,
+.research-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.research-fns button.active,
+.research-toggle button.active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.research-resolved {
+  margin-left: 0.4em;
+}
+
+.research-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+}
+
+.research-title {
+  margin: 0.2em 0 0;
+  font-size: var(--fs-xl);
+  color: var(--text-1);
+}
+
+.research-ticker {
+  font-family: var(--mono);
+  font-size: var(--fs-m);
+  color: var(--text-3);
+  margin-left: 0.4em;
+}
+
+.research-section h3 {
+  margin: 0 0 0.3em;
+  font-size: var(--fs-m);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.research-section p {
+  margin: 0 0 0.25em;
+}
+
+.research-dim {
+  color: var(--text-3);
+  font-size: var(--fs-s);
+}
+
+.research-notes {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: var(--fs-s);
+  color: var(--text-3);
+}
+
+.research-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+}
+
+.research-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-m);
+}
+
+.research-table th,
+.research-table td {
+  padding: 0.35em 0.7em;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.research-table th[scope="row"],
+.research-table thead th:first-child {
+  text-align: left;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.research-table tr:last-child th,
+.research-table tr:last-child td {
+  border-bottom: none;
+}
+
+
+.research-empty {
+  color: var(--text-2);
+}
+
+.research-table td:first-child {
+  text-align: left;
+}
+
+/* A filing open is the focus: the view takes the window's full width and
+   the reader the space the list leaves it. */
+.research.reading {
+  max-width: none;
+}
+
+/* A narrow window stacks the panes: the list on top, the reader under it. */
+@media (max-width: 800px) {
+  .research-stage.split {
+    flex-direction: column;
+  }
+  .research-stage.split .research-list-pane {
+    width: auto;
+    max-width: none;
+    flex: 0 0 38%;
+  }
+  .research-stage.split > .research-splitter {
+    display: none;
+  }
+  .research-stage.split > .reader {
+    padding-top: 0.6em;
+  }
+}
+
+.filing-form {
+  font-family: var(--mono);
+  font-size: var(--fs-s);
+  color: var(--text-2);
+}
+
+.filing-form.kind-event {
+  color: var(--accent-strong);
+}
+
+/* NEWS: who published each item -- an agency, or a company by ticker. */
+.news-source {
+  font-family: var(--mono);
+  font-size: var(--fs-s);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.news-source.event {
+  color: var(--accent-strong);
+}
+
+.news-what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+/* The agency's lede, two lines at most; the release itself has the rest. */
+.news-summary {
+  color: var(--text-3);
+  font-size: var(--fs-s);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.reader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  min-width: 0;
+  min-height: 0;
+}
+
+.research-stage > .reader {
+  flex: 1;
+}
+
+.reader > * {
+  flex: none;
+}
+
+/* A filing with many exhibits keeps its document picker to a few rows. */
+.reader > .research-toggle {
+  max-height: 5.5em;
+  overflow-y: auto;
+}
+
+.reader-foot {
+  margin: 0;
+}
+
+.reader-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6em;
+  cursor: default;
+  user-select: none;
+}
+
+.reader-head-spacer {
+  flex: 1;
+}
+
+.reader-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.reader-zoom .research-dim {
+  min-width: 3.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Maximised: the reader fills the window like a maximised results window,
+   between the top bar and the status bar. */
+.reader.max {
+  position: fixed;
+  inset: 3.6em 1em 2.4em 1em;
+  z-index: 50;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-2);
+  padding: 0.8em 1em;
+}
+
+.reader > .reader-text,
+.reader > .reader-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.reader-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: var(--fs-m);
+  line-height: 1.55;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 0.8em 1em;
+  color: var(--text-1);
+}
+
+/* The filing as sec.gov shows it: its own HTML on paper, with the document's
+   table of contents beside it, as wide as the user drags it. */
+.reader-body {
+  /* The contents column's width; the reader sets the dragged one inline. */
+  --contents-w: 15em;
+  display: flex;
+}
+
+@media (max-width: 800px) {
+  .reader-body {
+    flex-direction: column;
+    gap: 0.6em;
+  }
+  .reader-body > .reader-contents {
+    width: auto;
+    max-width: none;
+    max-height: 10em;
+  }
+  .reader-body > .research-splitter {
+    display: none;
+  }
+}
+
+.reader-contents {
+  flex: none;
+  width: var(--contents-w);
+  max-width: 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 0.5em;
+  background: var(--bg-inset);
+}
+
+.reader-contents-head {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  padding: 0.2em 0.4em 0.4em;
+}
+
+.reader-contents button {
+  all: unset;
+  cursor: pointer;
+  font-size: var(--fs-s);
+  line-height: 1.35;
+  color: var(--text-2);
+  padding: 0.3em 0.4em;
+  border-radius: var(--radius-xs);
+}
+
+.reader-contents button.part {
+  color: var(--text-1);
+  font-weight: 600;
+  margin-top: 0.4em;
+}
+
+.reader-contents button:hover,
+.reader-contents button:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.reader-paper {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-1);
+  padding: 2.5em 3em;
+  /* Filings set their own fonts and sizes inline; these are the defaults
+     sec.gov's own pages fall back to. */
+  font-family: "Times New Roman", Times, serif;
+  font-size: 10pt;
+  line-height: normal;
+  text-align: left;
+}
+
+.reader-paper table {
+  border-collapse: collapse;
+}
+
+.reader-paper a {
+  color: var(--paper-link);
+  text-decoration: underline;
+}
+
+.reader-paper img {
+  max-width: 100%;
+}
+
+/* A NEWS release arrives without its site's stylesheet: a sans face like
+   the agencies' own, and table rules so the figures stay in their columns. */
+.reader-page.release {
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  font-size: 9pt;
+  line-height: 1.45;
+}
+
+.reader-page.release table {
+  margin: 1em 0;
+}
+
+.reader-page.release th,
+.reader-page.release td {
+  border: 1px solid var(--paper-rule);
+  padding: 0.2em 0.5em;
+  vertical-align: top;
+}
+
+.reader-page.release td {
+  text-align: right;
+}
+
+/* MY (T142d) */
+.watch-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.watch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: var(--fs-s);
+}
+
+.watch-add {
+  width: 9em;
+}
+
+.watch-ticker {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+/* ResearchTable (T144): one look for every Research table. The wrap
+   scrolls, so the header can stay put inside it. */
+.rt-wrap {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.research-table.rt th,
+.research-table.rt td {
+  text-align: left;
+}
+
+/* The next batch of a long table loads as this comes into view; the
+   button is for a click, or a webview without IntersectionObserver. */
+.rt-more {
+  padding: 0.5em 0.75em;
+  font-size: var(--fs-s);
+  color: var(--text-3);
+}
+
+.research-table.rt th.num,
+.research-table.rt td.num {
+  text-align: right;
+}
+
+.research-table.rt thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.research-table.rt tbody tr:nth-child(even) {
+  background: var(--bg-inset);
+}
+
+.research-table.rt tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.research-table.rt tbody tr.active {
+  background: var(--accent-soft);
+}
+
+.research-table.rt tr.rt-click {
+  cursor: pointer;
+}
+
+.research-table.rt tr.rt-click:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+
+
+.rt-sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.rt-sort:focus-visible {
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-xs);
+}
+
+.rt-arrow {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+th[aria-sort="ascending"] .rt-arrow,
+th[aria-sort="descending"] .rt-arrow {
+  color: var(--accent-strong);
+}
+

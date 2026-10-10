@@ -1,0 +1,56 @@
+{
+  "tickers": [
+    "AAPL",
+    "ACME",
+    "ZZZZ"
+  ],
+  "recent": [
+    {
+      "ticker": "AAPL",
+      "when": "2026-07-31 06:01",
+      "title": "Quarterly report",
+      "filing": {
+        "accession": "0000320193-26-000020",
+        "form": "10-Q",
+        "kind": "report",
+        "title": "Quarterly report",
+        "filed": "2026-07-31",
+        "accepted": "2026-07-31 06:01 ET",
+        "reportDate": "2026-06-27",
+        "items": [],
+        "material": false,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/0000320193-26-000020-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/aapl-20260627.htm"
+      },
+      "cik": "0000320193"
+    },
+    {
+      "ticker": "AAPL",
+      "when": "2026-07-30 16:30",
+      "title": "Earnings results",
+      "filing": {
+        "accession": "0000320193-26-000018",
+        "form": "8-K",
+        "kind": "event",
+        "title": "Earnings results",
+        "filed": "2026-07-30",
+        "accepted": "2026-07-30 16:30 ET",
+        "reportDate": "2026-07-30",
+        "items": [
+          "2.02",
+          "9.01"
+        ],
+        "material": true,
+        "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/0000320193-26-000018-index.htm",
+        "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/aapl-20260730.htm"
+      },
+      "cik": "0000320193"
+    }
+  ],
+  "since": "2026-07-09",
+  "notes": [
+    "ACME: Could not read filings from SEC EDGAR: not found on EDGAR (404)",
+    "No SEC filer under ZZZZ — delisted symbols and funds are not in EDGAR's ticker list, so they have no filings here."
+  ],
+  "error": ""
+}

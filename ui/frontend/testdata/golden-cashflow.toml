@@ -1,0 +1,16 @@
+# Generated from the Backtest form. Switch to Config to edit this
+# config directly or add more [[Portfolio]] blocks.
+
+[[Portfolio]]
+Name = "My Portfolio"
+BuyingPower = 10000.0
+StartDate = "2015-05-26"
+EndDate = "2025-05-26"
+Tickers = ["AAPL", "MSFT", "9988.HK"]
+Benchmark = "$SP500"
+Strategy = "lua:strategies/buy_and_hold.lua"
+Params = { weights = { AAPL = 50.0, MSFT = 30.0, "9988.HK" = 20.0 } }
+
+  [Portfolio.Cashflow]
+  Amount = 500.0
+  Frequency = "monthly"

@@ -1,0 +1,6 @@
+{
+  "claim": "Concentrating in mega-cap tech beat the market over the decade",
+  "metric": "SharpeRatio",
+  "op": ">=",
+  "value": "1.2"
+}

@@ -1,0 +1,581 @@
+{
+  "results": [
+    {
+      "portfolioName": "2021-03-04",
+      "strategy": "2021-03-04",
+      "sharpeRatio": 1.25,
+      "sortinoRatio": 1.25,
+      "maxDrawdown": 1.25,
+      "annualReturn": 1.25,
+      "realAnnualReturn": 1.25,
+      "netContributions": 1.25,
+      "withdrawalsMissed": 7,
+      "standardDev": 1.25,
+      "avgCorrelation": 1.25,
+      "cointegratedPairs": 7,
+      "turnover": 1.25,
+      "avgExposure": 1.25,
+      "fundamentalCoverage": 1.25,
+      "calmarRatio": 1.25,
+      "longestUnderwaterDays": 7,
+      "timeInMarket": 1.25,
+      "alpha": 1.25,
+      "beta": 1.25,
+      "trackingError": 1.25,
+      "informationRatio": 1.25,
+      "upCapture": 1.25,
+      "downCapture": 1.25,
+      "initialCapital": 1.25,
+      "finalValue": 1.25,
+      "plots": [
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        },
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        }
+      ],
+      "equityCurve": [
+        1.25,
+        1.25
+      ],
+      "dates": [
+        "2021-03-04",
+        "2021-03-04"
+      ],
+      "drawdowns": [
+        {
+          "start": "2026-08-23T00:00:00Z",
+          "trough": "2026-08-23T00:00:00Z",
+          "recovered": "2026-08-23T00:00:00Z",
+          "ongoing": true,
+          "depthPct": 1.25,
+          "durationDays": 7,
+          "recoveryDays": 7
+        },
+        {
+          "start": "2026-08-23T00:00:00Z",
+          "trough": "2026-08-23T00:00:00Z",
+          "recovered": "2026-08-23T00:00:00Z",
+          "ongoing": true,
+          "depthPct": 1.25,
+          "durationDays": 7,
+          "recoveryDays": 7
+        }
+      ],
+      "rollingSharpe": [
+        {
+          "date": "2026-08-23T00:00:00Z",
+          "value": 1.25
+        },
+        {
+          "date": "2026-08-23T00:00:00Z",
+          "value": 1.25
+        }
+      ],
+      "yearlyReturns": [
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        },
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        }
+      ],
+      "monthlyReturns": [
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        },
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        }
+      ],
+      "benchmarkCurve": [
+        1.25,
+        1.25
+      ],
+      "benchmarkStats": {
+        "ticker": "2021-03-04",
+        "annualReturn": 1.25,
+        "sharpeRatio": 1.25,
+        "maxDrawdown": 1.25,
+        "standardDev": 1.25,
+        "realAnnualReturn": 1.25
+      },
+      "splits": [
+        {
+          "label": "2021-03-04",
+          "start": "2021-03-04",
+          "end": "2021-03-04",
+          "days": 7,
+          "totalReturn": 1.25,
+          "annualReturn": 1.25,
+          "sharpeRatio": 1.25,
+          "sortinoRatio": 1.25,
+          "maxDrawdown": 1.25,
+          "standardDev": 1.25
+        },
+        {
+          "label": "2021-03-04",
+          "start": "2021-03-04",
+          "end": "2021-03-04",
+          "days": 7,
+          "totalReturn": 1.25,
+          "annualReturn": 1.25,
+          "sharpeRatio": 1.25,
+          "sortinoRatio": 1.25,
+          "maxDrawdown": 1.25,
+          "standardDev": 1.25
+        }
+      ],
+      "walkForward": {
+        "objective": "2021-03-04",
+        "windows": [
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          },
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          }
+        ]
+      },
+      "trials": 7,
+      "expectedMaxSharpe": 1.25,
+      "deflatedSharpe": 1.25,
+      "baseline": {
+        "name": "2021-03-04",
+        "finalValue": 1.25,
+        "annualReturn": 1.25,
+        "sharpeRatio": 1.25,
+        "maxDrawdown": 1.25,
+        "standardDev": 1.25,
+        "excessFinalValue": 1.25,
+        "excessAnnualReturn": 1.25,
+        "beat": true,
+        "computed": true,
+        "outOfSampleAnnualReturn": 1.25,
+        "outOfSampleComputed": true
+      },
+      "significance": {
+        "draws": 7,
+        "seed": 7,
+        "sharpe": 1.25,
+        "pValue": 1.25,
+        "percentile": 1.25,
+        "nullMeanSharpe": 1.25,
+        "nullP95Sharpe": 1.25,
+        "bootstrapLow": 1.25,
+        "bootstrapHigh": 1.25,
+        "computed": true
+      },
+      "tradeStats": {
+        "trades": 7,
+        "buys": 7,
+        "sells": 7,
+        "roundTrips": 7,
+        "wins": 7,
+        "losses": 7,
+        "winRate": 1.25,
+        "avgWin": 1.25,
+        "avgLoss": 1.25,
+        "profitFactor": 1.25,
+        "totalRealized": 1.25,
+        "totalFees": 1.25,
+        "avgHoldingDays": 1.25,
+        "perTicker": [
+          {
+            "ticker": "2021-03-04",
+            "realized": 1.25,
+            "unrealized": 1.25,
+            "fees": 1.25,
+            "trades": 7,
+            "sharesHeld": 1.25,
+            "averageCost": 1.25
+          },
+          {
+            "ticker": "2021-03-04",
+            "realized": 1.25,
+            "unrealized": 1.25,
+            "fees": 1.25,
+            "trades": 7,
+            "sharesHeld": 1.25,
+            "averageCost": 1.25
+          }
+        ]
+      }
+    },
+    {
+      "portfolioName": "2021-03-04",
+      "strategy": "2021-03-04",
+      "sharpeRatio": 1.25,
+      "sortinoRatio": 1.25,
+      "maxDrawdown": 1.25,
+      "annualReturn": 1.25,
+      "realAnnualReturn": 1.25,
+      "netContributions": 1.25,
+      "withdrawalsMissed": 7,
+      "standardDev": 1.25,
+      "avgCorrelation": 1.25,
+      "cointegratedPairs": 7,
+      "turnover": 1.25,
+      "avgExposure": 1.25,
+      "fundamentalCoverage": 1.25,
+      "calmarRatio": 1.25,
+      "longestUnderwaterDays": 7,
+      "timeInMarket": 1.25,
+      "alpha": 1.25,
+      "beta": 1.25,
+      "trackingError": 1.25,
+      "informationRatio": 1.25,
+      "upCapture": 1.25,
+      "downCapture": 1.25,
+      "initialCapital": 1.25,
+      "finalValue": 1.25,
+      "plots": [
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        },
+        {
+          "name": "2021-03-04",
+          "points": [
+            {
+              "day": 7,
+              "value": 1.25
+            },
+            {
+              "day": 7,
+              "value": 1.25
+            }
+          ]
+        }
+      ],
+      "equityCurve": [
+        1.25,
+        1.25
+      ],
+      "dates": [
+        "2021-03-04",
+        "2021-03-04"
+      ],
+      "drawdowns": [
+        {
+          "start": "2026-08-23T00:00:00Z",
+          "trough": "2026-08-23T00:00:00Z",
+          "recovered": "2026-08-23T00:00:00Z",
+          "ongoing": true,
+          "depthPct": 1.25,
+          "durationDays": 7,
+          "recoveryDays": 7
+        },
+        {
+          "start": "2026-08-23T00:00:00Z",
+          "trough": "2026-08-23T00:00:00Z",
+          "recovered": "2026-08-23T00:00:00Z",
+          "ongoing": true,
+          "depthPct": 1.25,
+          "durationDays": 7,
+          "recoveryDays": 7
+        }
+      ],
+      "rollingSharpe": [
+        {
+          "date": "2026-08-23T00:00:00Z",
+          "value": 1.25
+        },
+        {
+          "date": "2026-08-23T00:00:00Z",
+          "value": 1.25
+        }
+      ],
+      "yearlyReturns": [
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        },
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        }
+      ],
+      "monthlyReturns": [
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        },
+        {
+          "period": "2021-03-04",
+          "returnPct": 1.25,
+          "partial": true,
+          "start": "2026-08-23T00:00:00Z",
+          "end": "2026-08-23T00:00:00Z"
+        }
+      ],
+      "benchmarkCurve": [
+        1.25,
+        1.25
+      ],
+      "benchmarkStats": {
+        "ticker": "2021-03-04",
+        "annualReturn": 1.25,
+        "sharpeRatio": 1.25,
+        "maxDrawdown": 1.25,
+        "standardDev": 1.25,
+        "realAnnualReturn": 1.25
+      },
+      "splits": [
+        {
+          "label": "2021-03-04",
+          "start": "2021-03-04",
+          "end": "2021-03-04",
+          "days": 7,
+          "totalReturn": 1.25,
+          "annualReturn": 1.25,
+          "sharpeRatio": 1.25,
+          "sortinoRatio": 1.25,
+          "maxDrawdown": 1.25,
+          "standardDev": 1.25
+        },
+        {
+          "label": "2021-03-04",
+          "start": "2021-03-04",
+          "end": "2021-03-04",
+          "days": 7,
+          "totalReturn": 1.25,
+          "annualReturn": 1.25,
+          "sharpeRatio": 1.25,
+          "sortinoRatio": 1.25,
+          "maxDrawdown": 1.25,
+          "standardDev": 1.25
+        }
+      ],
+      "walkForward": {
+        "objective": "2021-03-04",
+        "windows": [
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          },
+          {
+            "trainStart": "2021-03-04",
+            "trainEnd": "2021-03-04",
+            "testStart": "2021-03-04",
+            "testEnd": "2021-03-04",
+            "selected": "2021-03-04",
+            "trainScore": 1.25,
+            "testReturn": 1.25,
+            "candidates": 7,
+            "capital": 1.25
+          }
+        ]
+      },
+      "trials": 7,
+      "expectedMaxSharpe": 1.25,
+      "deflatedSharpe": 1.25,
+      "baseline": {
+        "name": "2021-03-04",
+        "finalValue": 1.25,
+        "annualReturn": 1.25,
+        "sharpeRatio": 1.25,
+        "maxDrawdown": 1.25,
+        "standardDev": 1.25,
+        "excessFinalValue": 1.25,
+        "excessAnnualReturn": 1.25,
+        "beat": true,
+        "computed": true,
+        "outOfSampleAnnualReturn": 1.25,
+        "outOfSampleComputed": true
+      },
+      "significance": {
+        "draws": 7,
+        "seed": 7,
+        "sharpe": 1.25,
+        "pValue": 1.25,
+        "percentile": 1.25,
+        "nullMeanSharpe": 1.25,
+        "nullP95Sharpe": 1.25,
+        "bootstrapLow": 1.25,
+        "bootstrapHigh": 1.25,
+        "computed": true
+      },
+      "tradeStats": {
+        "trades": 7,
+        "buys": 7,
+        "sells": 7,
+        "roundTrips": 7,
+        "wins": 7,
+        "losses": 7,
+        "winRate": 1.25,
+        "avgWin": 1.25,
+        "avgLoss": 1.25,
+        "profitFactor": 1.25,
+        "totalRealized": 1.25,
+        "totalFees": 1.25,
+        "avgHoldingDays": 1.25,
+        "perTicker": [
+          {
+            "ticker": "2021-03-04",
+            "realized": 1.25,
+            "unrealized": 1.25,
+            "fees": 1.25,
+            "trades": 7,
+            "sharesHeld": 1.25,
+            "averageCost": 1.25
+          },
+          {
+            "ticker": "2021-03-04",
+            "realized": 1.25,
+            "unrealized": 1.25,
+            "fees": 1.25,
+            "trades": 7,
+            "sharesHeld": 1.25,
+            "averageCost": 1.25
+          }
+        ]
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "level": "2021-03-04",
+      "portfolio": "2021-03-04",
+      "message": "2021-03-04",
+      "script": "2021-03-04",
+      "line": 7
+    },
+    {
+      "level": "2021-03-04",
+      "portfolio": "2021-03-04",
+      "message": "2021-03-04",
+      "script": "2021-03-04",
+      "line": 7
+    }
+  ],
+  "verdicts": [
+    {
+      "hypothesisId": "2021-03-04",
+      "claim": "2021-03-04",
+      "campaign": "2021-03-04",
+      "portfolio": "2021-03-04",
+      "criterion": "2021-03-04",
+      "verdict": "2021-03-04",
+      "checks": [
+        {
+          "name": "2021-03-04",
+          "status": "2021-03-04",
+          "detail": "2021-03-04"
+        },
+        {
+          "name": "2021-03-04",
+          "status": "2021-03-04",
+          "detail": "2021-03-04"
+        }
+      ],
+      "judgedAt": "2026-08-23T00:00:00Z",
+      "trialsSpent": 7,
+      "budget": 7,
+      "budgetSpent": true
+    },
+    {
+      "hypothesisId": "2021-03-04",
+      "claim": "2021-03-04",
+      "campaign": "2021-03-04",
+      "portfolio": "2021-03-04",
+      "criterion": "2021-03-04",
+      "verdict": "2021-03-04",
+      "checks": [
+        {
+          "name": "2021-03-04",
+          "status": "2021-03-04",
+          "detail": "2021-03-04"
+        },
+        {
+          "name": "2021-03-04",
+          "status": "2021-03-04",
+          "detail": "2021-03-04"
+        }
+      ],
+      "judgedAt": "2026-08-23T00:00:00Z",
+      "trialsSpent": 7,
+      "budget": 7,
+      "budgetSpent": true
+    }
+  ],
+  "hypothesisError": "2021-03-04"
+}

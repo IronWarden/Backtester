@@ -1,16 +1,66 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { main } from "../wailsjs/go/models";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { backtest, main } from "../wailsjs/go/models";
+import { readStored, writeStored } from "./storage";
+import { DockProvider, ResultPanel, useDock } from "./ResultPanel";
 
+// Categorical palette (Kanagawa), assigned by portfolio index in fixed slot
+// order: crystalBlue, surimiOrange, springGreen, sakuraPink, carpYellow,
+// oniViolet, waveAqua, waveRed. Adjacent slots alternate warm and cool so the
+// first few portfolios — the common case — never sit next to a near-twin, and
+// every hue clears 3:1 against the #1f1f28 card surface.
 const COLORS = [
-  "#4a9eff",
-  "#f59e0b",
-  "#22c55e",
-  "#ef4444",
-  "#a855f7",
-  "#14b8a6",
-  "#eab308",
-  "#ec4899",
+  "#7e9cd8",
+  "#ffa066",
+  "#98bb6c",
+  "#d27e99",
+  "#e6c384",
+  "#957fb8",
+  "#7aa89f",
+  "#e46876",
 ];
+
+// The benchmark is a reference line, not a competing series, so it is drawn
+// in a muted neutral (fujiGray) outside the categorical palette — it must never
+// be mistaken for one of the portfolios.
+const BENCHMARK_COLOR = "#727169";
+
+type PlotSeries = {
+  name: string;
+  pts: { t: number; v: number }[];
+  benchmark?: boolean;
+};
+
+// Portfolios keep their palette slot by index; benchmarks are appended after
+// every portfolio, so portfolio colours are unaffected by their presence.
+function seriesColor(s: PlotSeries, i: number): string {
+  return s.benchmark ? BENCHMARK_COLOR : COLORS[i % COLORS.length];
+}
+
+// A portfolio's colour chip. Every panel that names a portfolio shows one, so
+// this is the single place the palette lookup and the two spacing variants
+// live: `inline` is the form that sits before a name inside a table cell.
+function Swatch({
+  index,
+  color,
+  inline,
+}: {
+  index?: number;
+  color?: string;
+  inline?: boolean;
+}) {
+  const background = color ?? COLORS[(index ?? 0) % COLORS.length];
+  return (
+    <span
+      className="swatch"
+      style={
+        inline
+          ? { background, display: "inline-block", marginRight: "0.5em" }
+          : { background }
+      }
+    />
+  );
+}
 
 // Compact money label, e.g. 1234567 -> "$1.2M", 12345 -> "$12.3k".
 function fmtMoney(v: number): string {
@@ -25,30 +75,381 @@ function fmtPct(v: number): string {
   return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 }
 
-// Total return from a portfolio's equity curve (last vs first day), %.
-function totalReturn(curve: number[]): number | null {
-  if (!curve || curve.length < 2 || curve[0] === 0) return null;
-  return (curve[curve.length - 1] / curve[0] - 1) * 100;
+// Exact whole-dollar amount, e.g. 184320.7 -> "$184,321". Used for the headline
+// figures, where the rounded "$184.3k" of fmtMoney would hide real money.
+function fmtDollars(v: number): string {
+  const sign = v < 0 ? "-" : "";
+  return `${sign}$${Math.round(Math.abs(v)).toLocaleString("en-US")}`;
 }
 
-type Props = { results: main.RunResult[]; fontSize: number };
+// Profit in dollars and as a % of starting capital, measured against the cash
+// the portfolio began with. Null when the run reported no starting capital.
+// Go's time.Time arrives as an RFC3339 string, typed `any` by the wails
+// binding generator. An ongoing drawdown has no recovery date and is sent
+// as the zero time, which we render as a dash rather than as year 1.
+// The engine reports 0 for "CPI does not cover both ends of this window", which
+// is a different claim from "real growth was zero" and must not be rendered as
+// 0.00. Exactly zero is unreachable for a real run, so the sentinel is safe.
+function fmtReal(v: number | undefined): string {
+  return v ? v.toFixed(2) : "—";
+}
 
-export default function ResultsView({ results, fontSize }: Props) {
-  const wrapRef = useRef<HTMLDivElement>(null);
+function fmtDate(v: any): string {
+  if (!v) return "—";
+  const d = new Date(v as string);
+  if (isNaN(d.getTime()) || d.getUTCFullYear() < 1900) return "—";
+  return d.toISOString().slice(0, 10);
+}
+
+// One chart line per distinct benchmark curve, appended after every
+// portfolio so the palette indices stay put. Portfolios sharing a benchmark
+// and a deposit schedule share a line -- identical lines would only stack.
+// But a benchmark curve carries its portfolio's contributions, so a lump-sum
+// card and a monthly-deposit card against $SP500 have DIFFERENT lines, and
+// each is named after its portfolio rather than one silently standing in for
+// both.
+export function benchmarkLines(
+  results: main.RunResult[],
+): { name: string; result: main.RunResult }[] {
+  const groups = new Map<string, main.RunResult[]>();
+  for (const r of results) {
+    const ticker = r.benchmarkStats?.ticker;
+    if (!ticker || !r.benchmarkCurve || r.benchmarkCurve.length < 2) continue;
+    const key = `${ticker}\u0000${r.benchmarkCurve.length}\u0000${r.benchmarkCurve[r.benchmarkCurve.length - 1]}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  const perTicker = new Map<string, number>();
+  for (const rs of groups.values()) {
+    const t = rs[0].benchmarkStats!.ticker;
+    perTicker.set(t, (perTicker.get(t) ?? 0) + 1);
+  }
+  return [...groups.values()].map((rs) => {
+    const t = rs[0].benchmarkStats!.ticker;
+    return {
+      name: perTicker.get(t)! > 1 ? `${t} · ${rs.map((r) => r.portfolioName).join(", ")}` : t,
+      result: rs[0],
+    };
+  });
+}
+
+// The benchmark columns are only meaningful when a benchmark was set, and
+// a wall of zeros is worse than no column at all.
+function hasBenchmark(results: main.RunResult[]): boolean {
+  return results.some(
+    (r) => r.beta !== 0 || r.alpha !== 0 || r.trackingError !== 0,
+  );
+}
+
+// Money the user put in is not money the strategy made. Contributing 500 a
+// month for ten years grows the account by 60,000 that was never a gain, so
+// the deposits are netted out — otherwise the Profit column reports the
+// paying-in as performance. Zero without a [portfolio.Cashflow] schedule, so
+// this is the old expression for every run that has none.
+//
+// The percentage stays against the starting capital rather than against
+// capital-plus-contributions: a money-weighted figure is a different question
+// (what did MY money earn) and answering it halfway here would be worse than
+// not answering it.
+function profit(r: main.RunResult): { abs: number; pct: number } | null {
+  if (!r.initialCapital) return null;
+  const abs = r.finalValue - r.initialCapital - (r.netContributions ?? 0);
+  return { abs, pct: (abs / r.initialCapital) * 100 };
+}
+
+// Whether any portfolio in this run had a cashflow schedule. The columns it
+// governs are blank for everyone else, and a wall of zeros is worse than no
+// column — the same rule the sweep and benchmark column groups follow.
+function hasCashflows(results: main.RunResult[]): boolean {
+  return results.some(
+    (r) => (r.netContributions ?? 0) !== 0 || (r.withdrawalsMissed ?? 0) > 0,
+  );
+}
+
+// Round tick values: pick a 1/2/2.5/5×10^n step and emit the multiples that
+// fall inside [min, max], so axis labels land on clean dollar amounts.
+function niceTicks(min: number, max: number, count: number): number[] {
+  const span = max - min || 1;
+  const step0 = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const norm = step0 / mag;
+  const step = (norm >= 5 ? 5 : norm >= 2.5 ? 2.5 : norm >= 2 ? 2 : 1) * mag;
+  const out: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-6; v += step)
+    out.push(v);
+  return out;
+}
+
+const DAY = 86400000;
+const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+
+// Calendar-aligned x ticks: year starts on multi-year spans, month starts on
+// shorter ones, plain evenly-spaced days inside a couple of months.
+function timeTicks(tMin: number, tMax: number): { t: number; label: string }[] {
+  const days = (tMax - tMin) / DAY;
+  const out: { t: number; label: string }[] = [];
+  if (days > 900) {
+    const y0 = new Date(tMin).getUTCFullYear() + 1;
+    const y1 = new Date(tMax).getUTCFullYear();
+    const step = Math.max(1, Math.ceil((y1 - y0 + 1) / 7));
+    for (let yy = y0; yy <= y1; yy += step)
+      out.push({ t: Date.UTC(yy, 0, 1), label: String(yy) });
+  } else if (days > 50) {
+    const stepM = days > 540 ? 3 : days > 270 ? 2 : 1;
+    const d = new Date(tMin);
+    let yy = d.getUTCFullYear();
+    let mm = d.getUTCMonth() + 1; // first month start at/after tMin
+    for (;;) {
+      if (mm > 11) {
+        mm -= 12;
+        yy += 1;
+      }
+      const t = Date.UTC(yy, mm, 1);
+      if (t > tMax) break;
+      out.push({ t, label: `${MONTHS[mm]} ${String(yy).slice(2)}` });
+      mm += stepM;
+    }
+  } else {
+    for (let i = 0; i < 5; i++) {
+      const t = tMin + ((tMax - tMin) * i) / 4;
+      const d = new Date(t);
+      out.push({ t, label: `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}` });
+    }
+  }
+  return out;
+}
+
+type Pt = { t: number; v: number };
+
+// Index of the point with time closest to t (pts are date-ordered).
+function nearestIdx(pts: Pt[], t: number): number {
+  let lo = 0;
+  let hi = pts.length - 1;
+  if (hi < 0) return -1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (pts[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && Math.abs(pts[lo - 1].t - t) <= Math.abs(pts[lo].t - t)) lo--;
+  return lo;
+}
+
+type Hover = {
+  px: number; // crosshair x in svg pixels
+  date: string;
+  rows: { name: string; color: string; v: number; x: number; y: number }[];
+};
+
+// The mechanical judgement against a pre-registered criterion. Rendered above
+// the standing objections because it is the question the user actually asked;
+// the strip below is the set of questions asked on their behalf.
+//
+// Three verdicts, and the colours say what they mean rather than good/bad:
+// rejected is a claim about the STRATEGY, inconclusive a claim about the
+// EVIDENCE. They are not degrees of the same thing, so inconclusive is amber
+// and neutral rather than a paler shade of failure.
+function HypothesisVerdicts({ verdicts }: { verdicts: backtest.VerdictReport[] }) {
+  if (verdicts.length === 0) return null;
+  return (
+    <ResultPanel id="verdict" title="Hypothesis verdict">
+      <div className="verdicts">
+        {verdicts.map((v, i) => (
+          <div className="verdict-group" key={i}>
+            <div className={`vhead ${v.verdict}`}>
+              <span className="vverdict">{v.verdict}</span>
+              <span className="vid">{v.hypothesisId}</span>
+              {v.portfolio && <span className="vport">{v.portfolio}</span>}
+            </div>
+            {v.claim && <div className="vclaim">{v.claim}</div>}
+            <div className="vcriterion">
+              criterion <code>{v.criterion}</code>
+              {v.campaign
+                ? ` · campaign ${v.campaign}: ${v.trialsSpent} of ${v.budget} trials spent`
+                : ""}
+            </div>
+            {v.budgetSpent && (
+              <div className="vbudget">
+                Budget spent — further searching in this campaign is not evidence.
+              </div>
+            )}
+            <ul className="vchecks">
+              {(v.checks ?? []).map((c: backtest.Check, j: number) => (
+                <li className={`vcheck ${c.status}`} key={j}>
+                  <span className="vstatus">
+                    {c.status === "pass"
+                      ? "PASS"
+                      : c.status === "fail"
+                        ? "FAIL"
+                        : "n/a"}
+                  </span>
+                  <span className="vname">{c.name}</span>
+                  <span className="vdetail">{c.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </ResultPanel>
+  );
+}
+
+// The three questions that kill an idea, in the same visual weight as the
+// return above them. They are computed on every run and used to be visible
+// only on the CLI, which is the same failure mode as burying them in a
+// footnote: a candidate that looks good because it was the best of two hundred
+// tries should not be able to hide the two hundred.
+//
+// Deliberately mirrors the -pages export (src/backtest/candidatepage.go) card
+// for card, so a result read in the app and the same result read from a file
+// say the same thing.
+function VerdictStrip({ results }: { results: main.RunResult[] }) {
+  const shown = results.filter(
+    (r) => r.baseline?.computed || r.significance?.computed || (r.trials ?? 0) > 1,
+  );
+  if (shown.length === 0) return null;
+
+  return (
+    <ResultPanel id="objections" title="Does this survive the obvious objections?">
+      <div className="verdicts">
+        {shown.map((r, i) => (
+          <div className="verdict-group" key={i}>
+            {shown.length > 1 && (
+              <div className="verdict-owner">{r.portfolioName}</div>
+            )}
+            <div className="verdict-cards">
+              {r.baseline?.computed ? (
+                <div className={`vcard ${r.baseline.beat ? "good" : "bad"}`}>
+                  <span className="vq">Beat {r.baseline.name}?</span>
+                  <span className="va">{r.baseline.beat ? "YES" : "NO"}</span>
+                  <span className="vd">
+                    {r.baseline.excessAnnualReturn >= 0 ? "+" : ""}
+                    {r.baseline.excessAnnualReturn.toFixed(2)}%/yr ·{" "}
+                    {fmtDollars(r.baseline.excessFinalValue)} in final value
+                  </span>
+                </div>
+              ) : (
+                <div className="vcard unknown">
+                  <span className="vq">Beat the baseline?</span>
+                  <span className="va">—</span>
+                  <span className="vd">no baseline could be built</span>
+                </div>
+              )}
+
+              {r.significance?.computed ? (
+                <div className={`vcard ${r.significance.pValue <= 0.05 ? "good" : "bad"}`}>
+                  <span className="vq">Better than random timing?</span>
+                  <span className="va">
+                    {r.significance.pValue <= 0.05 ? "YES" : "NO"}
+                  </span>
+                  <span className="vd">
+                    p = {r.significance.pValue.toFixed(3)} ·{" "}
+                    {r.significance.percentile.toFixed(0)}th percentile of{" "}
+                    {r.significance.draws} draws
+                  </span>
+                </div>
+              ) : (
+                <div className="vcard unknown">
+                  <span className="vq">Better than random timing?</span>
+                  <span className="va">—</span>
+                  <span className="vd">not computed</span>
+                </div>
+              )}
+
+              <div className={`vcard ${trialClass(r)}`}>
+                <span className="vq">How many trials was this picked from?</span>
+                <span className="va">{Math.max(r.trials ?? 0, 1)}</span>
+                <span className="vd">
+                  deflated Sharpe {r.deflatedSharpe.toFixed(3)} · a no-edge
+                  best-of-{Math.max(r.trials ?? 0, 1)} would show{" "}
+                  {r.expectedMaxSharpe.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ResultPanel>
+  );
+}
+
+// An unswept run is not being warned about at all; a swept one always is, and
+// how loudly depends on whether the deflated Sharpe clears the bar. Same rule
+// as writeVerdictStrip in candidatepage.go.
+function trialClass(r: main.RunResult): string {
+  if ((r.trials ?? 0) <= 1) return "good";
+  return r.deflatedSharpe < 0.9 ? "bad" : "warn";
+}
+
+type Props = {
+  results: main.RunResult[];
+  fontSize: number;
+  verdicts?: backtest.VerdictReport[];
+};
+
+// Which metric columns the table shows at rest.
+//
+// The table is honest and complete -- around twenty numeric columns, more once
+// a benchmark, a sweep or a contribution schedule is involved -- and that is
+// exactly what makes a first result unreadable: nothing on screen says which
+// numbers answer the question that was asked. So the table has two views. The
+// full one is what it has always shown; the basic one keeps the six columns a
+// first run is actually about, and hides the rest behind one click. Nothing is
+// removed, and a hidden column is still one hover from its definition.
+//
+// The keys are the single source of truth: the header, the portfolio rows and
+// the benchmark rows all ask `show(key)`, so a column cannot appear in one and
+// not the other. `TestMetricTableColumnsLineUp` in smoke.tsx counts the cells
+// of both views to prove it.
+// One rule decides membership: a column stays in Basics if hiding it would
+// make a visible one misleading. Profit without Contributed reads as
+// investment return when it is partly money paid in; a swept Sharpe without
+// Confidence reads as edge when it may be selection; a plan that ran out of
+// money says so in Missed W/D and nowhere else. The four conditional ones only
+// render when their run produced them, so naming them here costs nothing on a
+// plain run.
+const BASIC_COLUMNS = new Set([
+  "portfolio",
+  "strategy",
+  "finalValue",
+  "profit",
+  "sharpe",
+  "maxDrawdown",
+  "annualReturn",
+  "contributed",
+  "missedWD",
+  "confidence",
+  "alpha",
+]);
+
+const METRICS_VIEW_KEY = "backtester-metrics-view";
+
+export type MetricsView = "basic" | "full";
+
+// Basics on a first visit: someone who has never seen the table is exactly
+// who the wall of columns costs the most.
+function readMetricsView(): MetricsView {
+  return readStored(METRICS_VIEW_KEY) === "full" ? "full" : "basic";
+}
+
+// visibleColumn is exported for the smoke run, which needs the same predicate
+// the table uses rather than a copy of the rule.
+export function visibleColumn(view: MetricsView, key: string): boolean {
+  return view === "full" || BASIC_COLUMNS.has(key);
+}
+
+function ResultsView({ results, fontSize, verdicts }: Props) {
   const [width, setWidth] = useState(800);
-
-  // Track the container width so the SVG is drawn in real pixels (crisp text,
-  // no aspect-ratio distortion) and reflows when the panel is resized.
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w) setWidth(w);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  // The chart's available height, used only while it is in a window of its
+  // own (docked, it has the strip's fixed height).
+  const [fillHeight, setFillHeight] = useState(0);
+  const dock = useDock();
+  const equityFloating = !!dock.floats["equity"];
+  // Which metric columns to show. Remembered like the collapsible panels, so
+  // a user who wants everything asks for it once.
+  const [metricsView, setMetricsView] = useState<MetricsView>(readMetricsView);
+  const show = (key: string) => visibleColumn(metricsView, key);
+  const [hover, setHover] = useState<Hover | null>(null);
 
   // Only portfolios with a real curve can be plotted.
   const plottable = useMemo(
@@ -56,16 +457,56 @@ export default function ResultsView({ results, fontSize }: Props) {
     [results],
   );
 
+  // Track the container's size so the SVG is drawn in real pixels (crisp
+  // text, no aspect-ratio distortion) and reflows when the panel is resized.
+  //
+  // A callback ref, not a ref plus an effect: the chart's container is a
+  // different element after every pop-out, dock, or run that removes and
+  // restores the chart, and an effect keyed on anything else kept observing
+  // the old, detached one -- the chart stayed at whatever width it had
+  // before, or at the 800px default. This re-attaches to whichever element is
+  // current, every time it changes.
+  const [wrapEl, wrapRef] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!wrapEl) return;
+    // Measure synchronously so the first paint is full-width; the observer's
+    // initial delivery is async and would leave an 800px chart on screen.
+    // Content width, the same box the observer reports: clientWidth includes
+    // the padding, so the first paint used to be a few pixels wider than
+    // every later one.
+    const cs = getComputedStyle(wrapEl);
+    const w =
+      wrapEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (w > 0) setWidth(w);
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r?.width) setWidth(r.width);
+      if (r?.height) setFillHeight(r.height);
+    });
+    ro.observe(wrapEl);
+    return () => ro.disconnect();
+  }, [wrapEl]);
+
   const chart = useMemo(() => {
     if (plottable.length === 0) return null;
 
-    const series = plottable.map((r) => ({
+    const series: PlotSeries[] = plottable.map((r) => ({
       name: r.portfolioName,
-      pts: r.equityCurve.map((v, i) => ({
-        t: Date.parse(r.dates[i] ?? ""),
-        v,
-      })),
+      pts: r.equityCurve
+        .map((v, i) => ({ t: Date.parse(r.dates[i] ?? ""), v }))
+        .filter((p) => !Number.isNaN(p.t)),
     }));
+
+    for (const b of benchmarkLines(plottable)) {
+      const r = b.result;
+      series.push({
+        name: b.name,
+        benchmark: true,
+        pts: r.benchmarkCurve
+          .map((v, i) => ({ t: Date.parse(r.dates[i] ?? ""), v }))
+          .filter((p) => !Number.isNaN(p.t)),
+      });
+    }
 
     let tMin = Infinity,
       tMax = -Infinity,
@@ -73,10 +514,8 @@ export default function ResultsView({ results, fontSize }: Props) {
       yMax = -Infinity;
     for (const s of series)
       for (const p of s.pts) {
-        if (!Number.isNaN(p.t)) {
-          if (p.t < tMin) tMin = p.t;
-          if (p.t > tMax) tMax = p.t;
-        }
+        if (p.t < tMin) tMin = p.t;
+        if (p.t > tMax) tMax = p.t;
         if (p.v < yMin) yMin = p.v;
         if (p.v > yMax) yMax = p.v;
       }
@@ -84,154 +523,1248 @@ export default function ResultsView({ results, fontSize }: Props) {
       yMin -= 1;
       yMax += 1;
     }
+    // Breathing room so lines don't touch the panel edges.
+    const yPad = (yMax - yMin) * 0.05;
+    yMin -= yPad;
+    yMax += yPad;
     const tSpan = tMax - tMin || 1;
     const ySpan = yMax - yMin || 1;
-    return { series, tMin, tSpan, yMin, yMax, ySpan };
+    return { series, tMin, tMax, tSpan, yMin, yMax, ySpan };
   }, [plottable]);
 
-  if (results.length === 0) {
-    return <div className="empty">No results yet.</div>;
-  }
+  // The benchmark's own figures, one row per chart line (benchmarkLines), so
+  // N portfolios sharing $SP500 and a deposit schedule contribute one row
+  // rather than N identical ones. The curve starts at the portfolio's capital
+  // and receives the same contributions, so its "final value" answers "what
+  // would that money have become in the index", and profit nets the
+  // contributions out exactly as the portfolio's own Profit does.
+  const benchmarkRows = useMemo(
+    () =>
+      benchmarkLines(results).map(({ name, result: r }) => {
+        const finalValue = r.benchmarkCurve[r.benchmarkCurve.length - 1];
+        return {
+          ticker: name,
+          finalValue,
+          profit: finalValue - r.initialCapital - (r.netContributions ?? 0),
+          stats: r.benchmarkStats,
+        };
+      }),
+    [results],
+  );
 
   // The chart is laid out in pixels, so its height, paddings, label size and
   // stroke are all multiplied by the zoom factor to grow in step with the rest
   // of the (em-sized) UI. Width still comes from the container's real width.
+  // Above the early return only because the path memo below needs it.
   const scale = fontSize / 16;
-  const H = Math.round(240 * scale);
+  // Direct end-of-line labels for 2–4 series (beyond that the legend carries
+  // identity alone); they need reserved room on the right.
+  const endLabeled = plottable.length >= 2 && plottable.length <= 4;
+  // Docked, the chart is a fixed 250 (scaled); in its own window it takes the
+  // window's height, which is most of the point of taking it out.
+  const H =
+    equityFloating && fillHeight > 0
+      ? Math.max(Math.round(160 * scale), Math.floor(fillHeight))
+      : Math.round(250 * scale);
   const pad = {
-    top: 12 * scale,
-    right: 16 * scale,
+    top: 14 * scale,
+    right: (endLabeled ? 100 : 18) * scale,
     bottom: 26 * scale,
-    left: 60 * scale,
+    left: 62 * scale,
   };
   const labelSize = 10 * scale;
   const innerW = Math.max(10, width - pad.left - pad.right);
   const innerH = H - pad.top - pad.bottom;
+
+  // The curve paths depend only on the data and the geometry, never on the
+  // hover state -- yet the crosshair re-renders this component on every
+  // mousemove. Rebuilding a thousands-of-points `d` string per series per
+  // pixel of pointer travel is what made the chart lag behind the cursor, so
+  // they are built once per layout and reused while the pointer moves.
+  const paths = useMemo(() => {
+    if (!chart) return [];
+    const px = (t: number) => pad.left + ((t - chart.tMin) / chart.tSpan) * innerW;
+    const py = (v: number) => pad.top + (1 - (v - chart.yMin) / chart.ySpan) * innerH;
+    return chart.series.map((s) =>
+      s.pts.map((p, j) => `${j === 0 ? "M" : "L"}${px(p.t)},${py(p.v)}`).join(" "),
+    );
+  }, [chart, pad.left, pad.top, innerW, innerH]);
+
+  // Every hook must run before the early return below: React counts hooks
+  // per render, and ResultsView stays mounted across a run (App clears
+  // results, then fills them), so a hook placed after the return would be
+  // skipped on the empty render and appear on the next one -- "rendered
+  // more hooks than during the previous render", which unmounts the tree.
+  if (results.length === 0) {
+    return (
+      <div className="results-empty">
+        Run a backtest to see equity curves and metrics here.
+      </div>
+    );
+  }
 
   const x = (t: number) =>
     chart ? pad.left + ((t - chart.tMin) / chart.tSpan) * innerW : 0;
   const y = (v: number) =>
     chart ? pad.top + (1 - (v - chart.yMin) / chart.ySpan) * innerH : 0;
 
-  const yTicks = chart
-    ? Array.from({ length: 5 }, (_, i) => chart.yMin + (chart.ySpan * i) / 4)
-    : [];
-  const xTicks = chart
-    ? Array.from({ length: 4 }, (_, i) => chart.tMin + (chart.tSpan * i) / 3)
-    : [];
+  const yTicks = chart ? niceTicks(chart.yMin, chart.yMax, 4) : [];
+  const xTicks = chart ? timeTicks(chart.tMin, chart.tMax) : [];
+
+  // End labels, nudged apart vertically so close curves don't collide.
+  let endLabels: { name: string; color: string; y: number }[] = [];
+  if (chart && endLabeled) {
+    endLabels = chart.series
+      .map((s, i) => {
+        const last = s.pts[s.pts.length - 1];
+        const name =
+          s.name.length > 13 ? `${s.name.slice(0, 12)}…` : s.name;
+        return { name, color: seriesColor(s, i), y: y(last.v) };
+      })
+      .sort((a, b) => a.y - b.y);
+    const minGap = 13 * scale;
+    for (let i = 1; i < endLabels.length; i++)
+      if (endLabels[i].y - endLabels[i - 1].y < minGap)
+        endLabels[i].y = endLabels[i - 1].y + minGap;
+    const over = endLabels[endLabels.length - 1].y - (H - pad.bottom);
+    if (over > 0) for (const l of endLabels) l.y -= over;
+  }
+
+  function onChartMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (!chart) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    if (px < pad.left || px > width - pad.right) {
+      setHover(null);
+      return;
+    }
+    const t = chart.tMin + ((px - pad.left) / innerW) * chart.tSpan;
+    let dateT = NaN;
+    const rows: Hover["rows"] = [];
+    chart.series.forEach((s, i) => {
+      const idx = nearestIdx(s.pts, t);
+      if (idx < 0) return;
+      const p = s.pts[idx];
+      if (Number.isNaN(dateT) || Math.abs(p.t - t) < Math.abs(dateT - t))
+        dateT = p.t;
+      rows.push({
+        name: s.name,
+        color: seriesColor(s, i),
+        v: p.v,
+        x: x(p.t),
+        y: y(p.v),
+      });
+    });
+    if (rows.length === 0 || Number.isNaN(dateT)) {
+      setHover(null);
+      return;
+    }
+    rows.sort((a, b) => b.v - a.v);
+    const d = new Date(dateT);
+    setHover({
+      px: x(dateT),
+      date: `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`,
+      rows,
+    });
+  }
+
+  const tipOnLeft = hover !== null && hover.px > width * 0.62;
+
+  // Computed for the plotted set, not for every result: a portfolio with no
+  // curve is not on the chart the note sits under.
+  const windowNote = differingWindows(plottable);
+
+  const benchmarked = hasBenchmark(results);
+
+  const contributing = hasCashflows(results);
+  // Only meaningful when something was actually searched: a single untried
+  // portfolio has no selection bias to correct for, and showing a bar of 0.00
+  // next to it would imply otherwise.
+  const swept = results.some((r) => (r.trials ?? 0) > 1);
 
   return (
-    <div className="results-view" ref={wrapRef}>
-      <div className="headline-cards">
+    <DockProvider value={dock}>
+    <div className="results-view">
+      <div className="stat-grid">
         {results.map((r, i) => {
-          const tr = totalReturn(r.equityCurve);
+          const p = profit(r);
           return (
-            <div className="card" key={i}>
-              <div className="card-name" title={r.portfolioName}>
-                <span
-                  className="card-swatch"
-                  style={{ background: COLORS[i % COLORS.length] }}
-                />
+            <div className="stat-card" key={i}>
+              <div className="stat-name" title={r.portfolioName}>
+                <Swatch index={i} />
                 {r.portfolioName}
               </div>
-              <div
-                className={`card-big ${tr != null && tr < 0 ? "neg" : "pos"}`}
-              >
-                {tr != null ? fmtPct(tr) : "—"}
-              </div>
-              <div className="card-sub">
-                <span>Annual {fmtPct(r.annualReturn)}</span>
-                <span>Max DD {r.maxDrawdown.toFixed(1)}%</span>
-                <span>Sharpe {r.sharpeRatio.toFixed(2)}</span>
+              <div className="stat-value">{fmtDollars(r.finalValue)}</div>
+              {p && (
+                <div className={`stat-gain ${p.abs < 0 ? "neg" : "pos"}`}>
+                  {p.abs >= 0 ? "+" : "−"}
+                  {fmtDollars(Math.abs(p.abs))} ({fmtPct(p.pct)})
+                  <span className="stat-from">
+                    from {fmtDollars(r.initialCapital)}
+                  </span>
+                </div>
+              )}
+              <div className="stat-sub">
+                <span>
+                  <span className="sub-k">Annual</span>
+                  <span className="sub-v">{fmtPct(r.annualReturn)}</span>
+                </span>
+                <span>
+                  <span className="sub-k">Max DD</span>
+                  <span className="sub-v">{r.maxDrawdown.toFixed(1)}%</span>
+                </span>
+                <span>
+                  <span className="sub-k">Sharpe</span>
+                  <span className="sub-v">{r.sharpeRatio.toFixed(2)}</span>
+                </span>
               </div>
             </div>
           );
         })}
       </div>
 
+      <HypothesisVerdicts verdicts={verdicts ?? []} />
+
+      <VerdictStrip results={results} />
+
       {chart && (
-        <svg
-          className="equity-chart"
-          width={width}
-          height={H}
-          style={{ fontSize: labelSize }}
+        <ResultPanel
+          id="equity"
+          title="Equity curve"
+          fillClass="fill"
+          head={
+            plottable.length >= 2 && (
+              <div className="legend">
+                {plottable.map((r, i) => (
+                  <span
+                    className="legend-item"
+                    key={i}
+                    title={r.portfolioName}
+                  >
+                    <Swatch index={i} />
+                    {r.portfolioName}
+                  </span>
+                ))}
+              </div>
+            )
+          }
         >
-          {yTicks.map((v, i) => (
-            <g key={i}>
-              <line
-                x1={pad.left}
-                x2={width - pad.right}
-                y1={y(v)}
-                y2={y(v)}
-                stroke="#2c2c2c"
-              />
-              <text
-                x={pad.left - 8 * scale}
-                y={y(v) + 3 * scale}
-                className="axis-label end"
-              >
-                {fmtMoney(v)}
-              </text>
-            </g>
-          ))}
-          {xTicks.map((t, i) => (
-            <text
-              key={i}
-              x={x(t)}
-              y={H - 8 * scale}
-              className="axis-label mid"
+          {windowNote && <div className="panel-note">{windowNote}</div>}
+          <div className="chart-wrap" ref={wrapRef}>
+            <svg
+              className="equity-chart"
+              width={width}
+              height={H}
+              style={{ fontSize: labelSize }}
+              onMouseMove={onChartMove}
+              onMouseLeave={() => setHover(null)}
             >
-              {new Date(t).toISOString().slice(0, 7)}
-            </text>
-          ))}
-          {chart.series.map((s, i) => {
-            const d = s.pts
-              .filter((p) => !Number.isNaN(p.t))
-              .map((p, j) => `${j === 0 ? "M" : "L"}${x(p.t)},${y(p.v)}`)
-              .join(" ");
-            return (
-              <path
-                key={i}
-                d={d}
-                fill="none"
-                stroke={COLORS[i % COLORS.length]}
-                strokeWidth={1.6 * scale}
-              />
-            );
-          })}
-        </svg>
+              {yTicks.map((v, i) => (
+                <g key={i}>
+                  <line
+                    className="gridline"
+                    x1={pad.left}
+                    x2={width - pad.right}
+                    y1={y(v)}
+                    y2={y(v)}
+                  />
+                  <text
+                    x={pad.left - 8 * scale}
+                    y={y(v) + 3 * scale}
+                    className="axis-label end"
+                  >
+                    {fmtMoney(v)}
+                  </text>
+                </g>
+              ))}
+              {xTicks.map((tick, i) => (
+                <text
+                  key={i}
+                  x={x(tick.t)}
+                  y={H - 8 * scale}
+                  className="axis-label mid"
+                >
+                  {tick.label}
+                </text>
+              ))}
+              {hover && (
+                <line
+                  className="crosshair"
+                  x1={hover.px}
+                  x2={hover.px}
+                  y1={pad.top}
+                  y2={H - pad.bottom}
+                />
+              )}
+              {[...chart.series.entries()]
+                // Benchmarks first so the portfolio lines paint over them.
+                .sort((a, b) => Number(!!b[1].benchmark) - Number(!!a[1].benchmark))
+                .map(([i, s]) => {
+                  return (
+                    <path
+                      key={i}
+                      d={paths[i]}
+                      fill="none"
+                      stroke={seriesColor(s, i)}
+                      strokeWidth={(s.benchmark ? 1.25 : 2) * scale}
+                      strokeDasharray={s.benchmark ? `${5 * scale},${4 * scale}` : undefined}
+                      strokeLinejoin="round"
+                    />
+                  );
+                })}
+              {endLabels.map((l, i) => (
+                <g key={i}>
+                  <line
+                    x1={width - pad.right + 4 * scale}
+                    x2={width - pad.right + 14 * scale}
+                    y1={l.y}
+                    y2={l.y}
+                    stroke={l.color}
+                    strokeWidth={2 * scale}
+                  />
+                  <text
+                    className="end-label"
+                    x={width - pad.right + 18 * scale}
+                    y={l.y + 3 * scale}
+                  >
+                    {l.name}
+                  </text>
+                </g>
+              ))}
+              {/* Hover markers: series-colored dots ringed with the surface so
+                  overlapping curves stay separable. */}
+              {hover &&
+                hover.rows.map((r, i) => (
+                  <circle
+                    key={i}
+                    cx={r.x}
+                    cy={r.y}
+                    r={4 * scale}
+                    fill={r.color}
+                    stroke="#1f1f28"
+                    strokeWidth={2 * scale}
+                  />
+                ))}
+            </svg>
+            {hover && (
+              <div
+                className="chart-tip"
+                style={{
+                  left: hover.px,
+                  top: pad.top + 4 * scale,
+                  transform: tipOnLeft
+                    ? "translateX(calc(-100% - 0.9em))"
+                    : "translateX(0.9em)",
+                }}
+              >
+                <div className="tip-date">{hover.date}</div>
+                {hover.rows.map((r, i) => (
+                  <div className="tip-row" key={i}>
+                    <Swatch color={r.color} />
+                    <span className="tip-name">{r.name}</span>
+                    <span className="tip-val">{fmtDollars(r.v)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </ResultPanel>
       )}
 
+      <ResultPanel
+        id="metrics"
+        title="Metrics"
+        head={
+          <>
+          {/* Not a "show more" link: both views are named, so the basic one
+              reads as a choice rather than as the table failing to load. */}
+          <div className="metrics-view" role="group" aria-label="Metric columns">
+            {(["basic", "full"] as MetricsView[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={`metrics-view-btn ${metricsView === v ? "on" : ""}`}
+                aria-pressed={metricsView === v}
+                title={
+                  v === "basic"
+                    ? "The six numbers a first run is about"
+                    : "Every metric the engine computed"
+                }
+                onClick={() => {
+                  setMetricsView(v);
+                  writeStored(METRICS_VIEW_KEY, v);
+                }}
+              >
+                {v === "basic" ? "Basics" : "Everything"}
+              </button>
+            ))}
+          </div>
+          </>
+        }
+      >
+        <div className="table-scroll">
+          <table>
+            <thead>
+              {/* Every cell in this table -- header, portfolio row, benchmark
+                  row -- is gated on the same show(key), so a column cannot
+                  appear in one and be missing from another. That failure is
+                  not a gap in a row: it slides every later value one column
+                  left, printing a number under the wrong label. It has
+                  happened once already; see the benchmark row below. */}
+              <tr>
+                {show("portfolio") && <th>Portfolio</th>}
+                {show("strategy") && <th>Strategy</th>}
+                {show("finalValue") && <th className="num">Final value</th>}
+                {show("profit") && <th className="num">Profit</th>}
+                {show("sharpe") && <th className="num">Sharpe</th>}
+                {show("sortino") && <th className="num">Sortino</th>}
+                {show("calmar") && (
+                  <th
+                    className="num"
+                    title="Annual return per unit of worst decline; 0 means it never declined"
+                  >
+                    Calmar
+                  </th>
+                )}
+                {show("maxDrawdown") && <th className="num">Max DD %</th>}
+                {show("underwater") && (
+                  <th
+                    className="num"
+                    title="Longest run of calendar days below a previous peak"
+                  >
+                    Underwater
+                  </th>
+                )}
+                {show("annualReturn") && <th className="num">Annual %</th>}
+                {show("realAnnual") && (
+                  <th
+                    className="num"
+                    title="Annual % with inflation divided out (CPI). An em dash means CPI does not cover both ends of the window — it is published a month in arrears — not that real growth was zero."
+                  >
+                    Real %
+                  </th>
+                )}
+                {show("stdDev") && <th className="num">Std Dev</th>}
+                {show("turnover") && <th className="num">Turnover</th>}
+                {show("exposure") && (
+                  <th className="num" title="Mean invested fraction of the book">
+                    Exposure %
+                  </th>
+                )}
+                {show("fundCov") && (
+                  <th
+                    className="num"
+                    title="Share of day x ticker x declared-metric cells that had a published figure. Blank unless the config declares Fundamentals."
+                  >
+                    Fund Cov %
+                  </th>
+                )}
+                {show("inMarket") && (
+                  <th className="num" title="Share of simulated days holding anything">
+                    In Market %
+                  </th>
+                )}
+                {show("avgCorr") && <th className="num">Avg Corr</th>}
+                {show("cointPairs") && <th className="num">Coint Pairs</th>}
+                {contributing && (
+                  <>
+                    {show("contributed") && (
+                      <th
+                        className="num"
+                        title="Net money paid in by the [portfolio.Cashflow] schedule — deposits positive, withdrawals negative. Already subtracted from Profit."
+                      >
+                        Contributed
+                      </th>
+                    )}
+                    {show("missedWD") && (
+                      <th
+                        className="num"
+                        title="Scheduled withdrawals that could not be funded even after selling everything. Non-zero means the portfolio ran out of money."
+                      >
+                        Missed W/D
+                      </th>
+                    )}
+                  </>
+                )}
+                {swept && (
+                  <>
+                    {show("trials") && <th className="num">Trials</th>}
+                    {show("luckBar") && <th className="num">Luck bar</th>}
+                    {show("confidence") && <th className="num">Confidence</th>}
+                  </>
+                )}
+                {benchmarked && (
+                  <>
+                    {show("alpha") && <th className="num">Alpha %</th>}
+                    {show("beta") && <th className="num">Beta</th>}
+                    {show("trackErr") && <th className="num">Track Err</th>}
+                    {show("infoRatio") && <th className="num">Info Ratio</th>}
+                    {show("upCap") && <th className="num">Up Cap %</th>}
+                    {show("downCap") && <th className="num">Down Cap %</th>}
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r, i) => {
+                const p = profit(r);
+                return (
+                  <tr key={i}>
+                    {show("portfolio") && (
+                      <td>
+                        <Swatch index={i} inline />
+                        {r.portfolioName}
+                      </td>
+                    )}
+                    {show("strategy") && (
+                      <td className="strategy" title={r.strategy}>
+                        {r.strategy}
+                      </td>
+                    )}
+                    {show("finalValue") && (
+                      <td className="num">{fmtDollars(r.finalValue)}</td>
+                    )}
+                    {show("profit") && (
+                      <td className={`num ${p && p.abs < 0 ? "neg" : "pos"}`}>
+                        {p
+                          ? `${p.abs >= 0 ? "+" : "−"}${fmtDollars(Math.abs(p.abs))}`
+                          : "—"}
+                      </td>
+                    )}
+                    {show("sharpe") && (
+                      <td className="num">{r.sharpeRatio.toFixed(2)}</td>
+                    )}
+                    {show("sortino") && (
+                      <td className="num">{r.sortinoRatio.toFixed(2)}</td>
+                    )}
+                    {show("calmar") && (
+                      <td className="num">{r.calmarRatio.toFixed(2)}</td>
+                    )}
+                    {show("maxDrawdown") && (
+                      <td className="num">{r.maxDrawdown.toFixed(2)}</td>
+                    )}
+                    {show("underwater") && (
+                      <td className="num">{r.longestUnderwaterDays}</td>
+                    )}
+                    {show("annualReturn") && (
+                      <td className="num">{r.annualReturn.toFixed(2)}</td>
+                    )}
+                    {/* Zero means "CPI did not reach both ends of this
+                        window", not "no real growth" — opposite claims, so it
+                        must not render as 0.00. */}
+                    {show("realAnnual") && (
+                      <td className="num">{fmtReal(r.realAnnualReturn)}</td>
+                    )}
+                    {show("stdDev") && (
+                      <td className="num">{r.standardDev.toFixed(4)}</td>
+                    )}
+                    {show("turnover") && (
+                      <td className="num">{r.turnover.toFixed(2)}</td>
+                    )}
+                    {show("exposure") && (
+                      <td className="num">{r.avgExposure.toFixed(1)}</td>
+                    )}
+                    {/* Blank rather than 0.0 when no Fundamentals were
+                        declared: a zero here would read as "the data was
+                        missing" rather than "this run never asked for it". */}
+                    {show("fundCov") && (
+                      <td className="num">
+                        {(r.fundamentalCoverage ?? 0) > 0
+                          ? r.fundamentalCoverage.toFixed(1)
+                          : "—"}
+                      </td>
+                    )}
+                    {show("inMarket") && (
+                      <td className="num">{r.timeInMarket.toFixed(1)}</td>
+                    )}
+                    {show("avgCorr") && (
+                      <td className="num">{r.avgCorrelation.toFixed(2)}</td>
+                    )}
+                    {show("cointPairs") && (
+                      <td className="num">{r.cointegratedPairs}</td>
+                    )}
+                    {contributing && (
+                      <>
+                        {show("contributed") && (
+                          <td className="num">{fmtDollars(r.netContributions ?? 0)}</td>
+                        )}
+                        {/* A missed withdrawal is not a statistic, it is the
+                            result: the plan ran out of money. Coloured as the
+                            negative it is. */}
+                        {show("missedWD") && (
+                          <td className={`num ${(r.withdrawalsMissed ?? 0) > 0 ? "neg" : ""}`}>
+                            {r.withdrawalsMissed ?? 0}
+                          </td>
+                        )}
+                      </>
+                    )}
+                    {swept && (
+                      <>
+                        {show("trials") && <td className="num">{r.trials}</td>}
+                        {show("luckBar") && (
+                          <td className="num">{r.expectedMaxSharpe.toFixed(2)}</td>
+                        )}
+                        {/* Confidence below 0.5 means the headline Sharpe is
+                            more likely selection bias than edge, so it is
+                            coloured as a negative rather than left neutral. */}
+                        {show("confidence") && (
+                          <td
+                            className={`num ${r.deflatedSharpe < 0.5 ? "neg" : "pos"}`}
+                          >
+                            {r.deflatedSharpe.toFixed(2)}
+                          </td>
+                        )}
+                      </>
+                    )}
+                    {benchmarked && (
+                      <>
+                        {show("alpha") && <td className="num">{r.alpha.toFixed(2)}</td>}
+                        {show("beta") && <td className="num">{r.beta.toFixed(2)}</td>}
+                        {show("trackErr") && (
+                          <td className="num">{r.trackingError.toFixed(4)}</td>
+                        )}
+                        {show("infoRatio") && (
+                          <td className="num">{r.informationRatio.toFixed(2)}</td>
+                        )}
+                        {show("upCap") && (
+                          <td className="num">{r.upCapture.toFixed(1)}</td>
+                        )}
+                        {show("downCap") && (
+                          <td className="num">{r.downCapture.toFixed(1)}</td>
+                        )}
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+              {/* One row per distinct benchmark, after the portfolios and
+                  visually subordinate: it is the reference the rows above are
+                  measured against, not another result. Only the columns that
+                  describe a return series on its own terms are filled in —
+                  a benchmark has no strategy, no turnover and no alpha
+                  against itself. */}
+              {benchmarkRows.map((b) => (
+                <tr key={`bench-${b.ticker}`} className="benchmark-row">
+                  {show("portfolio") && (
+                    <td>
+                      <Swatch color={BENCHMARK_COLOR} inline />
+                      {b.ticker}
+                    </td>
+                  )}
+                  {show("strategy") && <td className="strategy">benchmark</td>}
+                  {show("finalValue") && (
+                    <td className="num">{fmtDollars(b.finalValue)}</td>
+                  )}
+                  {show("profit") && (
+                    <td className={`num ${b.profit < 0 ? "neg" : "pos"}`}>
+                      {`${b.profit >= 0 ? "+" : "−"}${fmtDollars(Math.abs(b.profit))}`}
+                    </td>
+                  )}
+                  {/* Cell for cell against the header, in header order, and
+                      gated on the same show(key) so the two cannot disagree.
+                      The four BenchmarkStats carries land in their own columns
+                      and everything else is an em dash. This row used to emit
+                      five cells too few, which did not leave the row short —
+                      it slid every value left, printing max drawdown under
+                      Calmar and annual return under Max DD %. A number under
+                      the wrong label is worse than no number. */}
+                  {show("sharpe") && (
+                    <td className="num">{b.stats.sharpeRatio.toFixed(2)}</td>
+                  )}
+                  {show("sortino") && <td className="num">—</td>}
+                  {/* Calmar is annual return over worst decline, and the
+                      engine has a rule for the zero-drawdown case. Deriving it
+                      here would risk printing a figure that disagrees with the
+                      column it sits in. */}
+                  {show("calmar") && <td className="num">—</td>}
+                  {show("maxDrawdown") && (
+                    <td className="num">{b.stats.maxDrawdown.toFixed(2)}</td>
+                  )}
+                  {show("underwater") && <td className="num">—</td>}
+                  {show("annualReturn") && (
+                    <td className="num">{b.stats.annualReturn.toFixed(2)}</td>
+                  )}
+                  {show("realAnnual") && (
+                    <td className="num">{fmtReal(b.stats.realAnnualReturn)}</td>
+                  )}
+                  {show("stdDev") && (
+                    <td className="num">{b.stats.standardDev.toFixed(4)}</td>
+                  )}
+                  {show("turnover") && <td className="num">—</td>}
+                  {show("exposure") && <td className="num">—</td>}
+                  {show("fundCov") && <td className="num">—</td>}
+                  {show("inMarket") && <td className="num">—</td>}
+                  {show("avgCorr") && <td className="num">—</td>}
+                  {show("cointPairs") && <td className="num">—</td>}
+                  {contributing && (
+                    <>
+                      {show("contributed") && <td className="num">—</td>}
+                      {show("missedWD") && <td className="num">—</td>}
+                    </>
+                  )}
+                  {swept && (
+                    <>
+                      {show("trials") && <td className="num">—</td>}
+                      {show("luckBar") && <td className="num">—</td>}
+                      {show("confidence") && <td className="num">—</td>}
+                    </>
+                  )}
+                  {benchmarked && (
+                    <>
+                      {show("alpha") && <td className="num">—</td>}
+                      {show("beta") && <td className="num">—</td>}
+                      {show("trackErr") && <td className="num">—</td>}
+                      {show("infoRatio") && <td className="num">—</td>}
+                      {show("upCap") && <td className="num">—</td>}
+                      {show("downCap") && <td className="num">—</td>}
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </ResultPanel>
+
+      <StrategyPlots results={results} />
+
+      {results.some((r) => (r.walkForward?.windows ?? []).length > 0) && (
+        <ResultPanel id="walk-forward" title="Walk-forward windows" collapsible>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th>Train</th>
+                  <th>Test</th>
+                  <th>Selected</th>
+                  <th className="num">Train score</th>
+                  <th className="num">Test return %</th>
+                  <th className="num">Capital</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  (r.walkForward?.windows ?? []).map((w, j) => (
+                    <tr key={`${i}-wf-${j}`}>
+                      <td>
+                        <Swatch index={i} inline />
+                        {j === 0 ? r.portfolioName : ""}
+                      </td>
+                      <td className="mono">
+                        {w.trainStart} → {w.trainEnd}
+                      </td>
+                      <td className="mono">
+                        {w.testStart} → {w.testEnd}
+                      </td>
+                      <td className="strategy" title={w.selected}>
+                        {w.selected}
+                      </td>
+                      <td className="num">{w.trainScore.toFixed(2)}</td>
+                      {/* The gap between these two columns is the whole
+                          diagnostic: strong training scores next to weak test
+                          returns is what overfitting looks like. */}
+                      <td className={`num ${w.testReturn < 0 ? "neg" : "pos"}`}>
+                        {w.testReturn.toFixed(2)}
+                      </td>
+                      <td className="num">{fmtDollars(w.capital)}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ResultPanel>
+      )}
+
+      {results.some((r) => (r.splits ?? []).length > 0) && (
+        <ResultPanel id="splits" title="In-sample vs out-of-sample" collapsible>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th>Segment</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th className="num">Days</th>
+                  <th className="num">Return %</th>
+                  <th className="num">Annual %</th>
+                  <th className="num">Sharpe</th>
+                  <th className="num">Sortino</th>
+                  <th className="num">Max DD %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  (r.splits ?? []).map((s) => (
+                    <tr
+                      key={`${i}-${s.label}`}
+                      /* The out-of-sample row is the one that carries
+                         information about a tuned parameter set; the
+                         in-sample row is the number that was optimised and
+                         is dimmed so it cannot be mistaken for evidence. */
+                      className={
+                        s.label === "in-sample" ? "benchmark-row" : undefined
+                      }
+                    >
+                      <td>
+                        <Swatch index={i} inline />
+                        {r.portfolioName}
+                      </td>
+                      <td className="strategy">{s.label}</td>
+                      <td className="mono">{s.start}</td>
+                      <td className="mono">{s.end}</td>
+                      <td className="num">{s.days}</td>
+                      <td
+                        className={`num ${s.totalReturn < 0 ? "neg" : "pos"}`}
+                      >
+                        {s.totalReturn.toFixed(2)}
+                      </td>
+                      <td className="num">{s.annualReturn.toFixed(2)}</td>
+                      <td className="num">{s.sharpeRatio.toFixed(2)}</td>
+                      <td className="num">{s.sortinoRatio.toFixed(2)}</td>
+                      <td className="num">{s.maxDrawdown.toFixed(2)}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ResultPanel>
+      )}
+
+      {results.some((r) => (r.drawdowns ?? []).length > 0) && (
+        <ResultPanel id="drawdowns" title="Deepest drawdowns" collapsible>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th className="num">Depth %</th>
+                  <th>Peak</th>
+                  <th>Trough</th>
+                  <th>Recovered</th>
+                  <th className="num">Days down</th>
+                  <th className="num">Days to recover</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  (r.drawdowns ?? []).slice(0, 5).map((d, j) => (
+                    <tr key={`${i}-${j}`}>
+                      <td>
+                        <Swatch index={i} inline />
+                        {r.portfolioName}
+                      </td>
+                      <td className="num neg">{d.depthPct.toFixed(2)}</td>
+                      <td>{fmtDate(d.start)}</td>
+                      <td>{fmtDate(d.trough)}</td>
+                      <td>{d.ongoing ? "ongoing" : fmtDate(d.recovered)}</td>
+                      <td className="num">{d.durationDays}</td>
+                      <td className="num">
+                        {d.ongoing ? "—" : d.recoveryDays}
+                      </td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ResultPanel>
+      )}
+
+      {results.some((r) => (r.tradeStats?.trades ?? 0) > 0) && (
+        <ResultPanel id="trading" title="Trading" collapsible>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th className="num">Trades</th>
+                  <th className="num">Round trips</th>
+                  <th className="num">Win rate %</th>
+                  <th className="num">Avg win</th>
+                  <th className="num">Avg loss</th>
+                  <th className="num">Profit factor</th>
+                  <th className="num">Avg hold (d)</th>
+                  <th className="num">Realized</th>
+                  <th className="num">Fees</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r, i) => {
+                  const t = r.tradeStats;
+                  if (!t || t.trades === 0) return null;
+                  return (
+                    <tr key={i}>
+                      <td>
+                        <Swatch index={i} inline />
+                        {r.portfolioName}
+                      </td>
+                      <td className="num">{t.trades}</td>
+                      <td className="num">{t.roundTrips}</td>
+                      <td className="num">{t.winRate.toFixed(1)}</td>
+                      <td className="num pos">{fmtDollars(t.avgWin)}</td>
+                      {/* AvgLoss is a positive magnitude (blotter.go sums
+                          -RealizedPnL), so the sign has to be written in or a
+                          red "$540" reads as if the field were already signed. */}
+                      <td className="num neg">
+                        {t.avgLoss > 0 ? "−" : ""}
+                        {fmtDollars(Math.abs(t.avgLoss))}
+                      </td>
+                      <td className="num">{t.profitFactor.toFixed(2)}</td>
+                      <td className="num">{t.avgHoldingDays.toFixed(0)}</td>
+                      <td className={`num ${t.totalRealized < 0 ? "neg" : "pos"}`}>
+                        {fmtDollars(t.totalRealized)}
+                      </td>
+                      <td className="num">{fmtDollars(t.totalFees)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </ResultPanel>
+      )}
+
+      {results.some((r) => (r.tradeStats?.perTicker ?? []).length > 0) && (
+        <ResultPanel id="attribution" title="Attribution — which position made the money" collapsible>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Portfolio</th>
+                  <th>Ticker</th>
+                  <th className="num">Total P&amp;L</th>
+                  <th className="num">Realized</th>
+                  <th className="num">Unrealized</th>
+                  <th className="num">Fees</th>
+                  <th className="num">Trades</th>
+                  <th className="num">Shares held</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.flatMap((r, i) =>
+                  // Biggest contributors first: the decision-changing question
+                  // is whether one position carried the whole result.
+                  [...(r.tradeStats?.perTicker ?? [])]
+                    .sort(
+                      (a, b) =>
+                        Math.abs(b.realized + b.unrealized) -
+                        Math.abs(a.realized + a.unrealized),
+                    )
+                    .map((t, j) => {
+                      const total = t.realized + t.unrealized;
+                      return (
+                        <tr key={`${i}-${j}`}>
+                          <td>
+                            <Swatch index={i} inline />
+                            {r.portfolioName}
+                          </td>
+                          <td>{t.ticker}</td>
+                          <td className={`num ${total < 0 ? "neg" : "pos"}`}>
+                            {fmtDollars(total)}
+                          </td>
+                          <td className="num">{fmtDollars(t.realized)}</td>
+                          <td className="num">{fmtDollars(t.unrealized)}</td>
+                          <td className="num">{fmtDollars(t.fees)}</td>
+                          <td className="num">{t.trades}</td>
+                          <td className="num">
+                            {t.sharesHeld > 0 ? t.sharesHeld.toFixed(2) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    }),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ResultPanel>
+      )}
+
+      {results.some((r) => (r.yearlyReturns ?? []).length > 0) && (
+        <ResultPanel id="yearly" title="Calendar year returns" collapsible>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  {results.map((r, i) => (
+                    <th className="num" key={i} title={r.portfolioName}>
+                      <Swatch index={i} inline />
+                      {r.portfolioName}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from(
+                  new Set(
+                    results.flatMap((r) =>
+                      (r.yearlyReturns ?? []).map((y) => y.period),
+                    ),
+                  ),
+                )
+                  .sort()
+                  .map((period) => (
+                    <tr key={period}>
+                      <td>{period}</td>
+                      {results.map((r, i) => {
+                        const y = (r.yearlyReturns ?? []).find(
+                          (p) => p.period === period,
+                        );
+                        if (!y) return <td className="num" key={i}>—</td>;
+                        return (
+                          <td
+                            className={`num ${y.returnPct < 0 ? "neg" : "pos"}`}
+                            key={i}
+                            title={y.partial ? "partial year" : undefined}
+                          >
+                            {y.returnPct.toFixed(2)}
+                            {y.partial ? "*" : ""}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="panel-note">
+            * partial period — the run does not span the whole year. Shown as
+            the plain return over the days present, not annualized.
+          </div>
+        </ResultPanel>
+      )}
+
+      {results.some((r) => (r.monthlyReturns ?? []).length > 0) && (
+        <ResultPanel id="monthly" title="Monthly returns" collapsible>
+          {results.map((r, i) =>
+            (r.monthlyReturns ?? []).length === 0 ? null : (
+              <MonthGrid key={i} result={r} color={COLORS[i % COLORS.length]} showName={results.length > 1} />
+            ),
+          )}
+          <div className="panel-note">
+            * partial month — the run does not span the whole month. Shown as
+            the plain return over the days present.
+          </div>
+        </ResultPanel>
+      )}
+    </div>
+    </DockProvider>
+  );
+}
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// A year-by-month matrix. The calendar-year table above answers "was this a
+// good year"; this answers whether the year was steady or was one good month,
+// which is the same question the deflated Sharpe asks of a sweep and the one a
+// single annual figure hides most effectively.
+// What the strategy plotted.
+//
+// log() could always say things; nothing could show a NUMBER over time. The
+// moving average a script is crossing, the z-score it is waiting on, the
+// exposure it thinks it is carrying -- those are what explain a run, and
+// reading them out of a thousand console lines is not seeing them.
+//
+// One chart per series rather than extra lines on the equity chart, which is
+// in dollars: an RSI between 0 and 100 drawn on a $184,000 axis is a flat line
+// at the bottom, and giving each series its own axis on a shared chart is how
+// two lines end up looking like they cross when they do not.
+function PlotChart({
+  series,
+  dates,
+}: {
+  series: backtest.PlotSeries;
+  dates: string[];
+}) {
+  const pts = series.points ?? [];
+  if (pts.length === 0) return null;
+
+  const values = pts.map((p) => p.value);
+  let lo = Math.min(...values);
+  let hi = Math.max(...values);
+  // A flat series is a real answer (an indicator that never moved), so it is
+  // drawn down the middle rather than dividing by a zero range.
+  if (hi - lo < 1e-12) {
+    lo -= 1;
+    hi += 1;
+  }
+  // The x axis is the run's days, not the plotted points: a series that starts
+  // on day 200 must start 200 days in, not at the left edge.
+  const lastDay = Math.max(dates.length - 1, pts[pts.length - 1].day, 1);
+  const W = 600;
+  const H = 64;
+  const x = (day: number) => (day / lastDay) * W;
+  const y = (v: number) => H - ((v - lo) / (hi - lo)) * H;
+  const d = pts.map((p) => `${x(p.day)},${y(p.value)}`).join(" ");
+  const fmt = (v: number) =>
+    Math.abs(v) >= 1000 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(4);
+
+  return (
+    <div className="plot-chart">
+      <div className="plot-head">
+        <span className="plot-name">{series.name}</span>
+        <span className="plot-range">
+          {fmt(lo)} … {fmt(hi)} · last {fmt(values[values.length - 1])}
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="plot-svg"
+        role="img"
+        aria-label={`${series.name}: ${pts.length} points`}
+      >
+        <polyline
+          points={d}
+          fill="none"
+          // Without this the non-uniform viewBox stretch would thin the line
+          // horizontally and fatten it vertically.
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function StrategyPlots({ results }: { results: main.RunResult[] }) {
+  const withPlots = results.filter((r) => (r.plots ?? []).length > 0);
+  if (withPlots.length === 0) return null;
+  return (
+    <ResultPanel id="plots" title="What the strategy plotted" collapsible>
+      <div className="plots">
+        {withPlots.map((r) => (
+          <div className="plot-group" key={r.portfolioName}>
+            {withPlots.length > 1 && (
+              <div className="plot-owner">
+                <Swatch index={results.indexOf(r)} inline />
+                {r.portfolioName}
+              </div>
+            )}
+            {(r.plots ?? []).map((s) => (
+              <PlotChart key={s.name} series={s} dates={r.dates ?? []} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </ResultPanel>
+  );
+}
+
+// Two portfolios drawn as two lines on one chart read as a comparison. Each
+// genuinely runs over its own window, which is correct -- a portfolio's window
+// is decided by what its own holdings cover -- but two return series over
+// different periods are not comparable, and nothing on the panel said so. A
+// 2009-2020 portfolio beating a 2015-2020 one has mostly told you that it held
+// through the recovery.
+//
+// A note, not a refusal: running two windows on purpose is legitimate.
+// Exported so the smoke run exercises the decision rather than a copy of it.
+export function differingWindows(results: main.RunResult[]): string {
+  const spans = results
+    .filter((r) => (r.dates ?? []).length > 0)
+    .map((r) => ({
+      name: r.portfolioName,
+      from: r.dates[0],
+      to: r.dates[r.dates.length - 1],
+    }));
+  if (spans.length < 2) return "";
+  const first = spans[0];
+  if (spans.every((s) => s.from === first.from && s.to === first.to)) return "";
+  const listed = spans.map((s) => `${s.name} ${s.from} → ${s.to}`).join(" · ");
+  return (
+    `These portfolios cover different windows — ${listed}. ` +
+    "Two return series over different periods are not comparable: the longer " +
+    "one has been through market conditions the other never saw."
+  );
+}
+
+function MonthGrid({
+  result,
+  color,
+  showName,
+}: {
+  result: main.RunResult;
+  color: string;
+  showName: boolean;
+}) {
+  // Period is "YYYY-MM"; anything else is skipped rather than guessed at.
+  const byYear = new Map<string, (PeriodReturnLike | undefined)[]>();
+  for (const m of result.monthlyReturns ?? []) {
+    const [year, month] = (m.period ?? "").split("-");
+    const idx = Number(month) - 1;
+    if (!year || Number.isNaN(idx) || idx < 0 || idx > 11) continue;
+    if (!byYear.has(year)) byYear.set(year, new Array(12).fill(undefined));
+    byYear.get(year)![idx] = m;
+  }
+  const years = [...byYear.keys()].sort();
+  if (years.length === 0) return null;
+
+  return (
+    <div className="table-scroll">
+      {showName && (
+        <div className="month-owner">
+          <Swatch color={color} inline />
+          {result.portfolioName}
+        </div>
+      )}
       <table>
         <thead>
           <tr>
-            <th>Portfolio</th>
-            <th>Strategy</th>
-            <th>Sharpe</th>
-            <th>Sortino</th>
-            <th>Max DD %</th>
-            <th>Annual %</th>
-            <th>Std Dev</th>
-            <th>Avg Corr</th>
-            <th>Coint Pairs</th>
+            <th>Year</th>
+            {MONTH_LABELS.map((m) => (
+              <th className="num" key={m}>
+                {m}
+              </th>
+            ))}
+            <th className="num">Year</th>
           </tr>
         </thead>
         <tbody>
-          {results.map((r, i) => (
-            <tr key={i}>
-              <td>{r.portfolioName}</td>
-              <td>{r.strategy}</td>
-              <td>{r.sharpeRatio.toFixed(2)}</td>
-              <td>{r.sortinoRatio.toFixed(2)}</td>
-              <td>{r.maxDrawdown.toFixed(2)}</td>
-              <td>{r.annualReturn.toFixed(2)}</td>
-              <td>{r.standardDev.toFixed(4)}</td>
-              <td>{r.avgCorrelation.toFixed(2)}</td>
-              <td>{r.cointegratedPairs}</td>
-            </tr>
-          ))}
+          {years.map((y) => {
+            const months = byYear.get(y)!;
+            // Compound the months present rather than summing them: returns
+            // are multiplicative, and a year with -50% then +50% is -25%.
+            const compounded =
+              (months.reduce(
+                (acc, m) => acc * (1 + (m ? m.returnPct : 0) / 100),
+                1,
+              ) -
+                1) *
+              100;
+            return (
+              <tr key={y}>
+                <td>{y}</td>
+                {months.map((m, j) => (
+                  <td
+                    key={j}
+                    className={`num ${m ? (m.returnPct < 0 ? "neg" : "pos") : "dim"}`}
+                  >
+                    {m ? `${m.returnPct.toFixed(1)}${m.partial ? "*" : ""}` : "—"}
+                  </td>
+                ))}
+                <td className={`num ${compounded < 0 ? "neg" : "pos"}`}>
+                  <b>{compounded.toFixed(1)}</b>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
+
+// The shape MonthGrid needs from a period return, kept narrow so the grid does
+// not depend on fields it never reads.
+type PeriodReturnLike = { period: string; returnPct: number; partial: boolean };
+
+// Memoised: App re-renders on every keystroke in the Backtest form, and all
+// three props are state that only changes when a run finishes or the zoom
+// moves. Without this each keystroke re-rendered the whole dashboard --
+// ~10 ms plus a diff of every chart path -- to produce identical output.
+export default memo(ResultsView);

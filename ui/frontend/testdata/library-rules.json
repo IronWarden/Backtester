@@ -1,0 +1,30 @@
+[
+  {
+    "file": "momentum_rotation.lua",
+    "rules": {
+      "rebalance": "monthly",
+      "rank": "return_126",
+      "pick": 2,
+      "keep": 0,
+      "filter": "rising_126",
+      "weight": "",
+      "allocations": null,
+      "riskOff": ""
+    },
+    "sentence": "Every 21 trading days (about monthly), hold the 2 stocks that rose most over the last 126 trading days, counting only those up over the last 126 trading days, equally weighted. If none qualify, the money waits in cash. The first decision waits for 126 trading days of history; until then it holds cash."
+  },
+  {
+    "file": "rebalance.lua",
+    "rules": {
+      "rebalance": "quarterly",
+      "rank": "",
+      "pick": 0,
+      "keep": 0,
+      "filter": "",
+      "weight": "",
+      "allocations": null,
+      "riskOff": ""
+    },
+    "sentence": "Every 63 trading days (about quarterly), hold every one of these stocks, equally weighted."
+  }
+]
