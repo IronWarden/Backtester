@@ -18,8 +18,7 @@ import (
 )
 
 // Version is the release this source tree is. Semver with a pre-release tag
-// while the beta lasts; the LICENSE's terms end at 1.0, so the tag is load
-// bearing rather than decorative.
+// while the beta lasts.
 const Version = "0.1.0-beta.1"
 
 // Commit is set at link time by the release script:

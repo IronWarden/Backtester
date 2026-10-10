@@ -557,7 +557,7 @@ function App() {
             act("tab-backtest", "Go to Backtest tab"),
             act("tab-config", "Go to Config tab"),
             act("tab-data", "Go to Data tab"),
-            act("tab-research", "Read a company's SEC filings (Research: CN, MY, search)", {
+            act("tab-research", "Read a company's SEC filings or the news (Research: CN, MY, NEWS, search)", {
                 // Deferred, like Find a ticker: the palette must unmount
                 // before the command line takes focus.
                 run: () => {
@@ -1240,7 +1240,7 @@ function App() {
                     <button
                         className={mode === "research" ? "active" : ""}
                         onClick={() => setMode("research")}
-                        title={`Read SEC filings: a company's, your watchlist's, or a full-text search (${keysFor("tab-research")})`}
+                        title={`Read SEC filings — a company's, your watchlist's, or a full-text search — and NEWS: economic releases and your watchlist's material events (${keysFor("tab-research")})`}
                     >
                         Research
                     </button>

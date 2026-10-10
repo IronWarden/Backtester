@@ -5,6 +5,7 @@
 //   AAPL                   -> CN (the company's filings)
 //   apple                  -> a name: resolved to the best-matching symbol
 //   MY                     -> the watchlist's filings (T142d)
+//   NEWS                   -> economic releases + the watchlist's material events
 //   "going concern"        -> full-text search of every filing (T142e)
 //   "buyback" AAPL         -> the same, within one company
 // The function may come first ("CN AAPL"); case never matters.
@@ -14,6 +15,12 @@
 export const RESEARCH_FUNCTIONS = [
   { code: "CN", label: "Filings", hint: "A company's SEC filings, read as sec.gov shows them", market: false },
   { code: "MY", label: "Watchlist", hint: "Filings across the companies you follow", market: true },
+  {
+    code: "NEWS",
+    label: "News",
+    hint: "Economic releases from BLS, BEA and Census, and your watchlist's material events",
+    market: true,
+  },
 ] as const;
 
 // FTS is the full-text search: started by quotes, never by a button, so it
@@ -31,7 +38,7 @@ export type ResearchCommand = {
 const CODES = new Set<string>(RESEARCH_FUNCTIONS.map((f) => f.code));
 const MARKET_CODES = new Set<string>(RESEARCH_FUNCTIONS.filter((f) => f.market).map((f) => f.code));
 
-// Whether a function runs without a ticker: MY, and a search, which
+// Whether a function runs without a ticker: MY, NEWS, and a search, which
 // may or may not name one.
 export function isMarketFunction(fn: ResearchFn): boolean {
   return MARKET_CODES.has(fn) || fn === "FTS";

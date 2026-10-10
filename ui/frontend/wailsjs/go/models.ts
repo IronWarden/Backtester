@@ -679,6 +679,7 @@ export namespace main {
 	    accepted: string;
 	    reportDate: string;
 	    items: string[];
+	    material: boolean;
 	    indexUrl: string;
 	    primaryUrl: string;
 	
@@ -696,6 +697,7 @@ export namespace main {
 	        this.accepted = source["accepted"];
 	        this.reportDate = source["reportDate"];
 	        this.items = source["items"];
+	        this.material = source["material"];
 	        this.indexUrl = source["indexUrl"];
 	        this.primaryUrl = source["primaryUrl"];
 	    }
@@ -718,6 +720,68 @@ export namespace main {
 	        this.cik = source["cik"];
 	        this.company = source["company"];
 	        this.filings = this.convertValues(source["filings"], FilingRow);
+	        this.notes = source["notes"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ReleaseRow {
+	    agency: string;
+	    series: string;
+	    title: string;
+	    summary: string;
+	    url: string;
+	    date: string;
+	    when: string;
+	    next: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReleaseRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.agency = source["agency"];
+	        this.series = source["series"];
+	        this.title = source["title"];
+	        this.summary = source["summary"];
+	        this.url = source["url"];
+	        this.date = source["date"];
+	        this.when = source["when"];
+	        this.next = source["next"];
+	    }
+	}
+	export class EconomicNews {
+	    releases: ReleaseRow[];
+	    since: string;
+	    notes: string[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EconomicNews(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.releases = this.convertValues(source["releases"], ReleaseRow);
+	        this.since = source["since"];
 	        this.notes = source["notes"];
 	        this.error = source["error"];
 	    }
@@ -1103,6 +1167,7 @@ export namespace main {
 		    return a;
 		}
 	}
+	
 	
 	export class RulesReading {
 	    sentence: string;

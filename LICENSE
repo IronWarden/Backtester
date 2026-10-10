@@ -1,88 +1,21 @@
-Backtester — Beta Evaluation License
-Copyright (c) 2026 IronWarden. All rights reserved.
+MIT License
 
-This is pre-release software. It is NOT open source: the source is published
-so you can read it, and reading it grants you nothing beyond what this licence
-says.
+Copyright (c) 2026 IronWarden
 
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. GRANT
-
-You may download, install and run this beta build of Backtester, on any number
-of devices you control, for any purpose including commercial work. No fee is
-charged for the beta.
-
-
-2. WHAT YOU MAY NOT DO
-
-You may not:
-
-  (a) redistribute, publish, sell, rent, lease, sublicense or host this
-      software, in whole or in part, or make it available to anyone else as a
-      service;
-  (b) reverse engineer, decompile, disassemble, or attempt to derive the source
-      of the distributed binaries, except where that restriction is
-      unenforceable under law that applies to you;
-  (c) modify or create derivative works of this software; or
-  (d) remove or alter any copyright, licence or attribution notice, including
-      the contents of THIRD-PARTY-NOTICES.txt.
-
-All rights not expressly granted above are reserved.
-
-
-3. THIS IS A BETA
-
-The software is incomplete and under active development. It may contain
-defects that produce WRONG NUMBERS, and its file formats, configuration schema
-and results may change between builds without notice.
-
-This licence covers beta builds only. It ends when version 1.0 is released, at
-which point continued use requires whatever licence accompanies that release.
-Nothing here obliges the copyright holder to release 1.0, to release it free of
-charge, or to release it under these terms.
-
-
-4. THIS IS NOT INVESTMENT ADVICE
-
-Backtester simulates hypothetical trading over historical data. Its output
-describes what a strategy would have done in the past, under modelling
-assumptions that are documented and that are all, to some degree, wrong. Past
-simulated performance does not predict future returns.
-
-Nothing this software produces is investment, financial, legal or tax advice,
-and it is not a recommendation to buy or sell anything. You are solely
-responsible for any decision you make with it, and for any resulting loss.
-
-
-5. NO WARRANTY
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE, ACCURACY AND NONINFRINGEMENT.
-
-
-6. LIMITATION OF LIABILITY
-
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE COPYRIGHT HOLDER
-BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY — INCLUDING TRADING OR
-INVESTMENT LOSSES, LOST PROFITS, OR LOSS OF DATA — WHETHER IN AN ACTION OF
-CONTRACT, TORT OR OTHERWISE, ARISING FROM OR IN CONNECTION WITH THE SOFTWARE OR
-ITS USE.
-
-
-7. TERMINATION
-
-This licence ends automatically if you breach it. On termination you must stop
-using the software and delete every copy you hold.
-
-
-8. OTHER MATERIAL, LICENSED SEPARATELY
-
-  - Third-party components compiled into or bundled with this software are
-    licensed by their own authors under their own terms. Those terms are
-    reproduced in THIRD-PARTY-NOTICES.txt and, where they conflict with this
-    licence, they govern their own components.
-
-  - The market-data database distributed with this software is NOT covered by
-    this licence. See DATA-LICENSE.md, which is more restrictive: some of that
-    data comes from third parties whose terms do not permit redistribution.
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

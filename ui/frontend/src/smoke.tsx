@@ -20,7 +20,7 @@ import { join } from "node:path";
 
 import ResultsView, { benchmarkLines, differingWindows } from "./ResultsView";
 import SimpleFormView, { Examples, Investors } from "./SimpleForm";
-import PortfolioCard from "./PortfolioCard";
+import PortfolioCard, { uncopiedForm } from "./PortfolioCard";
 import {
     addBuffer,
     copyPath,
@@ -81,9 +81,9 @@ import {
 } from "./luaApi";
 import { parseSession } from "./session";
 import RulesCard from "./RulesCard";
-import { ResearchTable, nextSort, sortRows, type Column, type Sort } from "./ResearchTable";
-import { fmtDate } from "./researchFormat";
-import Research, { FilingsView, MyView, ReaderView, ResearchPanes, SearchView } from "./Research";
+import { ResearchTable, TABLE_PAGE, nextSort, shownCount, sortRows, type Column, type Sort } from "./ResearchTable";
+import { fmtCountdown, fmtDate } from "./researchFormat";
+import Research, { FilingsView, MY_MAX_FEED, MyView, NewsView, ReaderView, ResearchPanes, SearchView, mergeWatchFeeds, newsRows } from "./Research";
 import {
     filterFilings,
     firstDocument,
@@ -1622,6 +1622,26 @@ check("PortfolioCard / every card offers the famous investors", () => {
     }
 });
 
+check("PortfolioCard / None undoes a famous-investor copy", () => {
+    const mine = { ...form, name: "Mine", strategy: "my_strategy.lua" };
+    const copied = buildInvestor(INVESTORS[1], INVESTOR_RANGES, "$SP500", mine)!;
+    // Known: the user's own card comes back, strategy included.
+    eq("restored", uncopiedForm(copied, mine, "Portfolio 1"), mine);
+    // Unknown (copied from the gallery, or a restored session): the holdings
+    // stay, but the card stops wearing the investor's name.
+    const kept = uncopiedForm(copied, null, "Portfolio 1");
+    eq("renamed", kept.name, "Portfolio 1");
+    eq("holdings kept", kept.tickers, copied.tickers);
+    const html = renderToString(
+        <PortfolioCard form={copied} onChange={noop} onRemove={null} otherNames={[]}
+            defaultName="Portfolio 1" dbPath="" available={[]} names={{}}
+            ranges={INVESTOR_RANGES} pickable={[]} showBaskets={false} />,
+    );
+    if (!html.includes("None — back to your own portfolio")) {
+        throw new Error("a copied card offers no way back to None");
+    }
+});
+
 check("a benchmark line per deposit schedule, not one per ticker", () => {
     const mk = (name: string, curve: number[], netContributions = 0) =>
         main.RunResult.createFrom({
@@ -2416,6 +2436,146 @@ check("research tables sort by any column, blanks last, ties stable", () => {
     if (!renderToString(<ResearchTable label="t" rows={[] as R[]} columns={cols} rowKey={(r) => r.name}
         empty="Nothing yet." />).includes("Nothing yet.")) {
         throw new Error("an empty table must say so");
+    }
+});
+
+check("ResearchTable draws a long list a page at a time", () => {
+    type R = { n: number };
+    const rows: R[] = Array.from({ length: 250 }, (_, i) => ({ n: i }));
+    const cols: Column<R>[] = [{ key: "n", label: "N", numeric: true, render: (r) => `row${r.n}`, sortValue: (r) => r.n }];
+    const html = renderToString(<ResearchTable label="t" rows={rows} columns={cols} rowKey={(r) => String(r.n)} />)
+        .replace(/<!-- -->/g, "");
+    eq("rows drawn", (html.match(/<tr/g) ?? []).length - 1, TABLE_PAGE);
+    if (!html.includes(`Show ${TABLE_PAGE} more of 150`)) throw new Error("no way to the rest of the list");
+    // An open row past the page is still drawn.
+    eq("stretched to the active row", shownCount(250, TABLE_PAGE, 180), 181);
+    eq("short list", shownCount(20, TABLE_PAGE, -1), 20);
+    const active = renderToString(<ResearchTable label="t" rows={rows} columns={cols}
+        rowKey={(r) => String(r.n)} activeKey="180" />);
+    if (!active.includes("row180")) throw new Error("the active row was not drawn");
+    const short = renderToString(<ResearchTable label="t" rows={rows.slice(0, 5)} columns={cols} rowKey={(r) => String(r.n)} />);
+    if (short.includes("rt-more")) throw new Error("a short list offers more");
+});
+
+// NEWS: the agencies' recorded feeds (ui/news_test.go) and the recorded MY
+// feed, whose Apple earnings 8-K is a material event and its 10-Q is not.
+check("NEWS streams the economic releases and the watchlist's material events", () => {
+    eq("lone", parseResearchCommand("news"), { query: "", fn: "NEWS" });
+    eq("the ticker NEWS", parseResearchCommand("NEWS CN"), { query: "NEWS", fn: "CN" });
+    eq("countdown", fmtCountdown("2026-11-04", "2026-10-09"), "in 26 days");
+    eq("tomorrow", fmtCountdown("2026-10-10", "2026-10-09"), "tomorrow");
+    eq("past", fmtCountdown("2026-09-30", "2026-10-09"), "");
+
+    const econ = fixture<main.EconomicNews>("research-news");
+    const watch = fixture<main.WatchFeed>("research-my");
+    const all = newsRows(econ, watch, "all");
+    const events = all.filter((r) => r.item);
+    eq("events: material 8-Ks only", events.map((r) => `${r.source} ${r.title}`), ["AAPL Earnings results"]);
+    eq("economy", newsRows(econ, watch, "economy").length, econ.releases.length);
+    eq("watchlist", newsRows(econ, watch, "watchlist").length, 1);
+
+    const html = renderToString(<NewsView econ={econ} watch={watch} pending={[]} selected=""
+        onSelect={noop} today="2026-10-09" />).replace(/<!-- -->/g, "").replace(/&#x27;/g, "'");
+    for (const want of ["News", "Economy", "Watchlist", "Oct 6, 2026", "BEA", "BLS", "Census",
+        "U.S. International Trade in Goods and Services, August 2026",
+        "The U.S. goods and services trade deficit increased",
+        "Next International trade release Nov 4, 2026 (in 26 days)",
+        "CPI for all items increases 0.4% in August", "AAPL", "Earnings results", "Jul 30, 2026",
+        "No media, no commentary", "BLS Producer Price Index could not be read"]) {
+        if (!html.includes(want)) throw new Error(`NEWS lacks ${want}`);
+    }
+    // A next release already past is not counted down.
+    if (html.includes("Personal income and outlays (PCE) release Sep 30")) throw new Error("a past next release shown");
+    if (html.includes("Quarterly report")) throw new Error("NEWS shows a routine filing");
+    // Releases open in the reader now, not the browser: no ↗ on a row.
+    if (body_has_arrow(html)) throw new Error("a NEWS row still promises to leave the app");
+    if (!html.includes("read it here")) throw new Error("NEWS does not say where a click goes");
+    // An open release is the active row.
+    const open = renderToString(<NewsView econ={econ} watch={watch} pending={[]} selected="" onSelect={noop}
+        selectedRelease={econ.releases[0].url} today="2026-10-09" />);
+    if (!open.includes("rt-click active")) throw new Error("the open release is not marked");
+    eq("one table", (html.match(/<table/g) ?? []).length, 1);
+    const body = html.slice(html.indexOf("<tbody"));
+    if (body.indexOf("Oct 6, 2026") > body.indexOf("Sep 11, 2026")) throw new Error("NEWS is not newest first");
+
+    // Before anything answers: the view, saying what it is waiting for.
+    const waiting = renderToString(<NewsView econ={null} watch={null} pending={[]} selected="" onSelect={noop} />);
+    if (!waiting.includes("Reading the BLS, BEA and Census release feeds")) throw new Error("NEWS loading is blank");
+    // The agencies unreachable: said, and the watchlist still shows.
+    const failed = renderToString(<NewsView econ={main.EconomicNews.createFrom({ releases: [], since: "",
+        notes: [], error: "None of the agencies' release feeds could be read." })} watch={watch} pending={[]}
+        selected="" onSelect={noop} />).replace(/&#x27;/g, "'").replace(/<!-- -->/g, "");
+    for (const want of ["coverage-msg err", "could be read.", "Earnings results"]) {
+        if (!failed.includes(want)) throw new Error(`NEWS without the agencies lacks ${want}`);
+    }
+    // An empty watchlist says how to fill it.
+    const lonely = renderToString(<NewsView econ={econ} watch={main.WatchFeed.createFrom({ tickers: [],
+        recent: [], since: "2026-07-11", notes: [], error: "" })} pending={[]} selected="" onSelect={noop} />);
+    if (!lonely.includes("Your watchlist is empty")) throw new Error("an empty watchlist is not explained");
+});
+
+function body_has_arrow(html: string): boolean {
+    return html.slice(html.indexOf("<tbody"), html.indexOf("</tbody>")).includes("↗");
+}
+
+// A NEWS release in the reader: BLS's August CPI release, read down to the
+// release by ui/news_test.go.
+check("a NEWS release reads in the app, without the agency's site", () => {
+    const econ = fixture<main.EconomicNews>("research-news");
+    const cpi = econ.releases.find((r) => r.agency === "BLS" && r.date === "2026-09-11")!;
+    const doc = fixture<main.ReaderDoc>("research-reader-release");
+    const html = renderToString(<ReaderView release={cpi} docs={[]} doc={doc} loading={false} onOpen={noop} />)
+        .replace(/<!-- -->/g, "");
+    for (const want of ["CPI for all items increases 0.4% in August", "BLS · Consumer Price Index · published Sep 11, 2026",
+        "On bls.gov ↗", "reader-page release", "CONSUMER PRICE INDEX - AUGUST 2026", "<table",
+        "The release as BLS publishes it"]) {
+        if (!html.includes(want)) throw new Error(`the release reader lacks ${want}`);
+    }
+    for (const gone of ["On sec.gov", "SEC EDGAR publishes", "<script", "filed "]) {
+        if (html.includes(gone)) throw new Error(`the release reader shows ${gone}`);
+    }
+    const loading = renderToString(<ReaderView release={cpi} docs={[]} doc={null} loading={true} onOpen={noop} />)
+        .replace(/<!-- -->/g, "");
+    if (!loading.includes("Reading from BLS…")) throw new Error("a loading release names the wrong source");
+    const failed = renderToString(<ReaderView release={cpi} docs={[]} loading={false} onOpen={noop}
+        doc={{ url: cpi.url, html: "", text: "", contents: [], truncated: false,
+            error: "Could not open the release: answered 503" } as unknown as main.ReaderDoc} />)
+        .replace(/<!-- -->/g, "");
+    if (!failed.includes("coverage-msg err") || !failed.includes("On bls.gov")) {
+        throw new Error("a failed release must say so and still link out");
+    }
+});
+
+check("MY fills in one company at a time", () => {
+    const item = (t: string, when: string) => ({ ticker: t, when, title: `${t} ${when}`, cik: "1",
+        filing: { accession: `${t}-${when}`, form: "8-K", kind: "event", filed: when.slice(0, 10) } });
+    const part = (t: string, recent: unknown[], notes: string[] = []) =>
+        main.WatchFeed.createFrom({ tickers: [t], recent, since: "2026-07-09", notes, error: "" });
+    const tail = " — delisted symbols and funds are not in EDGAR's ticker list, so they have no filings here.";
+    const merged = mergeWatchFeeds(["AAPL", "SPY", "MSFT", "QQQ", "NVDA"], {
+        AAPL: part("AAPL", [item("AAPL", "2026-07-30 16:30")]),
+        MSFT: part("MSFT", [item("MSFT", "2026-08-01 08:00")], ["MSFT: Could not read filings"]),
+        SPY: part("SPY", [], ["No SEC filer under SPY" + tail]),
+        QQQ: part("QQQ", [], ["No SEC filer under QQQ" + tail]),
+    }, "2026-07-01");
+    eq("every ticker listed", merged.tickers, ["AAPL", "SPY", "MSFT", "QQQ", "NVDA"]);
+    eq("newest first", merged.recent.map((r) => r.ticker), ["MSFT", "AAPL"]);
+    eq("notes", merged.notes, ["MSFT: Could not read filings", "No SEC filer under SPY, QQQ" + tail]);
+    eq("since from the backend", merged.since, "2026-07-09");
+    const many = Array.from({ length: MY_MAX_FEED + 5 }, (_, i) => item("AAPL", `2026-08-01 ${String(i).padStart(5, "0")}`));
+    const capped = mergeWatchFeeds(["AAPL"], { AAPL: part("AAPL", many) }, "");
+    eq("capped", capped.recent.length, MY_MAX_FEED);
+    if (!capped.notes.some((n) => n.includes(`newest ${MY_MAX_FEED}`))) throw new Error("the cap is not said");
+
+    // The list shows before EDGAR answers, saying how far along it is.
+    const html = renderToString(<MyView feed={merged} pending={["NVDA"]} holdings={[]} onChange={noop}
+        selected="" onSelect={noop} />).replace(/<!-- -->/g, "");
+    for (const want of ["Remove NVDA", "Reading from SEC EDGAR… 4 of 5 companies in", "AAPL 2026-07-30 16:30"]) {
+        if (!html.includes(want)) throw new Error(`MY while loading lacks ${want}`);
+    }
+    if (renderToString(<MyView feed={merged} holdings={[]} onChange={noop} selected="" onSelect={noop} />)
+        .includes("Reading from SEC EDGAR")) {
+        throw new Error("a finished MY still says it is reading");
     }
 });
 

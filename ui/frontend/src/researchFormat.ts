@@ -19,3 +19,19 @@ export function fmtDate(s: string): string {
   const p = parts(s);
   return p ? `${MONTHS[p.m - 1]} ${p.d}, ${p.y}` : s;
 }
+
+// "in 26 days" from today to a future date, both read by their parts; ""
+// for a date that is today or past, or unreadable.
+export function fmtCountdown(s: string, today: string): string {
+  const a = parts(today);
+  const b = parts(s);
+  if (!a || !b) return "";
+  const days = Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000);
+  if (days <= 0) return "";
+  return days === 1 ? "tomorrow" : `in ${days} days`;
+}
+
+// Today's date as the bindings write it, in the viewer's own zone.
+export function todayISO(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}

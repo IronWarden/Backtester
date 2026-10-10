@@ -2,6 +2,8 @@
 //
 //   CN   the company's own SEC filings, in a reader (the default for a ticker)
 //   MY   the watchlist: its companies' filings, newest first
+//   NEWS the economic releases (BLS, BEA, Census) and the watchlist's
+//        material 8-K events, one stream
 //   "…"  full-text search of every filing since 2001, optionally one company's
 //
 // Nothing here is a live quote or a headline: everything is a primary source
@@ -12,10 +14,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import {
     CompanyFilings,
+    EconomicReleases,
     FilingDocuments,
     ListTickers,
     LoadWatchlist,
     ReadFiling,
+    ReadRelease,
     SaveWatchlist,
     SearchFilings,
     TickerNames,
@@ -27,7 +31,7 @@ import { searchTickers } from "./tickerSearch";
 import { readStoredNumber, writeStored } from "./storage";
 import { trackDrag } from "./frame";
 import { ResearchTable, type Column } from "./ResearchTable";
-import { fmtDate } from "./researchFormat";
+import { fmtCountdown, fmtDate, todayISO } from "./researchFormat";
 import {
     FILING_FILTERS,
     RESEARCH_FUNCTIONS,
@@ -217,14 +221,20 @@ function failedRead(url: string, error: string): main.ReaderDoc {
     return { url, html: "", text: "", contents: [], truncated: false, error } as unknown as main.ReaderDoc;
 }
 
+// The publisher a NEWS release is read from, for the reader's link out.
+const AGENCY_SITES: Record<string, string> = { BLS: "bls.gov", BEA: "bea.gov", Census: "census.gov" };
+
 export function ReaderView({
     filing,
+    release,
     docs,
     doc,
     loading,
     onOpen,
 }: {
-    filing: main.FilingRow;
+    // What is open: a filing, or (NEWS) an agency's release.
+    filing?: main.FilingRow | null;
+    release?: main.ReleaseRow | null;
     docs: main.FilingDocument[];
     doc: main.ReaderDoc | null;
     loading: boolean;
@@ -298,18 +308,38 @@ export function ReaderView({
                 }}
                 title={max ? "Double-click to restore (Esc)" : "Double-click to maximise"}
             >
-                <strong>{filing.title}</strong>
-                <span className="research-dim">
-                    {filing.form} · filed {fmtDate(filing.filed)}
-                </span>
-                <button
-                    type="button"
-                    className="link-button"
-                    onClick={() => openExternal(filing.indexUrl)}
-                    title="Open this filing on sec.gov in your browser"
-                >
-                    On sec.gov ↗
-                </button>
+                {filing && (
+                    <>
+                        <strong>{filing.title}</strong>
+                        <span className="research-dim">
+                            {filing.form} · filed {fmtDate(filing.filed)}
+                        </span>
+                        <button
+                            type="button"
+                            className="link-button"
+                            onClick={() => openExternal(filing.indexUrl)}
+                            title="Open this filing on sec.gov in your browser"
+                        >
+                            On sec.gov ↗
+                        </button>
+                    </>
+                )}
+                {release && (
+                    <>
+                        <strong>{release.title}</strong>
+                        <span className="research-dim">
+                            {release.agency} · {release.series} · published {fmtDate(release.date)}
+                        </span>
+                        <button
+                            type="button"
+                            className="link-button"
+                            onClick={() => openExternal(release.url)}
+                            title={`Open this release on ${AGENCY_SITES[release.agency] ?? release.agency} in your browser`}
+                        >
+                            On {AGENCY_SITES[release.agency] ?? release.agency} ↗
+                        </button>
+                    </>
+                )}
                 <span className="reader-head-spacer" />
                 {doc?.html && hasContents && (
                     <button
@@ -371,7 +401,7 @@ export function ReaderView({
                     ))}
                 </div>
             )}
-            {loading && <p className="research-dim">Reading from SEC EDGAR…</p>}
+            {loading && <p className="research-dim">Reading from {release ? release.agency : "SEC EDGAR"}…</p>}
             {!loading && doc?.error && <div className="coverage-msg err">{doc.error}</div>}
             {!loading && doc && !doc.error && (
                 <>
@@ -407,7 +437,7 @@ export function ReaderView({
                             )}
                             <div ref={paper} className="reader-paper" onClick={onPaperClick}>
                                 <div
-                                    className="reader-page"
+                                    className={release ? "reader-page release" : "reader-page"}
                                     style={{ zoom }}
                                     dangerouslySetInnerHTML={{ __html: doc.html }}
                                 />
@@ -416,11 +446,19 @@ export function ReaderView({
                     ) : (
                         <pre className="reader-text">{doc.text}</pre>
                     )}
-                    <p className="research-dim reader-foot">
-                        {doc.truncated ? "Long document: the rest is on sec.gov. " : ""}
-                        The filing as SEC EDGAR publishes it{doc.html ? ", its own layout and tables" : ""}
-                        {hasContents ? "; the contents link to each part" : ""}.
-                    </p>
+                    {release ? (
+                        <p className="research-dim reader-foot">
+                            {doc.truncated ? `Long release: the rest is on ${AGENCY_SITES[release.agency]}. ` : ""}
+                            The release as {release.agency} publishes it, its own tables and charts, without the
+                            site around it.
+                        </p>
+                    ) : (
+                        <p className="research-dim reader-foot">
+                            {doc.truncated ? "Long document: the rest is on sec.gov. " : ""}
+                            The filing as SEC EDGAR publishes it{doc.html ? ", its own layout and tables" : ""}
+                            {hasContents ? "; the contents link to each part" : ""}.
+                        </p>
+                    )}
                 </>
             )}
         </div>
@@ -447,16 +485,65 @@ const watchFilingColumns: Column<main.WatchItem>[] = [
     { key: "what", label: "What", sortValue: (it) => it.title, render: (it) => it.title },
 ];
 
+// MY is fetched one company at a time (each is its own EDGAR request, paced
+// by the client), so the watchlist shows at once and fills in as answers
+// arrive rather than waiting on the slowest company. mergeWatchFeeds joins
+// the per-company feeds the way WatchlistFeed joins them in one call.
+export const MY_MAX_FEED = 300; // ui/watchlist.go maxFeed
+const NO_FILER = "No SEC filer under ";
+
+export function mergeWatchFeeds(
+    tickers: string[],
+    parts: Record<string, main.WatchFeed>,
+    since: string,
+): main.WatchFeed {
+    const recent: main.WatchItem[] = [];
+    const notes: string[] = [];
+    const noFiler: string[] = [];
+    let noFilerTail = "";
+    let error = "";
+    for (const t of tickers) {
+        const p = parts[t];
+        if (!p) continue;
+        if (p.error && !error) error = p.error;
+        recent.push(...(p.recent ?? []));
+        if (p.since) since = p.since;
+        for (const n of p.notes ?? []) {
+            // Each part names its own filer-less ticker; say it once for all.
+            if (n.startsWith(NO_FILER)) {
+                const dash = n.indexOf(" — ");
+                if (dash > 0) {
+                    noFiler.push(...n.slice(NO_FILER.length, dash).split(", "));
+                    noFilerTail = n.slice(dash);
+                    continue;
+                }
+            }
+            if (!notes.includes(n)) notes.push(n);
+        }
+    }
+    if (noFiler.length > 0) notes.push(NO_FILER + noFiler.join(", ") + noFilerTail);
+    // Newest first, stable, as the backend sorts.
+    recent.sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
+    if (recent.length > MY_MAX_FEED) {
+        recent.length = MY_MAX_FEED;
+        notes.push(`Showing the newest ${MY_MAX_FEED} items; open a company's CN for the rest.`);
+    }
+    return { tickers, recent, since, notes, error } as unknown as main.WatchFeed;
+}
+
 export function MyView({
     feed,
     holdings,
     onChange,
     selected,
     onSelect,
+    pending = [],
 }: {
     feed: main.WatchFeed;
     // The Backtest form's tickers, offered for the list.
     holdings: string[];
+    // Companies whose filings are still on their way from EDGAR.
+    pending?: string[];
     onChange: (tickers: string[]) => void;
     selected: string;
     onSelect: (row: main.FilingRow, cik: string) => void;
@@ -521,6 +608,13 @@ export function MyView({
                 </p>
             )}
 
+            {pending.length > 0 && (
+                <p className="research-dim research-pending">
+                    Reading from SEC EDGAR… {feed.tickers.length - pending.length} of{" "}
+                    {feed.tickers.length} companies in
+                </p>
+            )}
+
             {filings.length > 0 && (
                 <section className="research-section">
                     <h3>Filings</h3>
@@ -542,6 +636,181 @@ export function MyView({
                 </p>
             )}
             <Notes notes={feed.notes} />
+        </div>
+    );
+}
+
+// NEWS: what the agencies published and what the watchlist's companies
+// reported, in one stream. Releases are the BLS, BEA and Census notices
+// (src/news keeps only the market-moving series); events are the material
+// 8-Ks (edgar.Material: results, deals, bankruptcy, leadership, restatements,
+// write-downs) from the same per-company feeds MY reads.
+
+export type NewsFilter = "all" | "economy" | "watchlist";
+
+const NEWS_FILTERS: { id: NewsFilter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "economy", label: "Economy" },
+    { id: "watchlist", label: "Watchlist" },
+];
+
+export type NewsRow = {
+    key: string;
+    // YYYY-MM-DD, and with the time for ordering within a day.
+    date: string;
+    when: string;
+    // An agency (BLS, BEA, Census) or a ticker.
+    source: string;
+    series: string;
+    title: string;
+    summary: string;
+    // A release's next date in its series, YYYY-MM-DD, or "".
+    next: string;
+    // A release opens at the agency; an event opens in the reader.
+    url: string;
+    item: main.WatchItem | null;
+    release: main.ReleaseRow | null;
+};
+
+export function newsRows(econ: main.EconomicNews | null, watch: main.WatchFeed | null, filter: NewsFilter): NewsRow[] {
+    const rows: NewsRow[] = [];
+    if (filter !== "watchlist") {
+        for (const r of econ?.releases ?? []) {
+            rows.push({
+                key: `${r.agency} ${r.when} ${r.url}`, date: r.date, when: r.when, source: r.agency,
+                series: r.series, title: r.title, summary: r.summary, next: r.next, url: r.url, item: null,
+                release: r,
+            });
+        }
+    }
+    if (filter !== "economy") {
+        for (const it of watch?.recent ?? []) {
+            if (!it.filing?.material) continue;
+            rows.push({
+                key: `${it.ticker} ${it.filing.accession}`, date: it.filing.filed, when: it.when,
+                source: it.ticker, series: "", title: it.title, summary: "", next: "", url: "", item: it,
+                release: null,
+            });
+        }
+    }
+    return rows;
+}
+
+// A release feed the backend could not be asked for at all.
+function failedReleases(error: string): main.EconomicNews {
+    return { releases: [], since: "", notes: [], error } as unknown as main.EconomicNews;
+}
+
+function newsColumns(today: string): Column<NewsRow>[] {
+    return [
+        { key: "date", label: "Date", firstDir: "desc", sortValue: (r) => r.when, render: (r) => fmtDate(r.date) },
+        {
+            key: "source", label: "Source", sortValue: (r) => r.source,
+            title: (r) => (r.item ? `${r.source}'s SEC filing` : r.series),
+            render: (r) => <span className={r.item ? "news-source event" : "news-source release"}>{r.source}</span>,
+        },
+        {
+            key: "what", label: "What", sortValue: (r) => r.title,
+            render: (r) => {
+                const countdown = r.next ? fmtCountdown(r.next, today) : "";
+                return (
+                    <div className="news-what">
+                        <div>
+                            {r.item ? <FormChip form={r.item.filing!.form} kind={r.item.filing!.kind} /> : null}
+                            {r.item ? " " : null}
+                            {r.title}
+                        </div>
+                        {r.summary && <div className="news-summary">{r.summary}</div>}
+                        {countdown && (
+                            <div className="research-dim">
+                                Next {r.series} release {fmtDate(r.next)} ({countdown})
+                            </div>
+                        )}
+                    </div>
+                );
+            },
+        },
+    ];
+}
+
+export function NewsView({
+    econ,
+    watch,
+    pending,
+    selected,
+    onSelect,
+    selectedRelease = "",
+    onOpenRelease = () => {},
+    today = todayISO(),
+}: {
+    econ: main.EconomicNews | null;
+    watch: main.WatchFeed | null;
+    pending: string[];
+    // The open filing's accession, or the open release's URL.
+    selected: string;
+    onSelect: (row: main.FilingRow, cik: string) => void;
+    selectedRelease?: string;
+    onOpenRelease?: (r: main.ReleaseRow) => void;
+    today?: string;
+}) {
+    const [filter, setFilter] = useState<NewsFilter>("all");
+    const rows = newsRows(econ, watch, filter);
+    const tickers = watch?.tickers ?? [];
+    const reading = econ === null || watch === null || pending.length > 0;
+    const notes = [...(econ?.notes ?? []), ...(watch?.notes ?? [])];
+    if (watch && tickers.length === 0) {
+        notes.push("Your watchlist is empty, so no company events are shown. Add the companies you follow in MY.");
+    }
+    return (
+        <div className="research-view">
+            <h2 className="research-title">
+                News <span className="research-ticker">NEWS</span>
+            </h2>
+            <div className="research-toggle" role="group" aria-label="Show">
+                {NEWS_FILTERS.map((f) => (
+                    <button
+                        key={f.id}
+                        type="button"
+                        className={filter === f.id ? "active" : ""}
+                        onClick={() => setFilter(f.id)}
+                    >
+                        {f.label}
+                    </button>
+                ))}
+            </div>
+            {econ === null && <p className="research-dim">Reading the BLS, BEA and Census release feeds…</p>}
+            {econ?.error && (
+                <div className="coverage-msg err">
+                    {econ.error} Your watchlist&rsquo;s events still show below.
+                </div>
+            )}
+            {pending.length > 0 && (
+                <p className="research-dim research-pending">
+                    Reading from SEC EDGAR… {tickers.length - pending.length} of {tickers.length} companies in
+                </p>
+            )}
+            <ResearchTable
+                label="News"
+                rows={rows}
+                columns={newsColumns(today)}
+                rowKey={(r) => r.key}
+                initialSort={{ key: "date", dir: "desc" }}
+                onRowClick={(r) => (r.item ? onSelect(r.item.filing!, r.item.cik) : onOpenRelease(r.release!))}
+                activeKey={
+                    rows.find((r) =>
+                        r.item ? r.item.filing?.accession === selected : !!selectedRelease && r.url === selectedRelease,
+                    )?.key ?? ""
+                }
+                empty={reading ? undefined : "Nothing published in the last 90 days."}
+            />
+            <p className="research-dim">
+                Since {fmtDate(econ?.since || watch?.since || "")}: the official release notices from BLS, BEA and
+                Census (prices, jobs, GDP and spending, trade, housing, factory orders), each in the agency&rsquo;s own
+                words, and the material events your watchlist&rsquo;s companies filed with the SEC (results, deals,
+                bankruptcy, leadership changes, restatements, write-downs). No media, no commentary. Click either to
+                read it here: a release as the agency publishes it, an event as the filing.
+            </p>
+            <Notes notes={notes} />
         </div>
     );
 }
@@ -674,10 +943,18 @@ export function SearchView({
     );
 }
 
+// A company's MY feed is reused this long -- the EDGAR client caches the
+// same five minutes -- and this many are asked for at once (the client
+// paces them all to SEC's limit regardless).
+const MY_PART_TTL_MS = 5 * 60 * 1000;
+const MY_CONCURRENCY = 4;
+
 type Result =
     | { fn: "CN"; data: main.CompanyFilings }
-    | { fn: "MY"; data: main.WatchFeed }
-    | { fn: "FTS"; data: main.FilingSearch };
+    | { fn: "MY"; data: main.WatchFeed; pending: string[] }
+    | { fn: "FTS"; data: main.FilingSearch }
+    // Either half null until it first answers.
+    | { fn: "NEWS"; econ: main.EconomicNews | null; watch: main.WatchFeed | null; pending: string[] };
 
 export default function Research({
     dbPath,
@@ -701,6 +978,8 @@ export default function Research({
     // CN: the filter, the filing open in the reader, its documents and text.
     const [filter, setFilter] = useState<FilingFilter>("news");
     const [filing, setFiling] = useState<main.FilingRow | null>(null);
+    // NEWS: the release open in the reader, when it is a release.
+    const [release, setRelease] = useState<main.ReleaseRow | null>(null);
     const [docs, setDocs] = useState<main.FilingDocument[]>([]);
     const [doc, setDoc] = useState<main.ReaderDoc | null>(null);
     const [reading, setReading] = useState(false);
@@ -709,6 +988,9 @@ export default function Research({
     const readSeq = useRef(0);
     // MY: bumped after the watchlist is saved, to read the feed again.
     const [watchVersion, setWatchVersion] = useState(0);
+    // MY: each company's feed as it arrived, so editing the list fetches
+    // only the companies it adds.
+    const myParts = useRef<Record<string, { feed: main.WatchFeed; at: number }>>({});
     // FTS: the search as typed, and how it is narrowed.
     const [searchText, setSearchText] = useState("");
     const [searchRange, setSearchRange] = useState<SearchRange>("year");
@@ -743,7 +1025,8 @@ export default function Research({
     useEffect(() => {
         if (!dbPath || (!ticker && !isMarketFunction(fn))) return;
         let cancelled = false;
-        setLoading(true);
+        // An edited watchlist keeps its list on screen while it refetches.
+        if (!((fn === "MY" || fn === "NEWS") && result?.fn === fn)) setLoading(true);
         const done = (r: Result) => {
             if (!cancelled) {
                 setResult(r);
@@ -751,12 +1034,10 @@ export default function Research({
             }
         };
         const fail = () => !cancelled && setLoading(false);
-        if (fn === "FTS") {
-            SearchFilings(dbPath, searchText, ticker, searchForm ? [searchForm] : [],
-                searchSince(searchRange, new Date()), searchFrom)
-                .then((data) => done({ fn: "FTS", data }))
-                .catch(fail);
-        } else if (fn === "MY") {
+        // The watchlist's filings a company at a time (MY, and NEWS's
+        // events): update is called with the list at once, then again as
+        // each company's answer arrives.
+        const loadWatch = (update: (feed: main.WatchFeed, pending: string[]) => void) => {
             // A user with no saved watchlist starts from the form's holdings.
             LoadWatchlist()
                 .then((w) =>
@@ -764,9 +1045,64 @@ export default function Research({
                         ? SaveWatchlist(holdingsToAdd(holdingsRef.current, []))
                         : w,
                 )
-                .then((w) => WatchlistFeed(dbPath, w.tickers ?? []))
-                .then((data) => done({ fn: "MY", data }))
+                .then((w) => {
+                    if (cancelled) return;
+                    const tickers = w.tickers ?? [];
+                    const parts = myParts.current;
+                    const fresh = (t: string) =>
+                        parts[t] && Date.now() - parts[t].at < MY_PART_TTL_MS;
+                    const since = todayISO(new Date(Date.now() - 90 * 86400000));
+                    const show = () => {
+                        if (cancelled) return;
+                        const have: Record<string, main.WatchFeed> = {};
+                        for (const t of tickers) if (parts[t]) have[t] = parts[t].feed;
+                        update(mergeWatchFeeds(tickers, have, since), tickers.filter((t) => !fresh(t)));
+                    };
+                    // The list at once, with whatever is already in hand.
+                    show();
+                    const queue = tickers.filter((t) => !fresh(t));
+                    const worker = async () => {
+                        for (let t = queue.shift(); t !== undefined && !cancelled; t = queue.shift()) {
+                            const feed = await WatchlistFeed(dbPath, [t]).catch(
+                                (e) => ({ tickers: [t], recent: [], since: "", notes: [`${t}: ${e}`], error: "" }) as unknown as main.WatchFeed,
+                            );
+                            parts[t] = { feed, at: Date.now() };
+                            show();
+                        }
+                    };
+                    for (let i = 0; i < MY_CONCURRENCY; i++) void worker();
+                })
                 .catch(fail);
+        };
+        if (fn === "FTS") {
+            SearchFilings(dbPath, searchText, ticker, searchForm ? [searchForm] : [],
+                searchSince(searchRange, new Date()), searchFrom)
+                .then((data) => done({ fn: "FTS", data }))
+                .catch(fail);
+        } else if (fn === "MY") {
+            loadWatch((data, pending) => done({ fn: "MY", data, pending }));
+        } else if (fn === "NEWS") {
+            // Two halves, each shown as it lands: the agencies' releases in
+            // one call, the watchlist's events a company at a time.
+            let econ: main.EconomicNews | null = null;
+            let watch: main.WatchFeed | null = null;
+            let pending: string[] = [];
+            const show = () => done({ fn: "NEWS", econ, watch, pending });
+            show();
+            EconomicReleases()
+                .then((e) => {
+                    econ = e;
+                    show();
+                })
+                .catch((e) => {
+                    econ = failedReleases(String(e));
+                    show();
+                });
+            loadWatch((data, p) => {
+                watch = data;
+                pending = p;
+                show();
+            });
         } else {
             CompanyFilings(dbPath, ticker).then((data) => done({ fn: "CN", data })).catch(fail);
         }
@@ -778,6 +1114,7 @@ export default function Research({
     // A new company or view closes the reader.
     useEffect(() => {
         setFiling(null);
+        setRelease(null);
         setDocs([]);
         setDoc(null);
     }, [ticker, fn, searchText]);
@@ -811,6 +1148,7 @@ export default function Research({
     function selectFiling(row: main.FilingRow, cik: string, open = "") {
         const seq = ++readSeq.current;
         setFiling(row);
+        setRelease(null);
         setDocs([]);
         setDoc(null);
         setReading(true);
@@ -836,6 +1174,29 @@ export default function Research({
                 if (seq !== readSeq.current) return;
                 setDoc(failedRead(row.indexUrl, String(e)));
                 setReading(false);
+            });
+    }
+
+    // A NEWS release, read in the app: the release alone, from the agency.
+    function openRelease(r: main.ReleaseRow) {
+        const seq = ++readSeq.current;
+        setFiling(null);
+        setRelease(r);
+        setDocs([]);
+        setDoc(null);
+        setReading(true);
+        ReadRelease(r.url)
+            .then((d) => {
+                if (seq === readSeq.current) {
+                    setDoc(d);
+                    setReading(false);
+                }
+            })
+            .catch((e) => {
+                if (seq === readSeq.current) {
+                    setDoc(failedRead(r.url, String(e)));
+                    setReading(false);
+                }
             });
     }
 
@@ -872,19 +1233,20 @@ export default function Research({
         else if (ticker) setInput(`${ticker} ${next}`);
     }
 
-    const error = result?.data.error ?? "";
-    const readerPane = filing ? (
-        <ReaderView filing={filing} docs={docs} doc={doc} loading={reading} onOpen={openDocument} />
+    // NEWS has no single error: each half says what failed beside the other.
+    const error = result && "data" in result ? result.data.error ?? "" : "";
+    const readerPane = filing || release ? (
+        <ReaderView filing={filing} release={release} docs={docs} doc={doc} loading={reading} onOpen={openDocument} />
     ) : null;
 
     return (
-        <div className={filing ? "research reading" : "research"}>
+        <div className={filing || release ? "research reading" : "research"}>
             <div className="research-bar">
                 <input
                     ref={inputRef}
                     className="research-input"
                     data-shortcut="research"
-                    placeholder='A ticker or name for its filings (e.g. AAPL) · MY for your watchlist · "a phrase" to search every filing'
+                    placeholder='A ticker or name for its filings (e.g. AAPL) · MY for your watchlist · NEWS · "a phrase" to search every filing'
                     value={input}
                     spellCheck={false}
                     onChange={(e) => setInput(e.target.value)}
@@ -915,7 +1277,7 @@ export default function Research({
             {!dbPath && <p className="research-empty">Choose a database first (the database chip in the top bar).</p>}
             {dbPath && !ticker && !isMarketFunction(fn) && (
                 <div className="research-empty">
-                    <p>Look a company up by ticker or name to read its SEC filings, type MY for your watchlist&rsquo;s filings, or put words in quotes to search the text of every SEC filing since 2001 (add a ticker to search one company&rsquo;s). Everything shown comes straight from SEC EDGAR.</p>
+                    <p>Look a company up by ticker or name to read its SEC filings, type MY for your watchlist&rsquo;s filings or NEWS for the economic releases and your watchlist&rsquo;s material events, or put words in quotes to search the text of every SEC filing since 2001 (add a ticker to search one company&rsquo;s). Everything shown comes straight from SEC EDGAR or the government agency that published it.</p>
                     <ul>
                         {RESEARCH_FUNCTIONS.map((f) => (
                             <li key={f.code}>
@@ -925,7 +1287,11 @@ export default function Research({
                     </ul>
                 </div>
             )}
-            {loading && <p className="research-dim">Reading…</p>}
+            {loading && (
+                <p className="research-dim">
+                    {fn === "CN" && ticker ? `Reading ${named || ticker}’s filings from SEC EDGAR…` : "Reading…"}
+                </p>
+            )}
             {error && <div className="coverage-msg err">{error}</div>}
             {!loading && !error && result?.fn === "FTS" && (
                 <ResearchPanes
@@ -957,10 +1323,27 @@ export default function Research({
                     list={
                         <MyView
                             feed={result.data}
+                            pending={result.pending}
                             holdings={holdings}
                             onChange={saveWatchlist}
                             selected={filing?.accession ?? ""}
                             onSelect={selectFiling}
+                        />
+                    }
+                    reader={readerPane}
+                />
+            )}
+            {!loading && result?.fn === "NEWS" && (
+                <ResearchPanes
+                    list={
+                        <NewsView
+                            econ={result.econ}
+                            watch={result.watch}
+                            pending={result.pending}
+                            selected={filing?.accession ?? ""}
+                            onSelect={selectFiling}
+                            selectedRelease={release?.url ?? ""}
+                            onOpenRelease={openRelease}
                         />
                     }
                     reader={readerPane}

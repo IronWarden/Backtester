@@ -17,6 +17,8 @@ export function DatabaseNotice(arg1:string):Promise<string>;
 
 export function DefaultDBPath():Promise<string>;
 
+export function EconomicReleases():Promise<main.EconomicNews>;
+
 export function FileExists(arg1:string):Promise<boolean>;
 
 export function FilingDocuments(arg1:string,arg2:string):Promise<main.FilingDocuments>;
@@ -52,6 +54,8 @@ export function PickLuaFile():Promise<string>;
 export function ReadFile(arg1:string):Promise<string>;
 
 export function ReadFiling(arg1:string):Promise<main.ReaderDoc>;
+
+export function ReadRelease(arg1:string):Promise<main.ReaderDoc>;
 
 export function ReadRules(arg1:backtest.RulesConfig,arg2:Array<string>,arg3:string,arg4:string,arg5:string):Promise<main.RulesReading>;
 

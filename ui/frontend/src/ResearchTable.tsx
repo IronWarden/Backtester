@@ -3,7 +3,7 @@
 // that can open something. The sorting is pure (sortRows) so the smoke
 // render can pin it without a click.
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export type Column<T> = {
   key: string;
@@ -50,6 +50,16 @@ export function nextSort<T>(current: Sort, col: Column<T>): Sort {
   return { key: col.key, dir: col.firstDir ?? "asc" };
 }
 
+// A long list (a big filer's thousand CN filings) draws this many rows, then
+// the next batch as the bottom scrolls into view, so it appears at once.
+export const TABLE_PAGE = 100;
+
+// shownCount is how many sorted rows to draw: the page limit, stretched to
+// keep the active row on screen.
+export function shownCount(total: number, limit: number, activeIndex: number): number {
+  return Math.min(total, Math.max(limit, activeIndex + 1));
+}
+
 export function ResearchTable<T>({
   rows,
   columns,
@@ -74,10 +84,31 @@ export function ResearchTable<T>({
   empty?: ReactNode;
 }) {
   const [sort, setSort] = useState<Sort>(initialSort);
+  const [limit, setLimit] = useState(TABLE_PAGE);
+  const more = useRef<HTMLDivElement>(null);
+  const sorted = sortRows(rows, columns, sort);
+  const count = shownCount(
+    sorted.length,
+    limit,
+    activeKey ? sorted.findIndex((r) => rowKey(r) === activeKey) : -1,
+  );
+  const left = sorted.length - count;
+  useEffect(() => {
+    const el = more.current;
+    if (!el || left <= 0 || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setLimit((n) => n + TABLE_PAGE);
+      },
+      { rootMargin: "400px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [left]);
   if (rows.length === 0) {
     return empty ? <p className="research-dim">{empty}</p> : null;
   }
-  const shown = sortRows(rows, columns, sort);
+  const shown = sorted.slice(0, count);
   return (
     <div className="research-table-wrap rt-wrap">
       <table className="research-table rt" aria-label={label}>
@@ -143,6 +174,13 @@ export function ResearchTable<T>({
           })}
         </tbody>
       </table>
+      {left > 0 && (
+        <div ref={more} className="rt-more">
+          <button type="button" className="link-button" onClick={() => setLimit(count + TABLE_PAGE)}>
+            Show {Math.min(left, TABLE_PAGE)} more of {left}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

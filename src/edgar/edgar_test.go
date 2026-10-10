@@ -235,3 +235,27 @@ func TestClientIsPolite(t *testing.T) {
 		t.Error("the reader fetched a non-SEC URL")
 	}
 }
+
+func TestMaterialKeepsTheEventsAnInvestorActsOn(t *testing.T) {
+	cases := []struct {
+		f    Filing
+		want bool
+	}{
+		{Filing{Form: "8-K", Items: []string{"2.02", "9.01"}}, true},  // earnings
+		{Filing{Form: "8-K", Items: []string{"5.02"}}, true},          // an officer leaves
+		{Filing{Form: "8-K/A", Items: []string{"4.02"}}, true},        // restatement, amended
+		{Filing{Form: "8-K", Items: []string{"1.03"}}, true},          // bankruptcy
+		{Filing{Form: "8-K", Items: []string{"7.01", "9.01"}}, false}, // Reg FD slides
+		{Filing{Form: "8-K", Items: []string{"2.03"}}, false},         // routine debt
+		{Filing{Form: "8-K", Items: []string{"5.07"}}, false},         // vote results
+		{Filing{Form: "8-K", Items: []string{"8.01"}}, false},         // other event
+		{Filing{Form: "8-K"}, false},
+		{Filing{Form: "10-Q"}, false},
+		{Filing{Form: "4"}, false},
+	}
+	for _, c := range cases {
+		if got := Material(c.f); got != c.want {
+			t.Errorf("Material(%s %v) = %v, want %v", c.f.Form, c.f.Items, got, c.want)
+		}
+	}
+}

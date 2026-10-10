@@ -11,6 +11,7 @@ package edgar
 import (
 	"bytes"
 	"html"
+	"net/url"
 	"strings"
 	"time"
 
@@ -130,16 +131,65 @@ func renderLimited(doc, docURL string, limit int) (string, []Section, bool) {
 	if body == nil {
 		body = root
 	}
-	r := &renderer{folder: folderOf(docURL), limit: limit, seen: map[string]bool{}}
+	r := newRenderer(docURL, limit)
 	for n := body.FirstChild; n != nil; n = n.NextSibling {
 		r.node(n)
 	}
 	return r.buf.String(), r.contents, r.truncated
 }
 
+func newRenderer(docURL string, limit int) *renderer {
+	return &renderer{folder: folderOf(docURL), origin: originOf(docURL), limit: limit, seen: map[string]bool{}}
+}
+
+// RenderPart renders only the parts of a web page that match picks -- each
+// matching element whole, in document order -- with the same sanitizing as
+// a filing. It is how a government release page is read without the site's
+// banner, menus and footer around it. ok is false when nothing matched.
+func RenderPart(doc, docURL string, match func(n *xhtml.Node) bool) (out Rendered, ok bool) {
+	root, err := xhtml.Parse(strings.NewReader(doc))
+	if err != nil {
+		return Rendered{}, false
+	}
+	var parts []*xhtml.Node
+	var walk func(n *xhtml.Node)
+	walk = func(n *xhtml.Node) {
+		if n.Type == xhtml.ElementNode && match(n) {
+			parts = append(parts, n)
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(root)
+	if len(parts) == 0 {
+		return Rendered{}, false
+	}
+	r := newRenderer(docURL, MaxHTMLBytes)
+	for _, n := range parts {
+		r.node(n)
+	}
+	return Rendered{HTML: r.buf.String(), Contents: r.contents, Truncated: r.truncated}, true
+}
+
+// HasClass reports whether an element's class attribute lists class.
+func HasClass(n *xhtml.Node, class string) bool {
+	for _, c := range strings.Fields(attr(n, "class")) {
+		if c == class {
+			return true
+		}
+	}
+	return false
+}
+
+// ID is an element's id attribute.
+func ID(n *xhtml.Node) string { return attr(n, "id") }
+
 type renderer struct {
 	buf       bytes.Buffer
 	folder    string
+	origin    string
 	limit     int
 	truncated bool
 	contents  []Section
@@ -207,6 +257,9 @@ func (r *renderer) attr(tag string, a xhtml.Attribute) {
 	switch {
 	case key == "id" || (key == "name" && tag == "a"):
 		val = AnchorPrefix + val
+	case key == "src" && tag == "img" && inlineImage(val):
+		// An embedded picture (Census draws its charts this way) loads
+		// nothing, so it is kept as it is.
 	case key == "src" && tag == "img":
 		abs := r.absolute(val)
 		if abs == "" {
@@ -248,8 +301,8 @@ func (r *renderer) link(n *xhtml.Node) {
 	}
 }
 
-// absolute resolves a link or image source against the document's folder on
-// sec.gov; only http(s) results are kept.
+// absolute resolves a link or image source against the document's folder
+// (and a root-relative one against its host); only http(s) results are kept.
 func (r *renderer) absolute(ref string) string {
 	ref = strings.TrimSpace(ref)
 	low := strings.ToLower(ref)
@@ -258,6 +311,8 @@ func (r *renderer) absolute(ref string) string {
 		return ref
 	case strings.HasPrefix(ref, "//"):
 		return "https:" + ref
+	case strings.HasPrefix(ref, "/") && r.origin != "":
+		return r.origin + ref
 	case strings.HasPrefix(ref, "/"):
 		return WWWHost + ref
 	case strings.Contains(ref, ":"):
@@ -266,6 +321,29 @@ func (r *renderer) absolute(ref string) string {
 		return ""
 	}
 	return r.folder + ref
+}
+
+// inlineImage is a raster image embedded as a data: URI. SVG is not one: an
+// SVG can carry script.
+func inlineImage(src string) bool {
+	low := strings.ToLower(strings.TrimSpace(src))
+	for _, p := range []string{"data:image/png;base64,", "data:image/jpeg;base64,", "data:image/jpg;base64,",
+		"data:image/gif;base64,", "data:image/webp;base64,"} {
+		if strings.HasPrefix(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// originOf is a URL's scheme and host, "https://www.bls.gov", against which
+// a root-relative link resolves; "" when it has none.
+func originOf(docURL string) string {
+	u, err := url.Parse(docURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 func folderOf(docURL string) string {

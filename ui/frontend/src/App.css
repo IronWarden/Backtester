@@ -38,6 +38,7 @@
   --paper: #ffffff;
   --paper-ink: #000000;
   --paper-link: #0000ee;
+  --paper-rule: #c8c8c8;
 
   /* Type scale. Every size in the app is one of these, in em, so Ctrl+scroll
      scales all of it — the invariant this file's header claims and which the
@@ -3155,6 +3156,34 @@ td.num.dim {
   color: var(--accent-strong);
 }
 
+/* NEWS: who published each item -- an agency, or a company by ticker. */
+.news-source {
+  font-family: var(--mono);
+  font-size: var(--fs-s);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.news-source.event {
+  color: var(--accent-strong);
+}
+
+.news-what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+/* The agency's lede, two lines at most; the release itself has the rest. */
+.news-summary {
+  color: var(--text-3);
+  font-size: var(--fs-s);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .reader {
   display: flex;
   flex-direction: column;
@@ -3337,6 +3366,29 @@ td.num.dim {
   max-width: 100%;
 }
 
+/* A NEWS release arrives without its site's stylesheet: a sans face like
+   the agencies' own, and table rules so the figures stay in their columns. */
+.reader-page.release {
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  font-size: 9pt;
+  line-height: 1.45;
+}
+
+.reader-page.release table {
+  margin: 1em 0;
+}
+
+.reader-page.release th,
+.reader-page.release td {
+  border: 1px solid var(--paper-rule);
+  padding: 0.2em 0.5em;
+  vertical-align: top;
+}
+
+.reader-page.release td {
+  text-align: right;
+}
+
 /* MY (T142d) */
 .watch-chips {
   display: flex;
@@ -3375,6 +3427,14 @@ td.num.dim {
 .research-table.rt th,
 .research-table.rt td {
   text-align: left;
+}
+
+/* The next batch of a long table loads as this comes into view; the
+   button is for a click, or a webview without IntersectionObserver. */
+.rt-more {
+  padding: 0.5em 0.75em;
+  font-size: var(--fs-s);
+  color: var(--text-3);
 }
 
 .research-table.rt th.num,

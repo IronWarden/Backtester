@@ -18,6 +18,7 @@
         "accepted": "2026-07-31 06:01 ET",
         "reportDate": "2026-06-27",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/0000320193-26-000020-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/aapl-20260627.htm"
       },
@@ -39,6 +40,7 @@
           "2.02",
           "9.01"
         ],
+        "material": true,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/0000320193-26-000018-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/aapl-20260730.htm"
       },

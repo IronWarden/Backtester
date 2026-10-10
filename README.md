@@ -2,6 +2,19 @@
 
 A concurrent Go backtesting engine that simulates one or more portfolios over historical equity data stored in DuckDB. Portfolios, date ranges, tickers, and strategies are defined in a TOML config; each portfolio runs in parallel on a worker pool sized to the host's CPU count. Strategies are written in Lua, and a Wails desktop UI (with a built-in AI assistant) drives the same engine.
 
+**Backtester is open source under the [MIT licence](LICENSE).** Use it, fork it,
+take the ideas you like into your own tools. It began as one person's research
+workbench, and it shows: it is opinionated, Linux-only, and honest about its
+data's flaws rather than free of them. It is not a commercial product and makes
+no promise of support — but issues and pull requests are welcome (see
+[Contributing](#contributing)).
+
+**Nothing it produces is investment advice.** A backtest describes what a
+strategy would have done in the past under modelling assumptions that are
+documented here and are all, to some degree, wrong. Past simulated performance
+does not predict future returns, and the bundled data has known defects — read
+[`DATA-LICENSE.md`](DATA-LICENSE.md) before trusting a number.
+
 ## How it works
 
 - **`src/main.go`** — CLI entry point. Opens the DuckDB file, loads `config.toml`, converts each TOML portfolio entry into a `Portfolio`, and hands them to the runner.
@@ -47,7 +60,7 @@ window on some NVIDIA/Wayland stacks. `BACKTESTER_GPU=on ./backtester` (or
 | file | why it has to be there |
 |---|---|
 | `backtester` | the binary, with the frontend and the Lua library embedded |
-| `LICENSE` | the software's terms, which end at 1.0 |
+| `LICENSE` | the software's terms — MIT |
 | `DATA-LICENSE.md` | the data's terms, deliberately stricter than the software's, plus the defect inventory |
 | `THIRD-PARTY-NOTICES.txt` | **required**: shipping the binary without it breaks the MIT and BSD terms of everything it links |
 | `CHANGELOG.md`, `README.md` | what changed, and how to use it |
@@ -2603,11 +2616,13 @@ bounds.
 
 ## The Research tab (UI)
 
-A reader for **SEC filings**, and nothing else: a company's filings, your
-watchlist's, and a full-text search of every filing since 2001. It shows no
-quotes, financials, earnings dates or economic data — the views that did
-(DES, FA, ERN and ECO) were removed to keep the tab on filings. Everything it
-shows comes straight from SEC EDGAR, with its filing date.
+A reader for **primary sources**, and nothing else: a company's SEC filings,
+your watchlist's, a full-text search of every filing since 2001, and a news
+stream of the official economic releases and your watchlist's material
+events. It shows no quotes, financials, earnings dates, economic data series
+or media headlines — the views that did (DES, FA, ERN and ECO) were removed
+to keep the tab on primary documents. Everything it shows comes straight
+from SEC EDGAR or the government agency that published it, with its date.
 
 Type a ticker or a company name and press Enter (`Ctrl+4` jumps here with the
 cursor in the box):
@@ -2616,13 +2631,14 @@ cursor in the box):
 |---|---|---|
 | `AAPL` or `AAPL CN` | the company's **own news**: its recent SEC filings, newest first, each in plain words — an 8-K by what it reports (*Earnings results*, *Directors or officers changed*, *Material agreement*, *Bankruptcy*, …), 10-K/10-Q, 13D/13G stakes, proxies, insider forms — as a sortable table by filing date (form, what, period covered). Click one to read it in the app laid out as sec.gov shows it, with the document's own table of contents beside it; an earnings 8-K opens on its press release (EX-99.1) | SEC EDGAR, live (keyless) |
 | `MY` | **your watchlist's filings**, no ticker needed: one sortable table over the last 90 days of every company on it (filing date, ticker, form, what — events, reports and proxies as CN labels them). Click a filing to read it. Add and remove tickers in the view | `watchlist.json` in the config directory, SEC EDGAR |
+| `NEWS` | **the news, without the noise**, no ticker needed: one sortable stream over the last 90 days of the official economic release notices (BLS, BEA, Census — each in the agency's own words) and the *material* events your watchlist's companies filed (8-K results, deals, bankruptcy, leadership changes, restatements, write-downs). *All / Economy / Watchlist* filters it. Both open in the reader: a release as the agency publishes it, an event as the filing | bls.gov, bea.gov, census.gov feeds (keyless), SEC EDGAR |
 | `"going concern"` or `"share repurchase" AAPL` | **full-text search** of every SEC filing since 2001: words in quotes are an exact phrase, a ticker narrows to that company. Each row is a document whose text matches — an 8-K's press release says *in EX-99.1* — and opens in the reader. Past year by default (or past 30 days, or since 2001), narrowed by form; a sortable table, newest first, whose `#` column is EDGAR's relevance rank | EDGAR full-text search, live (keyless) |
 
 Case does not matter, and a name resolves to the best-matching symbol
 (`apple` → `AAPL`) the same way the Backtest tab's ticker search does.
 **Every table sorts**: click a column header, click again to reverse (dates
-start newest first). A lone `MY` is the watchlist; the ticker MY itself is
-`MY CN`. Anything in quotes is a search, wherever the ticker goes
+start newest first). A lone `MY` is the watchlist and a lone `NEWS` the news
+stream; the tickers themselves are `MY CN` and `NEWS CN`. Anything in quotes is a search, wherever the ticker goes
 (`AAPL "buyback"` works too).
 
 **CN reads SEC EDGAR live**, because filings are where company news starts: an
@@ -2696,6 +2712,50 @@ skips the rewrite, the adverts and the spin.
   not answer for is named in a note; the rest of the feed still shows. Each
   company is one EDGAR request, paced like CN's.
 
+**NEWS is what was published, not what was said about it.** Two halves, each
+shown as soon as it answers — the agencies' feeds in one call, the
+watchlist's events a company at a time, like MY.
+
+- **Economic releases, allow-listed.** Each agency's feed carries plenty that
+  moves nothing, so only the headline series are kept (`src/news`):
+  - *BLS*: Consumer Price Index, Employment Situation, Producer Price Index,
+    JOLTS, Employment Cost Index, productivity and costs, import and export
+    prices — one Atom feed per release.
+  - *BEA*: GDP, personal income and outlays (PCE), international trade,
+    international transactions. Its regional, territorial and satellite
+    accounts (outdoor recreation, arts, marine economy, …) are dropped.
+  - *Census*: retail sales, durable goods orders, housing starts, new home
+    sales, construction spending, factory orders, business inventories,
+    advance goods trade. Its copy of the trade report is dropped (the
+    release is joint with BEA, which carries it), as are the quarterly
+    surveys, business formation and vacancy rates.
+
+  Each release shows the agency's own headline and lede, and BEA's next
+  release date with a countdown. Feeds are cached for 15 minutes, in memory;
+  one agency failing is a note and the rest still show.
+- **Releases read in the app.** Clicking one opens the release itself in the
+  reader, beside the list: the agency's own page with its banner, menus and
+  footer cut away (BLS's `#bodytext`, BEA's release body, Census's release
+  text), sanitized exactly as a filing is — no scripts, forms, frames or
+  tracking — with its tables and charts kept. Census's feed links each
+  indicator's landing page, which describes the survey, so NEWS links the
+  indicator's *current release* page instead. *On bls.gov ↗* (or bea.gov,
+  census.gov) opens the original. The reader fetches only https pages on
+  www.bls.gov, www.bea.gov and www.census.gov; a page whose layout an agency
+  has changed says so instead of showing the whole site.
+- **Material events only.** From the same per-company EDGAR feeds MY reads,
+  NEWS keeps an 8-K only when it reports an item an investor acts on:
+  material agreements and their termination (1.01/1.02), bankruptcy (1.03),
+  cybersecurity incidents (1.05), completed acquisitions (2.01), earnings
+  (2.02), restructuring (2.05), impairments (2.06), delisting notices (3.01),
+  auditor changes (4.01), restatements (4.02), change in control (5.01) and
+  officer or director changes (5.02). The routine ones a large company files
+  weekly — new debt (2.03), Regulation FD slides (7.01), vote results (5.07),
+  bylaws (5.03), "other events" (8.01) — are left out (`edgar.Material`).
+- **Deliberately absent:** media and wire stories, the Fed and the
+  regulators. A source joins only if it is the primary publisher and its
+  items move prices.
+
 **Search is EDGAR's own full-text search**, the service behind
 efts.sec.gov, over the text of every filing since 2001:
 
@@ -2717,7 +2777,10 @@ efts.sec.gov, over the text of every filing since 2001:
 Code: `ui/frontend/src/Research.tsx`; CN is `src/edgar` (the client, parsing
 and the reader's sanitizer, tested against SEC responses recorded in
 `src/edgar/testdata`) and `ui/filings.go`; MY is `ui/watchlist.go`; search is
-`src/edgar/search.go` and `ui/search.go`.
+`src/edgar/search.go` and `ui/search.go`; NEWS is `src/news` (the feeds,
+their allow-lists and the release reader, tested against feeds and release
+pages recorded in `src/news/testdata`),
+`ui/news.go` and `edgar.Material`.
 
 ## The Backtest tab (UI)
 
@@ -3449,8 +3512,8 @@ under the same terms:
 
 | File | Covers |
 |---|---|
-| [`LICENSE`](LICENSE) | The software. A **beta evaluation licence** — free to use, including commercially, but not open source and not redistributable. The source is published to be read; reading it grants nothing further. Beta terms end at 1.0. |
-| [`DATA-LICENSE.md`](DATA-LICENSE.md) | The bundled `stock_data.db`. **More restrictive than the software licence** — some of the data comes from providers whose terms forbid redistribution. Also the honest inventory of what is wrong with the data, which anyone acting on a result should read first. |
+| [`LICENSE`](LICENSE) | The software — this repository's code, the Lua strategy library and the frontend. **MIT**: use, modify, redistribute and sell it freely, provided the copyright notice travels with it. |
+| [`DATA-LICENSE.md`](DATA-LICENSE.md) | The bundled `stock_data.db`. **Not open source, and not covered by the MIT licence** — some of the data comes from providers whose terms forbid redistribution, so a fork may ship the code but not the database. Point people at [`build_db.py`](#build-your-own-database) instead. Also the honest inventory of what is wrong with the data, which anyone acting on a result should read first. |
 | [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) | The 14 Go modules and 11 npm packages compiled into the binary, including the DuckDB C++ library, which `duckdb-go` statically links from the per-platform `duckdb-go-bindings/lib/*` module. All permissive (MIT, BSD, ISC, Apache-2.0), and all of them require their notice to travel with the binary. |
 
 `THIRD-PARTY-NOTICES.txt` is generated — regenerate it whenever a dependency
@@ -3462,3 +3525,29 @@ python3 gen_notices.py
 
 It reads `go list -deps` and `npm ls --omit=dev`, so it lists what is actually
 linked and bundled rather than everything in `go.mod` and `package.json`.
+
+## Contributing
+
+Issues and pull requests are welcome; there is no roadmap you have to fit.
+Before opening a PR:
+
+- **Keep the gate green.** `go build ./...`, `go vet ./...` and
+  `go test ./... -count=1` must all pass (about a minute; the `ui` package
+  dominates). `go test ./... -short` is the quick loop.
+- **A changed default must not change old numbers.** New config fields default
+  to a zero value that reproduces the previous behaviour exactly, so an
+  untouched config keeps producing identical results.
+- **Document what users can see.** A config key, metric, Lua global or result
+  field belongs in this README, and in `appReference` in `ui/chat.go` — that
+  prompt is the in-app assistant's entire knowledge of the engine. Tests
+  enforce it for `Metrics`, `PortfolioConfig` and `CostConfig`.
+- **Exercise UI changes, don't just compile them.** Add or extend a case in
+  `ui/frontend/src/smoke.tsx`; it mounts components inside `go test`.
+- **Never commit data.** `stock_data.db` and anything derived from it stay out
+  of the repository (see [Licence](#licence)), as does the `ui/ui` build
+  artifact.
+- **Ports are especially welcome.** macOS and Windows have never been built;
+  the `ui/build/darwin` and `ui/build/windows` directories are untested Wails
+  scaffolding.
+
+By contributing you agree your contribution is licensed under the MIT licence.

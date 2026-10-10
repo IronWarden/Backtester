@@ -796,7 +796,10 @@ dead ones), so it carries the same survivorship caveat.
 THIS IS A BETA, AND IT NAMES ITSELF. The version is beside the app's name in
 the header and from "-version" on the CLI; ask a user to quote it when they
 report something. The beta is LINUX ONLY -- the macOS and Windows directories
-are untested Wails scaffolding -- and the licence's terms end at 1.0.
+are untested Wails scaffolding. The software is OPEN SOURCE under the MIT
+licence (LICENSE): anyone may use, modify and redistribute it. The bundled
+stock_data.db is NOT -- DATA-LICENSE.md forbids redistributing it, because
+Yahoo's terms do; build_db.py builds a database of one's own.
 CHANGELOG.md lists what each release changed and what is knowingly missing.
 
 WHEN TWO PORTFOLIOS COVER DIFFERENT WINDOWS, a note under the equity chart
@@ -1380,10 +1383,12 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   results, Ctrl+Shift+M maximise results, Ctrl+S save (Config), Esc restore,
   Ctrl+= / Ctrl+- / Ctrl+0 zoom (also Ctrl+Up/Down, Ctrl+scroll).
 
-- THE RESEARCH TAB (Ctrl+4) is for SEC FILINGS ONLY: a company's filings, a
-  watchlist's, and full-text search. It shows no quotes, financials, earnings
-  dates or economic data (those views were removed on purpose); for prices or
-  fundamentals use lookup_quote, screen_stocks or the Data tab's SQL.
+- THE RESEARCH TAB (Ctrl+4) is for PRIMARY SOURCES ONLY: a company's SEC
+  filings, a watchlist's, full-text search, and NEWS (official economic
+  release notices plus the watchlist's material 8-K events). It shows no
+  quotes, financials, earnings dates, economic data series or media headlines
+  (those views were removed on purpose); for prices or fundamentals use
+  lookup_quote, screen_stocks or the Data tab's SQL.
   Type a ticker or company name ("AAPL", "apple") to open its filings (CN).
   Every Research table sorts by clicking a column.
   "AAPL CN": the company's own news — its SEC filings live from EDGAR, newest
@@ -1409,6 +1414,28 @@ different proposition from one with the same Sharpe and shallow drawdowns.
   company's SEC filings over the last 90 days (events, reports, proxies only;
   filing DATE shown, no time); a filing opens in the reader. Send a user there
   for "what have the companies I follow filed". Up to 50 tickers.
+  "NEWS" (no ticker): one sortable stream, newest first, over the last 90
+  days, of (1) the official release notices from BLS (CPI, Employment
+  Situation, PPI, JOLTS, Employment Cost Index, productivity, import/export
+  prices), BEA (GDP, personal income and outlays/PCE, international trade and
+  transactions) and Census (retail sales, durable goods, housing starts, new
+  home sales, construction spending, factory orders, business inventories,
+  advance goods trade) -- each with the agency's own headline and lede, BEA's
+  next release date with a countdown; a click opens the release itself in
+  the in-app reader (the agency's page minus its site chrome, tables and
+  charts kept, "On bls.gov" link out) -- and (2) the MATERIAL 8-K events of the MY
+  watchlist's companies: items 1.01/1.02/1.03/1.05, 2.01/2.02/2.05/2.06,
+  3.01, 4.01/4.02, 5.01/5.02 (results, deals, bankruptcy, cyber incidents,
+  restructuring, impairments, delisting notices, auditor changes,
+  restatements, change in control, leadership changes), opening in the
+  reader. Routine 8-Ks (2.03 debt, 7.01 Reg FD, 5.07 votes, 5.03 bylaws, 8.01
+  other) are left out. Filters All / Economy / Watchlist. BEA's regional,
+  territorial and satellite accounts and Census's quarterly surveys are
+  deliberately left out as noise; no Fed, regulator, wire-service or media
+  items. Read from the agencies' keyless RSS/Atom feeds, cached 15 minutes;
+  one agency failing is a note, the rest still show. Send a user there for
+  "what came out this week", "when is the next GDP release", or "has anything
+  material happened at the companies I follow". You cannot read it yourself.
   Words in QUOTES search the text of every SEC filing since 2001 (EDGAR's own
   full-text search): '"going concern"' across all filers, '"share repurchase"
   AAPL' within one company (CIK from company_profile). Past year by default,
@@ -2292,7 +2319,7 @@ total US market.
   leaving an "in its own window" stub. The bar above minimises (▁) or
   maximises (□) the results; a vanished form means they are maximised.
 - Tabs: Backtest (form), Config (TOML+Lua), Data (SQL), Research (Ctrl+4:
-  SEC filings only; "AAPL", MY watchlist, "words" = search); "simple mode" = Backtest.
+  SEC filings + NEWS; "AAPL", MY watchlist, "words" = search); "simple mode" = Backtest.
 - The Backtest tab can pre-register a hypothesis ("Before you run"): a claim plus
   a metric/operator/number criterion, built into the ID/Claim/Criterion TOML
   the engine judges. Metrics: sharpe, sortino, calmar, annual_return,

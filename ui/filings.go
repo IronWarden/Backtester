@@ -53,8 +53,11 @@ type FilingRow struct {
 	Accepted   string   `json:"accepted"`
 	ReportDate string   `json:"reportDate"`
 	Items      []string `json:"items"`
-	IndexURL   string   `json:"indexUrl"`
-	PrimaryURL string   `json:"primaryUrl"`
+	// Material marks an 8-K reporting an event an investor acts on
+	// (edgar.Material): what NEWS keeps from a watchlist's filings.
+	Material   bool   `json:"material"`
+	IndexURL   string `json:"indexUrl"`
+	PrimaryURL string `json:"primaryUrl"`
 }
 
 type CompanyFilings struct {
@@ -108,7 +111,7 @@ func filingsView(ticker, cik string, c *edgar.Client) CompanyFilings {
 		row := FilingRow{
 			Accession: f.Accession, Form: f.Form, Kind: string(kind), Title: title,
 			Filed: fmtDay(f.Filed), ReportDate: f.ReportDate, Items: f.Items,
-			IndexURL: edgar.IndexURL(cik, f.Accession),
+			IndexURL: edgar.IndexURL(cik, f.Accession), Material: edgar.Material(f),
 		}
 		if row.Items == nil {
 			row.Items = []string{}

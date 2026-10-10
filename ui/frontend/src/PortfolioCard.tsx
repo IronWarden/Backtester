@@ -100,6 +100,16 @@ function minusYears(date: string, years: number): string {
 const DEFAULT_CAPITAL = 10000;
 const MONEY_DIGITS = 12;
 
+// uncopiedForm is what None does to a card copied from a famous investor:
+// the card as it was before the copy, or -- when that is not known (the copy
+// came from the empty-form gallery, or a restored session) -- the copied
+// holdings kept as the user's own, under the card's default name so it no
+// longer claims to be the investor's portfolio.
+export function uncopiedForm(form: Form, before: Form | null, defaultName: string): Form {
+    if (before) return before;
+    return { ...form, name: defaultName };
+}
+
 type Props = {
     form: Form;
     onChange: (next: Form) => void;
@@ -246,6 +256,24 @@ export default function PortfolioCard({
     // The one this card was filled from, recognised by name, so its caveat
     // stays on screen while the card still is that portfolio.
     const copiedInvestor = INVESTORS.find((inv) => inv.name === form.name);
+    // The card as it was before the first copy, so None puts back the
+    // user's own holdings and strategy. Switching from one investor to
+    // another keeps the original, not the previous investor.
+    const beforeCopy = useRef<Form | null>(null);
+    if (!copiedInvestor) beforeCopy.current = null;
+
+    function pickInvestor(id: string) {
+        if (id === "") {
+            if (!copiedInvestor) return;
+            onChange(uncopiedForm(form, beforeCopy.current, defaultName));
+            beforeCopy.current = null;
+            return;
+        }
+        const choice = investorChoices.find((c) => c.inv.id === id);
+        if (!choice?.built) return;
+        if (!copiedInvestor) beforeCopy.current = form;
+        onChange(choice.built);
+    }
 
     function removeTicker(t: string) {
         const tickers = form.tickers.filter((x) => x !== t);
@@ -804,17 +832,14 @@ export default function PortfolioCard({
                     Copy a famous investor
                     <select
                         value={copiedInvestor?.id ?? ""}
-                        onChange={(e) => {
-                            const choice = investorChoices.find(
-                                (c) => c.inv.id === e.target.value,
-                            );
-                            if (choice?.built) onChange(choice.built);
-                        }}
+                        onChange={(e) => pickInvestor(e.target.value)}
                     >
                         <option value="">
-                            {form.tickers.length > 0
-                                ? "Choose one — replaces these holdings"
-                                : "Choose one"}
+                            {copiedInvestor
+                                ? "None — back to your own portfolio"
+                                : form.tickers.length > 0
+                                  ? "None (picking one replaces these holdings)"
+                                  : "None"}
                         </option>
                         {investorChoices.map(({ inv, built }) => (
                             <option key={inv.id} value={inv.id} disabled={!built}>

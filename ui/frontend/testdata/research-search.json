@@ -30,6 +30,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000092846414000003/0000928464-14-000003-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000092846414000003/aaplpx14a6g012314.htm"
       }
@@ -58,6 +59,7 @@
           "2.02",
           "9.01"
         ],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000067/0000320193-18-000067-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000067/a8-kexhibit991q220183312018.htm"
       }
@@ -86,6 +88,7 @@
           "8.01",
           "9.01"
         ],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312515023732/0001193125-15-023732-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312515023732/d835617dex991.htm"
       }
@@ -114,6 +117,7 @@
           "7.01",
           "9.01"
         ],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312513167469/0001193125-13-167469-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312513167469/d525706dex991.htm"
       }
@@ -139,6 +143,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017004790/0001628280-17-004790-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017004790/a10-qq22017412017.htm"
       }
@@ -164,6 +169,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017000717/0001628280-17-000717-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000162828017000717/a10-qq1201712312016.htm"
       }
@@ -189,6 +195,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312516439878/0001193125-16-439878-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312516439878/d66145d10q.htm"
       }
@@ -214,6 +221,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000007/0000320193-18-000007-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019318000007/a10-qq1201812302017.htm"
       }
@@ -239,6 +247,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000007/0000320193-22-000007-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019322000007/aapl-20211225.htm"
       }
@@ -264,6 +273,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000052/0000320193-20-000052-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019320000052/a10-qq220203282020.htm"
       }
@@ -289,6 +299,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000006/0000320193-24-000006-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019324000006/aapl-20231230.htm"
       }
@@ -314,6 +325,7 @@
         "accepted": "",
         "reportDate": "",
         "items": [],
+        "material": false,
         "indexUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312514157311/0001193125-14-157311-index.htm",
         "primaryUrl": "https://www.sec.gov/Archives/edgar/data/320193/000119312514157311/d694710d10q.htm"
       }

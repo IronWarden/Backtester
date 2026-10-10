@@ -3,6 +3,8 @@ package edgar
 import (
 	"strings"
 	"testing"
+
+	xhtml "golang.org/x/net/html"
 )
 
 const tenQURL = "https://www.sec.gov/Archives/edgar/data/320193/000032019326000020/aapl-20260627.htm"
@@ -126,5 +128,30 @@ func TestSafeStyle(t *testing.T) {
 		if got := SafeStyle(in); got != want {
 			t.Errorf("SafeStyle(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestRenderPartKeepsOnlyThePickedElements(t *testing.T) {
+	page := `<html><body><div id="nav"><a href="/home">Home</a><form><input></form></div>
+<div id="bodytext"><p>CPI rose <b>0.4%</b>.</p><a href="/cpi/tables.htm">Tables</a>
+<img src="/images/chart.png"><img src="data:image/png;base64,iVBOR"><img src="data:image/svg+xml;base64,PHN2Zz4=">
+<script>alert(1)</script></div><div id="footer">Footer</div></body></html>`
+	r, ok := RenderPart(page, "https://www.bls.gov/news.release/cpi.htm", func(n *xhtml.Node) bool { return ID(n) == "bodytext" })
+	if !ok {
+		t.Fatal("nothing matched")
+	}
+	for _, want := range []string{"CPI rose <b>0.4%</b>", `href="https://www.bls.gov/cpi/tables.htm" data-external="1"`,
+		`src="https://www.bls.gov/images/chart.png"`, `src="data:image/png;base64,iVBOR"`} {
+		if !strings.Contains(r.HTML, want) {
+			t.Errorf("lacks %s:\n%s", want, r.HTML)
+		}
+	}
+	for _, gone := range []string{"Home", "Footer", "<form", "<script", "svg+xml"} {
+		if strings.Contains(r.HTML, gone) {
+			t.Errorf("kept %s:\n%s", gone, r.HTML)
+		}
+	}
+	if _, ok := RenderPart(page, "", func(n *xhtml.Node) bool { return HasClass(n, "release-body") }); ok {
+		t.Error("a page without the part matched")
 	}
 }

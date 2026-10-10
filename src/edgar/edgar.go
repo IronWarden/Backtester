@@ -362,6 +362,32 @@ func Describe(f Filing) (Kind, string) {
 	return KindOther, title(f.Form)
 }
 
+// materialItems are the 8-K items an investor acts on: results, deals,
+// failure, leadership, restatements, write-downs. Left out are the routine
+// ones a large company files weekly -- new debt (2.03), Regulation FD
+// slides (7.01), vote results (5.07), bylaws (5.03), "other events" (8.01)
+// -- which are most of the volume and little of the news.
+var materialItems = map[string]bool{
+	"1.01": true, "1.02": true, "1.03": true, "1.05": true,
+	"2.01": true, "2.02": true, "2.05": true, "2.06": true,
+	"3.01": true, "4.01": true, "4.02": true,
+	"5.01": true, "5.02": true,
+}
+
+// Material reports whether a filing is a material event: an 8-K (or its
+// amendment) reporting at least one of materialItems.
+func Material(f Filing) bool {
+	if strings.TrimSuffix(f.Form, "/A") != "8-K" {
+		return false
+	}
+	for _, it := range f.Items {
+		if materialItems[it] {
+			return true
+		}
+	}
+	return false
+}
+
 // ---------------------------------------------------------------------------
 // One filing's documents
 

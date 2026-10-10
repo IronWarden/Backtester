@@ -37,7 +37,7 @@ export const SHORTCUTS: Shortcut[] = [
     { action: "tab-backtest", keys: "Ctrl+1", label: "Backtest tab" },
     { action: "tab-config", keys: "Ctrl+2", label: "Config tab" },
     { action: "tab-data", keys: "Ctrl+3", label: "Data tab" },
-    { action: "tab-research", keys: "Ctrl+4", label: "Research tab (SEC filings: CN, MY, full-text search)" },
+    { action: "tab-research", keys: "Ctrl+4", label: "Research tab (SEC filings and economic releases: CN, MY, NEWS, search)" },
     { action: "toggle-assistant", keys: "Ctrl+J", label: "Show or hide the assistant" },
     { action: "max-assistant", keys: "Ctrl+Shift+J", label: "Maximise or restore the assistant" },
     { action: "toggle-results", keys: "Ctrl+M", label: "Minimise or restore the results" },

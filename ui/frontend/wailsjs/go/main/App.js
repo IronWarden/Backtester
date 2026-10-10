@@ -30,6 +30,10 @@ export function DefaultDBPath() {
   return window['go']['main']['App']['DefaultDBPath']();
 }
 
+export function EconomicReleases() {
+  return window['go']['main']['App']['EconomicReleases']();
+}
+
 export function FileExists(arg1) {
   return window['go']['main']['App']['FileExists'](arg1);
 }
@@ -100,6 +104,10 @@ export function ReadFile(arg1) {
 
 export function ReadFiling(arg1) {
   return window['go']['main']['App']['ReadFiling'](arg1);
+}
+
+export function ReadRelease(arg1) {
+  return window['go']['main']['App']['ReadRelease'](arg1);
 }
 
 export function ReadRules(arg1, arg2, arg3, arg4, arg5) {

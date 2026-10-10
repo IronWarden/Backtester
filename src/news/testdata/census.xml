@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <atom:link href="https://www.census.gov/economic-indicators/indicator.xml" rel="self" type="application/rss+xml"/>
+    <title>U.S. Census Bureau Economic Briefing Room</title>
+    <link>https://www.census.gov/economic-indicators/</link>
+    <description>Key National Economic Indicators Published by the U.S. Census Bureau</description>
+    <language>en</language>
+    <pubDate>Fri, 09 Oct 2026 10:02:20 -0400</pubDate>
+    <lastBuildDate>Fri, 09 Oct 2026 10:02:20 -0400</lastBuildDate>
+    <item>
+      <title>Monthly Wholesale Trade: Sales and Inventories</title>
+      <link>https://www.census.gov/wholesale/index.html</link>
+      <description><![CDATA[August 2026 sales of merchant wholesalers were $817.5 billion, up 1.8 percent (+/- 0.2 percent) from last month. End-of-month inventories were $964.2 billion, up 0.5 percent (+/- 0.2 percent) from last month.<p><br>August 2026: +0.5 % Change in Inventories<br>July 2026 (r): +1.4 % Change in Inventories<br></p>]]></description>
+      <guid isPermaLink="false">wholesale</guid>
+      <pubDate>Thu, 08 Oct 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>U.S. International Trade in Goods and Services</title>
+      <link>https://www.census.gov/foreign-trade/index.html</link>
+      <description><![CDATA[The nation's international trade deficit in goods and services increased to $105.6 billion in August from $92.8 billion in July (revised), as imports increased more than exports.<p><br>August 2026: 13.7° % Change<br>July 2026 (r): 30.4° % Change<br></p>]]></description>
+      <guid isPermaLink="false">intl_trade</guid>
+      <pubDate>Tue, 06 Oct 2026 08:30:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Manufacturers' Shipments, Inventories, and Orders</title>
+      <link>https://www.census.gov/manufacturing/m3/</link>
+      <description><![CDATA[New orders for manufactured goods in August, up two consecutive months, increased $0.7 billion or 0.1 percent to $663.5 billion.<p><br>August 2026: +0.1° % Change<br>July 2026 (r): +0.8° % Change<br></p>]]></description>
+      <guid isPermaLink="false">mfg_orders</guid>
+      <pubDate>Fri, 02 Oct 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Construction Spending</title>
+      <link>https://www.census.gov/construction/c30/c30index.html</link>
+      <description><![CDATA[Total construction spending for August 2026 ($2,203.1 billion) was 0.9 percent (+/- 1.0 percent)* above the revised July 2026 ($2,184.5 billion) estimate.<p><br>August 2026: 0.9* % Change<br>July 2026 (r): -0.1* % Change<br></p>]]></description>
+      <guid isPermaLink="false">construction_value</guid>
+      <pubDate>Thu, 01 Oct 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Advance U.S. International Trade in Goods</title>
+      <link>https://www.census.gov/econ/indicators/index.html</link>
+      <description><![CDATA[The advance international trade deficit in goods increased to $132.6 billion in August from $118.9 billion in July as imports increased more than exports.<p><br>August 2026: 11.5° % Change<br>July 2026: 17.7° % Change<br></p>]]></description>
+      <guid isPermaLink="false">adv_intl_trade</guid>
+      <pubDate>Wed, 30 Sep 2026 08:30:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Advance Wholesale Inventories</title>
+      <link>https://www.census.gov/econ/indicators/index.html</link>
+      <description><![CDATA[August end-of-month inventories were $965.7 billion, up 0.7 percent (+/- 0.2 percent) from last month.<p><br>August 2026: +0.7 % Change in Inventories<br>July 2026 (r): +1.3 % Change in Inventories<br></p>]]></description>
+      <guid isPermaLink="false">adv_mwts</guid>
+      <pubDate>Wed, 30 Sep 2026 08:30:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Advance Retail Inventories</title>
+      <link>https://www.census.gov/econ/indicators/index.html</link>
+      <description><![CDATA[August 2026 end-of-month inventories were $881.6 billion, up 0.3 percent (+/-0.2 percent) from last month.<p><br>August 2026: +0.3 % Change in Inventories<br>July 2026 (r): +0.8 % Change in Inventories<br></p>]]></description>
+      <guid isPermaLink="false">adv_mrts</guid>
+      <pubDate>Wed, 30 Sep 2026 08:30:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Advance Monthly Manufacturers' Shipments, Inventories, and Orders</title>
+      <link>https://www.census.gov/manufacturing/m3/</link>
+      <description><![CDATA[New orders for manufactured durable goods in August, down following two consecutive monthly increases, decreased $0.1 billion or virtually unchanged to $338.6 billion.<p><br>August 2026: -0.0° % Change<br>July 2026 (r): +0.9° % Change<br></p>]]></description>
+      <guid isPermaLink="false">durable_goods</guid>
+      <pubDate>Fri, 25 Sep 2026 08:30:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>New Home Sales</title>
+      <link>https://www.census.gov/construction/nrs/</link>
+      <description><![CDATA[Sales of new single-family houses in August 2026 were at a seasonally adjusted annual rate of 684,000.  This is 6.4 percent (+/- 19.5%)* above the revised July 2026 estimate of 643,000.<p><br>August 2026: +6.4* % Change<br>July 2026 (r): -4.3* % Change<br></p>]]></description>
+      <guid isPermaLink="false">home_sales</guid>
+      <pubDate>Thu, 24 Sep 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>New Residential Construction</title>
+      <link>https://www.census.gov/construction/nrc/index.html</link>
+      <description><![CDATA[Privately-owned housing starts in August 2026 were at a seasonally adjusted annual rate of 1,275,000.  This is 2.6 percent (+/- 12.0%)* below the revised July 2026 estimate of 1,309,000.<p><br>August 2026: -2.6* % Change<br>July 2026 (r): -9.0* % Change<br></p>]]></description>
+      <guid isPermaLink="false">housing_starts</guid>
+      <pubDate>Thu, 17 Sep 2026 08:30:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Manufacturing and Trade Inventories and Sales</title>
+      <link>https://www.census.gov/mtis/index.html</link>
+      <description><![CDATA[U.S. total business end-of-month inventories for July 2026 were $2,764.7 billion, up 0.8 percent (+/- 0.1 percent) from last month. U.S. total business sales were $2,120.7 billion, up 0.3 percent (+/- 0.2 percent) from last month.<p><br>July 2026: +0.8 % Change in Inventories<br>June 2026 (r): +0.1* % Change in Inventories<br></p>]]></description>
+      <guid isPermaLink="false">business_sales</guid>
+      <pubDate>Wed, 16 Sep 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Advance Monthly Sales for Retail and Food Services</title>
+      <link>https://www.census.gov/retail/index.html</link>
+      <description><![CDATA[U.S. retail and food services sales for August 2026 were $773.9 billion, up 1.2 percent (+/-0.4 percent) from the previous month.<p><br>August 2026: +1.2 % Change<br>July 2026 (r): -0.5 % Change<br></p>]]></description>
+      <guid isPermaLink="false">retail_sales</guid>
+      <pubDate>Wed, 16 Sep 2026 08:30:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Business Formation Statistics</title>
+      <link>https://www.census.gov/econ/bfs/</link>
+      <description><![CDATA[Total U.S. Business Applications were 531,728 in August 2026, down 7.8% from July 2026.<p><br>August 2026: -7.8° % Change<br>July 2026 (r): +8.1° % Change<br></p>]]></description>
+      <guid isPermaLink="false">bfs</guid>
+      <pubDate>Fri, 11 Sep 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Quarterly Services Survey</title>
+      <link>https://www.census.gov/services/index.html</link>
+      <description><![CDATA[U.S. selected services total revenue for the second quarter of 2026, adjusted for seasonal variation but not for price changes, was $6,418.7 billion, an increase of 3.0 percent (+/- 0.4 percent) from the first quarter of 2026 and up 7.6 percent (+/- 0.6 percent) from the second quarter of 2025. The first quarter of 2026 to second quarter of 2026 percentage change was revised from the advance estimate of 3.1 percent (+/- 0.4 percent).<p><br>2nd Qtr 2026: +3.0 % Change<br>1st Qtr 2026 (r): +1.1 % Change<br></p>]]></description>
+      <guid isPermaLink="false">esbr075</guid>
+      <pubDate>Wed, 09 Sep 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Quarterly Financial Report - Retail</title>
+      <link>https://www.census.gov/econ/qfr/</link>
+      <description><![CDATA[Not seasonally adjusted after-tax profits for retail corporations with assets of $50 million and over were $112.3 billion for the second quarter 2026 (the 3 months ending July 31, 2026), up $47.2 (+/- 0.5) billion from first quarter 2026 (the 3 months ending April 30, 2026).<p><br>2nd Qtr 2026: +47.2 Billions of Dollars<br>1st Qtr 2026 (r): +1.7 Billions of Dollars<br></p>]]></description>
+      <guid isPermaLink="false">qfr_retail</guid>
+      <pubDate>Tue, 08 Sep 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Quarterly Financial Report</title>
+      <link>https://www.census.gov/econ/qfr/</link>
+      <description><![CDATA[Manufacturing corporations' not seasonally adjusted after-tax profits were $370.1 billion for the second quarter of 2026, up $82.8 (+/- 1.2) billion from first quarter of 2026.<p><br>2nd Qtr 2026: +82.8 Billions of Dollars<br>1st Qtr 2026 (r): +50.6 Billions of Dollars<br></p>]]></description>
+      <guid isPermaLink="false">qfr_trade</guid>
+      <pubDate>Tue, 08 Sep 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Rental Vacancy Rate</title>
+      <link>https://www.census.gov/housing/hvs/</link>
+      <description><![CDATA[The rental vacancy rate of 7.3 percent was not statistically different from the rate in the second quarter 2025. Compared to the second quarter 2025, the rental vacancy rate was higher in the Northeast and not statistically different in the Midwest, South, and West.<p><br>2nd Qtr 2026: +0.3* Percentage Points<br>2nd Qtr 2025: +0.4 Percentage Points<br></p>]]></description>
+      <guid isPermaLink="false">rental_vacancy</guid>
+      <pubDate>Tue, 28 Jul 2026 10:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>Housing Vacancies and Homeownership</title>
+      <link>https://www.census.gov/housing/hvs/</link>
+      <description><![CDATA[The homeownership rate of 65.0 percent was virtually the same as the rate in the second quarter 2025. The homeownership rates in the Northeast, Midwest, South, and West were not statistically different from second quarter 2025 rates.<p><br>2nd Qtr 2026: +0.0* Percentage Points<br>2nd Qtr 2025: -0.6* Percentage Points<br></p>]]></description>
+      <guid isPermaLink="false">homeownership</guid>
+      <pubDate>Tue, 28 Jul 2026 10:00:00 -0400</pubDate>
+    </item>
+  </channel>
+</rss>
