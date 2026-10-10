@@ -17,13 +17,15 @@ does not predict future returns, and the bundled data has known defects — read
 
 ## Demo
 
-[![Backtester demo: a Ray Dalio All Weather backtest, its verdict and charts, the Lua strategy behind it, a SQL query, and an NVIDIA earnings filing read in-app](docs/demo-poster.jpg)](docs/demo.mp4)
+![Backtester demo: a Ray Dalio All Weather backtest, its verdict and charts, the Lua strategy behind it, a SQL query, and an NVIDIA earnings filing read in-app](docs/demo.gif)
 
-Ninety seconds, recorded against a real database: copy Ray Dalio's All Weather
-portfolio and run it against the S&P 500; read the pre-registered verdict, the
-objections a skeptic would raise, and the equity curve; open the Lua script
-that does the rebalancing; query the price table in SQL; and read NVIDIA's
-latest earnings release straight from SEC EDGAR. ([`docs/demo.mp4`](docs/demo.mp4))
+One minute, at 1.5× speed, recorded against a real database: copy Ray Dalio's
+All Weather portfolio and run it against the S&P 500; read the pre-registered
+verdict, the objections a skeptic would raise, and the equity curve; open the
+Lua script that does the rebalancing; query the price table in SQL; and read
+NVIDIA's latest earnings release straight from SEC EDGAR. The full-quality
+1080p recording is [`docs/demo.mp4`](docs/demo.mp4) (GitHub can't play it in
+the browser — use *Download raw file*).
 
 ## How it works
 
